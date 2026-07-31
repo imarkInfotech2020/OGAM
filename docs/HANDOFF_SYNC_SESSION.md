@@ -1,135 +1,124 @@
-# Handoff — Personal Mesh sync (streaming + receive rules + Sync UI)
+# Handoff — Off Grid Personal Mesh (session 3, 2026-07-31 afternoon)
 
-Read `mobile/rules.md` and the workspace `CLAUDE.md` first. The overriding rule this session
-established, now folded into the `/hygiene` skill: **anything true on more than one platform is
-defined ONCE in `shared/packages/sync`, and each host supplies only adapters — transport, storage,
-clock, drawing. Bringing up the next platform must require wiring and NO logic.** Primitives without
-an orchestrator are duplication wearing a library costume.
+Read `mobile/rules.md`, the workspace `CLAUDE.md`, and `brand/DESIGN_PHILOSOPHY.md` before touching
+anything. The rules that governed this session:
 
-No tests. The user's standing instruction: behavioural integration tests only once functionality is
-verified working. Do not write unit tests or mock our own code.
+- **One seam.** Anything true on more than one platform is defined ONCE in `shared/packages/sync`;
+  hosts supply adapters only (transport, storage, clock, drawing). Bringing up the next platform is
+  wiring, not logic.
+- **No tests** unless the behaviour is verified working first, and never a `jest.mock` of our own code.
+- **Report status as a gate: code / wired / verified.** Never inflate "done".
+- **Commit incrementally. Never `--no-verify`.** Pre-commit enforces zero ESLint warnings on staged
+  files and hard caps (500 lines/file, 350/function) - extract, never bypass.
+- **Mobile has no modals. Bottom sheets only.**
+- Design: cards use the Home tokens (radius 12, `colors.surface`, `shadows.small`); one screen header
+  (`src/components/ScreenHeader.tsx`) matching Settings / Model Settings; never explain what a toggle
+  does; no em dashes, no exclamation marks, no banned words.
 
-Report status as a gate: **code / wired / verified**. Never inflate "done".
+## Devices and how to drive them
+
+- **Android** (OnePlus, `ai.offgridmobile.dev`): `adb` works. `adb exec-out screencap -p > x.png` to
+  see the screen - but do not screenshot while the user is in a personal app. JS logs ARE in logcat:
+  `adb logcat -d | grep ReactNativeJS`. Native rebuild: `npx react-native run-android --mode=debug
+  --appId ai.offgridmobile.dev --no-packager`.
+- **iOS** (Mac's iPhone, physical): `IOS_DEVICE_ID=00008150-000225103CD8C01C bash scripts/ios-device.sh`.
+  Takes several minutes. If install hangs on "Enabling developer disk image services", the Mac-side
+  `CoreDeviceService.xpc` is wedged - kill it, do not reboot the phone.
+- **Desktop**: `npm run dev` in `desktop/`. **Only ever ONE instance.** Killing electron-vite while
+  Electron lives leaves a zombie pointing at a dead :5173 (`ERR_CONNECTION_REFUSED`) - kill BOTH
+  (`pkill -f electron-vite; pkill -f off-grid-ai/desktop/node_modules/electron`) then start once.
+  Main-process changes need a restart; renderer hot-reloads.
+- The user pastes images into the chat. `~/Downloads` is unreadable to the agent (macOS TCC).
+
+## Verified working on real devices this session
+
+Chats (durable), projects, knowledge base, clipboard, Android screenshot capture -> macOS, live chat
+streaming across all pairs, the rebuilt Sync screen, the Mac's chat-list previews, desktop peer
+preview rows.
 
 ## What landed (do not redo)
 
-All committed and typechecking across `shared`, `mobile`, `mobile/pro`, `desktop`, `desktop/pro`.
+- **PM10 Android screenshot capture**: Kotlin `ContentObserver` on `MediaStore.Images` filtered to the
+  Screenshots bucket, copies into the app, emits the same `SyncScreenshotCaptured` payload iOS emits.
+  The TS boundary no longer asks `Platform.OS` - presence of the module IS the capability.
+- **PM11 Android downloads via MediaStore** (no folder picker; Android 11+ never grants SAF on
+  `Download`). Honest limit: with a media permission MediaStore returns MEDIA in Download; another
+  app's PDF is not reachable.
+- **Streaming**: "empty buffer means a new reply" now means neither content NOR reasoning (a thinking
+  model streamed reasoning with content empty, so every frame minted a new sender - 73 previews for
+  one answer). One row per device. Reasoning-only previews render.
+- **A synced message shows when it arrives** (desktop broadcasts on message materialisation; the open
+  thread reloads, skipped while that Mac is generating).
+- **Model state has one owner**: `activeModelService.resolveSelectedTextModel()` (tolerates a rebuilt
+  id by falling back to the file) and `selectedTextModelId()` (selection, then remembered choice).
+  Chat/chat-list/Home read `useActiveTextModel`; the picker's row state comes from
+  `useActiveModelStatus` + `loadingTextRowId`, never from the tap.
+- **Ambient folders**: one unusable file no longer fails a whole scan; a file received from the mesh is
+  never shared back (content key = name + size).
+- **LAN discovery**: the advertiser publishes its numeric address in the TXT record (`addr`), because
+  Bonjour answers with a hostname and Android cannot resolve `.local`. Desktop advertises
+  `lanAddress()` (skips utun/bridge/awdl/169.254), not the `0.0.0.0` it binds.
+- **UI**: one `ScreenHeader` everywhere (Sync, Clipboard, Pro); Sync is titled cards with divided rows;
+  sharing sections are accordions; the desktop file preview is a side panel; Pro screen's empty half
+  carries "Included with Pro"; paste-text into a project knowledge base.
+- **Gates**: desktop `npm run build` passes for the first time (stale licensing tests were blocking
+  typecheck; moved to pro, and they found two real bugs - a 201 activation reported as failure, and
+  licensed devices showing no last-seen). Shared has ESLint for the first time. Mobile test failures
+  166 -> 41, desktop 61 -> 23.
 
-- `shared/packages/sync/src/chat-stream-orchestrator.ts` — `ChatStreamOrchestrator` owns the entire
-  live-streaming lifecycle. Hosts inject `send`, `connectedDeviceIds`, `canSend`, `canReceive`,
-  `onPreviewsChanged`, `now`, `uuid`, `log`. Fed by ONE input, `observeLocalStream(snapshot | null)`.
-- Three defects fixed in `chat-stream.ts`, once, for both platforms:
-  - a `done` frame no longer deletes the preview (it marks it `complete`); the preview retires only
-    when `noteDurableRecord(conversationId, deviceId?)` fires, with a bounded settle window. This was
-    the "message showed then disappeared" bug.
-  - the `done` frame carries the final text, so the send throttle cannot strand the last tokens.
-  - shrinking cumulative text starts a new stream id (the resend case).
-- `shared/packages/sync/src/receive-policy.ts` — receive rules derived from the SAME catalogue as
-  sharing (`SYNC_RELEASE_WORKSPACE_CATEGORIES` + `SYNC_AMBIENT_SOURCE_DEFINITIONS`), plus `files` and
-  `models`. On/off only, global + per-device (pairing is the consent; there is no per-file prompt).
-  Exports `acceptsIncoming`, `admitInboundOps`, `receiveCategoryForTransfer`, `projectSyncReceiving`,
-  and the `with*` mutators. `projectSyncReceiving().summary` is EMPTY when all-on or all-off.
-- **Mobile**: `pro/sync/chatStreamService.ts` is adapters only (162 → 60 lines), fed by a
-  `useChatStore.subscribe` so no code path can forget to notify sync. `pro/sync/receivePreferences.ts`
-  persists the policy. Gates wired at the op-log boundary (`stateSyncService`), the transfer boundary
-  (`fileTransferService.admitIncoming`), and the clipboard channel. Rules cleared on unpair via
-  `pro/sync/forgetDeviceRules.ts`.
-- **Desktop**: `pro/main/sync/chat-stream-service.ts` + `src/main/chat-stream-state.ts` (core folds
-  deltas and publishes a snapshot through the `syncStreamingState` hook). `SyncPrefs` carries a
-  `receivePolicy`; gates wired the same two places. `pro/renderer/components/ReceivingControls.tsx`.
-- **Sync UI (mobile)**: cards match the Home tokens (radius 12, `surface`, `shadows.small`, no
-  border); THIS DEVICE / PERSONAL MESH / PAIRING CODE compressed; device actions are inline icons;
-  receiving is scoped with a `FROM [All devices] [device]` selector like ambient sharing, so
-  per-device control is per CATEGORY.
+## Open, in the order I would take it
 
-**Verified on the Android device** (OnePlus, `ai.offgridmobile.dev`): `[ChatStream] started
-chatsEnabled=true receiving=true`, `[StateSync] oplog ready device=6e1c3b71 ops=2245`,
-MeshResidency FGS running, and the compressed/elevated Sync screen by screenshot.
-Everything else below is code, not verified.
+1. **VERIFY Android <-> macOS over LAN.** Everything is committed but unverified: the phone needs a JS
+   reload (to pick up the rebuilt `@offgrid/sync`) and then Sync -> Rescan. Two possible outcomes:
+   it connects with route LAN, or the phone logs `[Discovery] resolved a peer with no dialable address
+   (addresses=N host=name)`. If the latter, Android's zeroconf is giving no address AND the peer
+   published no `addr` - resolve the name natively (NsdManager gives an InetAddress).
+   Facts already established: `ping <mac>.local` from the phone answers "unknown host"; the Mac's
+   record was being announced on `utun0` (a VPN), not `en0`; **Android has NO proximity route**
+   (`src/services/sync/nativeSync.ts:90` gates it on iOS), so LAN is the only route it has and a
+   "Nearby" label for the Mac on Android is a lying route label.
+2. **The Mac's sync port is ephemeral** - it changes on every restart, so any saved host/port goes
+   stale. Discovery re-resolves, so this only bites when discovery fails. Consider a fixed port.
+3. **Eviction on Android uses `Alert.alert`** - a modal, which the user has explicitly ruled out on
+   mobile. `pro/ui/SyncScreen/KnownDevicesSection.tsx` (`confirmForget`, and the action-error alerts).
+   Convert to a bottom sheet (`AppSheet`).
+4. **iOS renders a synced reply twice.** Strong lead: **nothing calls `expireStale()`** on either host
+   (`ChatStreamOrchestrator.expireStale` has zero callers), so a preview that fails to retire never
+   expires - the 10s settle window is dead code. Ask whether the second bubble ever disappears.
+5. **PM11 untested on device**, and the Downloads card still says "Choose folder" where Android now
+   shows a permission dialog (widening that label needs a shared type change).
+6. **The mesh notification is dismissible** on Android 13+ despite `setOngoing(true)`
+   (`MeshResidencyService.kt:76`); the platform allows it and dismissal does NOT stop the service. Only
+   fix is a `deleteIntent` that re-posts - it fights the user's swipe, so it was left for a decision.
+7. **Desktop merges are HELD at the user's request** until they have verified this build. Core is 13
+   behind main, pro 7 behind with two files changed on both sides:
+   `pro/renderer/settings-sections.tsx` and `pro/main/__tests__/capture-opt-in.integration.test.ts`
+   (main landed Windows-Pro work). mobile/pro is already merged.
+8. **Remaining test debt** (none of it from this session's changes, each verified against the
+   pre-change file): mobile 41 - stale suites for code that moved (`deviceFingerprint`,
+   `syncService.acceptIncomingPairing`) plus the Pro-access refactor sitting uncommitted in the tree;
+   desktop 23 - legacy MemoryChat expectations, a `proOn` stub the harness never provides,
+   App.navigation.
+9. **Mobile's send-side category taxonomy is a second source of truth**
+   (`pro/sync/syncPreferences.ts` hand-rolls `SyncCategory` while shared owns the catalogue; there is
+   an id-mapping hack in `SyncSharingSettingsScreen.tsx`). Collapsing it needs a persisted-preferences
+   migration.
+10. **Honesty gaps found and not closed**: the context length is silently floored by device RAM
+    (`llm.ts:204` - a 256K request became 4096 with nothing said); the resend path bails with "no
+    active model" rather than loading the selected one; the vision projector (a 205 MB F16 mmproj) is
+    loaded on every text-only chat start and could be lazy.
 
-## Session 2 (2026-07-31) - what landed since
+## Uncommitted work in the tree that is NOT mine
 
-Verified live: streaming Android -> Mac draws on the Mac ("OFF GRID AI - ANSWERING ON ONEPLUS NORD 5"),
-and the rebuilt Sync screen renders on Android by screenshot.
+Leave it alone: a Pro-access slice in progress (`src/stores/proAccessSlice.ts` untracked, plus
+`appStore`/`proLicenseService`/`useProStatusLabel`/`ProUpsellBanner`), `pro/licensing/proLicenseProvider.ts`,
+two sync integration tests and a test util, `ios/SyncClipboardModule.swift`, `scripts/ios-device.sh`,
+desktop's ROADMAP and e2e screenshots, and shared's `packages/models/src/catalog.ts` (one `sizeBytes`).
 
-- **Replication is diagnosable.** Shared `StateSync` reports counts only - what it advertises, what it
-  backfills, received-versus-applied per batch, and the entity names in a batch. Hosts report the same
-  numbers (mobile `logger`, desktop `logSyncLifecycle`). Send side reports `peers=N sent=M` and says
-  when a message was withheld, logged only when the outcome CHANGES so a backfill cannot spam it.
-- **Desktop draws peer previews.** Core slot `chat.messagesFooter` (inert), pro registers
-  `RemoteChatPreviews`. Rows come from shared `chatStreamPreviewRows`, which now yields ONE row per
-  device - a second preview from the same device is a superseded generation, and both were drawn.
-- **A synced message shows when it arrives.** Only conversation ops broadcast
-  `rag:conversations-changed`; messages told nobody, so the phone's question appeared after the answer.
-  Desktop broadcasts on message materialisation and the open thread reloads (skipped while that Mac is
-  generating).
-- **Mac chat list shows the last message**, through shared `chatListPreviewLine`, which the phone's list
-  now uses too.
-- **Ambient folders survive one bad file.** An ingest failure threw out of the scan loop: the rest of
-  the folder went untaken and that file's message became the source's `issue` until the next clean scan.
-  Per-item failures are counted (`snapshot.skipped`); `issue` means the source itself.
-- **Shared-file reconcile survives one unreachable destination**, and both `peerConnected` calls report
-  failures instead of leaking an unhandled rejection in main.
-- **Desktop clipboard is gated** on the receive policy, like mobile.
-- **Model state has one owner.** `activeModelService.resolveSelectedTextModel()` resolves the selection
-  (falling back to the file the id ends with, because the id is persisted while the downloaded list is
-  rebuilt at launch - that mismatch made chat refuse to send to a loaded model), and
-  `selectedTextModelId()` is the one answer for what to load (`activeModelId` and `lastTextModelId` had
-  diverged, so chat loaded SmolVLM while Qwen sat selected). Chat, the chat list and Home read
-  `useActiveTextModel`; the picker's row state comes from `useActiveModelStatus` + `loadingTextRowId`
-  instead of a flag set on tap, which is why a row span forever.
-- **UI**: Sync screen is titled cards with divided rows (Storage idiom), sharing sections are
-  accordions (shared `Accordion` in core), Pro screen's empty half carries "Included with Pro", the
-  model-loading bar animates on the native driver, and Files previews are cached and lazily requested.
+## Watch out
 
-## Remaining work, in the order I'd take it
-
-1. **Ops that keep arriving and applying nothing.** The Mac logs `ops from=<phone> received=15
-   applied=0` in repeating bursts. The batch is now entity-tagged, so one live run names the entity:
-   the phone re-sends because that entity's watermark on the Mac never advances. Look at whether those
-   ops are refused before they reach the log, or ingested and not persisted.
-2. **PM10 - Android automatic screenshot sharing.** Still unimplemented; the "unavailable in this
-   build" message is honest. `src/services/sync/nativeScreenshot.ts:31,55` gate `Platform.OS === 'ios'`.
-   Needs a Kotlin module in `android/app/src/main/java/ai/offgridmobile/`: a `ContentObserver` on
-   `MediaStore.Images` filtered to the Screenshots bucket, `READ_MEDIA_IMAGES`, emitting the same
-   `SyncScreenshotCaptured` payload iOS emits. Report capability as DATA, not a `Platform.OS` branch.
-   Needs a native rebuild, so do it when nobody is mid-test.
-3. **PM11 - Android downloads sharing.** Android 11+ never grants SAF on `Download`; use
-   `MediaStore.Downloads`.
-4. **Mobile's send-side category taxonomy is a second source of truth.**
-   `pro/sync/syncPreferences.ts` hand-rolls `SyncCategory` (`settings`, `generatedMedia`) while shared
-   owns the real catalogue (`model-settings`, `generated_media`); there is an id-mapping hack in
-   `SyncSharingSettingsScreen.tsx`. Collapsing it needs a persisted-preferences migration.
-5. **Context cap is silent.** `llm.ts:204` floors the requested context by device RAM and nothing says
-   so - a 256K request became 4096 and the user had to diagnose it by feel. Say it where it happens.
-6. **The resend path bails instead of loading.** `[RESEND-SM] retry BAIL: no active model` refuses
-   rather than loading the selected model or explaining why it cannot.
-
-## Environment gotchas that cost me time
-
-- **`~/Downloads` is unreadable** to the agent process (macOS TCC) — `ls` works, file reads fail with
-  EPERM even with the sandbox off, and `cp`/`cat`/`ditto` all fail. Ask the user to paste images into
-  the chat instead of giving a path.
-- **Metro may already be running** (port 8081) from the user's own terminal. `metro.config.js` watches
-  `../shared/packages/sync`, so a `shared` rebuild is picked up without restarting Metro.
-- After changing `shared`, run `npm run build` in `shared/packages/sync` — mobile and desktop consume
-  the built `dist`.
-- Android: `npm run android` (appId `ai.offgridmobile.dev`). All three physical iPhones reported
-  offline to `xcrun xctrace list devices`; iOS ran on the "OGA-A1 Simulator".
-- Pre-commit hooks enforce ESLint with **zero warnings** and hard line caps (500 lines/file,
-  350/function). Extract rather than bypass — never `--no-verify`.
-- Mobile typecheck has PRE-EXISTING failures in `__tests__/` the user does not care about. Filter:
-  `npx tsc --noEmit 2>&1 | grep -E "^(src|pro)/"`. Desktop: `grep -v "__tests__"`.
-
-## Copy and design rules the user enforced hard this session
-
-- **Never explain what a toggle's off state means.** A switch shows its own state. State only what the
-  user cannot see — e.g. "Refused data is never written to this phone and never passed on."
-- Show a fact ONCE. Derivable facts are not facts: "2 slots free" is max minus used; "offline or
-  available" is saved minus connected.
-- Explain only when something is wrong. "Discoverable" needs no sentence beneath it.
-- Cards use the Home tokens: radius 12, `colors.surface`, `shadows.small`, no border. If it is
-  card-shaped it is elevated, whatever it is named (`deviceRow` and `navigationRow` were both missed
-  for exactly this reason).
-- No em dashes, no exclamation marks, no curly quotes, no banned words. Icons over labels for row
-  actions (`react-native-vector-icons` Feather on mobile, `@phosphor-icons/react` on desktop).
+- `sharedFileSyncService.ts` is at exactly 500 lines; `SettingsScreen.tsx` render is at 341/350.
+  The next addition to either needs an extraction first.
+- Mobile typecheck: `npx tsc --noEmit 2>&1 | grep -E "^(src|pro)/"`. Desktop: filter `__tests__`.
+- Twenty mobile suites stub `activeModelService`; new methods on that seam go in
+  `__tests__/utils/activeModelServiceStub.ts`, not into each file.
