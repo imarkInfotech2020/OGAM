@@ -4,6 +4,7 @@ import {
   pickDirectory,
 } from '@react-native-documents/picker';
 import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
+import type { AmbientDirectoryAccessCopy } from '@offgrid/sync';
 
 /**
  * The grant Android uses for its Downloads folder, where there is no folder grant to hold.
@@ -41,14 +42,28 @@ interface SyncDirectorySourceNativeModule {
   ): Promise<NativeStagedDirectoryFile>;
 }
 
+interface DownloadsAccessState {
+  media: boolean;
+  allFiles: boolean;
+  canRequestAllFiles: boolean;
+}
+
 interface SyncDownloadsNativeModule {
   hasPermission(): Promise<boolean>;
+  accessState(): Promise<DownloadsAccessState>;
+  requestAllFilesAccess(): Promise<boolean>;
   enumerate(): Promise<NativeDirectoryCandidate[]>;
   stage(
     sourceId: string,
     destinationName: string,
   ): Promise<NativeStagedDirectoryFile>;
 }
+
+/**
+ * The access this device holds, remembered because the words on screen are chosen while rendering and
+ * cannot wait for the native call. Refreshed when the user acts and when the app comes back.
+ */
+let downloadsAccess: DownloadsAccessState | undefined;
 
 function nativeModule(): SyncDirectorySourceNativeModule {
   const boundary = NativeModules.SyncDirectorySourceModule as
@@ -92,6 +107,46 @@ async function authorizeMediaStoreDownloads(): Promise<string | undefined> {
   return anyGranted ? MEDIA_STORE_DOWNLOADS_GRANT : undefined;
 }
 
+/**
+ * What the Downloads card should say on this device, given the access it actually holds.
+ *
+ * Android is the only host where the folder cannot be picked, so it is the only host that returns
+ * anything here: everywhere else the shared source keeps its folder-grant wording. The point is that
+ * the button never promises a picker that will not appear, and never claims to share a whole folder
+ * when the system is only showing us the pictures in it.
+ */
+function downloadsAccessCopy(): AmbientDirectoryAccessCopy | undefined {
+  if (Platform.OS !== 'android' || !downloadsModule()) return undefined;
+  const access = downloadsAccess;
+  if (access?.allFiles) {
+    return {
+      configureLabel: 'Start watching',
+      description:
+        'New files saved to your Downloads folder go to your paired devices while the app is open.',
+    };
+  }
+  return {
+    configureLabel: access?.media ? 'Start watching' : 'Allow media access',
+    description:
+      'New pictures and video saved to your Downloads folder go to your paired devices while the app is open. Android does not let apps pick this folder, so Off Grid AI asks for media access instead.',
+    limitation:
+      'Android only shows apps the pictures and video in Downloads. Sharing PDFs and other downloads needs all files access.',
+    ...(access?.canRequestAllFiles !== false
+      ? { upgrade: { label: 'Allow all files' } }
+      : {}),
+  };
+}
+
+async function refreshDownloadsAccess(): Promise<void> {
+  const boundary = downloadsModule();
+  if (!boundary?.accessState) return;
+  try {
+    downloadsAccess = await boundary.accessState();
+  } catch {
+    // An unreadable access state is not a failure of the folder: the copy simply stays as it was.
+  }
+}
+
 export const nativeDirectorySourceBoundary = {
   available(): boolean {
     return (
@@ -100,10 +155,25 @@ export const nativeDirectorySourceBoundary = {
     );
   },
 
+  access: downloadsAccessCopy,
+
+  /** Refresh what access this device holds, so the card describes the present, not the last tap. */
+  refreshAccess: refreshDownloadsAccess,
+
+  /** Ask for all-files access, the only way Android will show a downloaded PDF to another app. */
+  async upgrade(): Promise<void> {
+    const boundary = downloadsModule();
+    if (!boundary?.requestAllFilesAccess) return;
+    await boundary.requestAllFilesAccess();
+    await refreshDownloadsAccess();
+  },
+
   async authorize(): Promise<string | undefined> {
     // Android: a media permission instead of a folder, because the folder cannot be granted.
     if (Platform.OS === 'android' && downloadsModule()) {
-      return authorizeMediaStoreDownloads();
+      const grant = await authorizeMediaStoreDownloads();
+      await refreshDownloadsAccess();
+      return grant;
     }
     try {
       const result = await pickDirectory({ requestLongTermAccess: true });

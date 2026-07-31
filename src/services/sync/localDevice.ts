@@ -20,7 +20,7 @@ import { currentPlatform } from './nativeSync';
 const LEGACY_DEVICE_ID_KEY = '@offgrid/sync/deviceId';
 const DEVICE_NAME_KEY = '@offgrid/sync/deviceName';
 const MAX_DEVICE_NAME_LENGTH = 64;
-const DEFAULT_DEVICE_NAME = 'Off Grid Device';
+const DEFAULT_DEVICE_NAME = 'Off Grid AI Device';
 
 /** Every local device fact EXCEPT its identity. The fingerprint owner supplies the id. */
 export type LocalDeviceProfile = Omit<SyncDeviceInfo, 'id'>;

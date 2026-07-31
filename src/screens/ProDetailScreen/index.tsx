@@ -263,7 +263,7 @@ export const ProDetailScreen: React.FC = () => {
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   flex: { flex: 1 },
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: SPACING.xxl },
+  content: { paddingTop: SPACING.lg, paddingBottom: SPACING.xxl },
 
   // Header
   header: {

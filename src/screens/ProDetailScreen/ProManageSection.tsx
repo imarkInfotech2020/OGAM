@@ -73,37 +73,41 @@ export const ProManageSection: React.FC = () => {
     );
   }
 
+  const renewing = tierMeta?.renews === true;
+
   return (
     <View style={styles.card}>
-      <View style={styles.statusRow}>
+      <Text style={styles.cardTitle}>Your licence</Text>
+      <View style={[styles.row, hasSyncScreen || renewing ? null : styles.lastRow]}>
         <Icon name="check-circle" size={18} color={colors.primary} />
-        <Text style={styles.statusText}>{statusLine}</Text>
+        <Text style={styles.rowTitle}>{statusLine}</Text>
       </View>
 
       {hasSyncScreen ? (
         <TouchableOpacity
-          style={styles.syncRow}
+          style={[styles.row, renewing ? null : styles.lastRow]}
+          activeOpacity={0.72}
           onPress={() => navigation.navigate('Sync')}
           accessibilityRole="button"
           accessibilityLabel="Manage licensed devices in Sync"
         >
-          <Icon name="monitor" size={16} color={colors.textMuted} />
-          <View style={styles.syncInfo}>
-            <Text style={styles.syncTitle}>Manage licensed devices</Text>
-            <Text style={styles.syncHint}>View or deactivate devices from Sync</Text>
+          <Icon name="monitor" size={18} color={colors.primary} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Licensed devices</Text>
+            <Text style={styles.rowDescription}>View or deactivate from Sync</Text>
           </View>
           <Icon name="chevron-right" size={16} color={colors.textMuted} />
         </TouchableOpacity>
       ) : null}
 
-      {tierMeta?.renews ? (
-        <View style={styles.manageBlock}>
-          <Text style={styles.sectionLabel}>Manage subscription</Text>
-          <View style={styles.manageRow}>
-            <Icon name="mail" size={14} color={colors.textMuted} />
-            <Text style={styles.manageHint}>
-              To cancel or update your payment method, use the link in your Off Grid AI purchase or
-              renewal email. RevenueCat sends one with every payment.
+      {/* Web Billing authenticates by email, so the only real path to cancelling is that link. */}
+      {renewing ? (
+        <View style={[styles.row, styles.lastRow]}>
+          <Icon name="mail" size={18} color={colors.primary} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Manage subscription</Text>
+            <Text style={styles.rowDescription}>
+              Use the link in your renewal email to cancel or change payment.
             </Text>
           </View>
         </View>
@@ -112,50 +116,37 @@ export const ProManageSection: React.FC = () => {
   );
 };
 
+// The same card as the rest of the app: one surface, an uppercase title, hairline-divided rows.
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
   ({
     card: {
       backgroundColor: colors.surface,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: SPACING.lg,
+      borderRadius: 12,
+      paddingHorizontal: SPACING.md,
+      paddingVertical: SPACING.xs,
       marginHorizontal: SPACING.xl,
       marginBottom: SPACING.xl,
-      gap: SPACING.sm as number,
       ...shadows.small,
     },
-    statusRow: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      gap: SPACING.sm,
-    },
-    statusText: { ...TYPOGRAPHY.body, color: colors.text },
-    sectionLabel: {
+    cardTitle: {
       ...TYPOGRAPHY.label,
-      textTransform: 'uppercase' as const,
       color: colors.textMuted,
+      textTransform: 'uppercase' as const,
       letterSpacing: 0.3,
-      marginTop: SPACING.sm,
+      paddingTop: SPACING.md,
+      paddingBottom: SPACING.xs,
     },
-    syncRow: {
+    row: {
+      minHeight: 44,
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       gap: SPACING.md,
-      minHeight: 44,
-      marginTop: SPACING.sm,
+      paddingVertical: SPACING.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
     },
-    syncInfo: { flex: 1, gap: SPACING.xs },
-    syncTitle: { ...TYPOGRAPHY.bodySmall, color: colors.text },
-    syncHint: { ...TYPOGRAPHY.meta, color: colors.textMuted },
-    manageBlock: {
-      marginTop: SPACING.sm,
-      gap: SPACING.sm as number,
-    },
-    manageRow: {
-      flexDirection: 'row' as const,
-      alignItems: 'flex-start' as const,
-      gap: SPACING.md,
-    },
-    manageHint: { ...TYPOGRAPHY.meta, color: colors.textMuted, flex: 1 },
+    lastRow: { borderBottomWidth: 0 },
+    rowText: { flex: 1, gap: SPACING.xs },
+    rowTitle: { ...TYPOGRAPHY.bodySmall, color: colors.text, flex: 1 },
+    rowDescription: { ...TYPOGRAPHY.meta, color: colors.textMuted },
   });

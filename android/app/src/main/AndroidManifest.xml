@@ -27,6 +27,13 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
+    <!-- A media permission only ever shows the media in Download, so a downloaded PDF or zip - most
+         of a real Downloads folder - stays invisible. This is the only remaining way to share those
+         files device to device, it is never requested on its own, and downloads sharing works without
+         it on media alone. Play requires the All files access declaration for this. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
     <!-- For silent companion file downloads (e.g. mmproj for vision models) -->
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
 
