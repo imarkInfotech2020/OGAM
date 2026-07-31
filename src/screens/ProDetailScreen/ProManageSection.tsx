@@ -1,8 +1,9 @@
 /**
  * ProManageSection
  *
- * Shown on the Pro screen when Pro is active. Surfaces subscription status from
- * the cached Keygen license (lifetime vs yearly + expiry). Active licensed
+ * Shown on the Pro screen when a protected credential is saved. Surfaces
+ * subscription status from the cached license (lifetime vs yearly + expiry).
+ * Active licensed
  * devices are managed from the Pro-owned Sync screen, so there is one list and
  * one action owner rather than a second read-only copy here.
  * For a recurring (yearly) license it explains how to cancel or update payment:

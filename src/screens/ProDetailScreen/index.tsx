@@ -20,6 +20,7 @@ import { withUtm } from '../../utils/utm';
 import { loadProFeatures } from '../../bootstrap/loadProFeatures';
 import { getPricingCopy } from '../../utils/proPricing';
 import { ProManageSection } from './ProManageSection';
+import { ProIncludedSection } from './ProIncludedSection';
 import { ProUnlockModal } from './ProUnlockModal';
 import { useHasRegisteredScreen } from '../../navigation/screenRegistry';
 import type { RootStackParamList } from '../../navigation/types';
@@ -59,10 +60,23 @@ export const ProDetailScreen: React.FC = () => {
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const hasRegisteredPro = useAppStore(s => s.hasRegisteredPro);
+  const hasSavedProCredential = useAppStore(s => s.hasSavedProCredential);
+  const isProActive = useAppStore(s => s.isProActive);
+  const isProDeviceActive = useAppStore(s => s.isProDeviceActive);
   const hasSyncBootstrap = useHasRegisteredScreen('Sync');
   const [verifyModalVisible, setVerifyModalVisible] = useState(false);
   const pricing = getPricingCopy();
+  const isDevelopmentAccess = __DEV__ && isProActive && !hasSavedProCredential;
+  const deviceStatus = isProDeviceActive
+    ? { icon: 'check', label: 'Pro Active' }
+    : isDevelopmentAccess
+    ? { icon: 'tool', label: 'Development Access' }
+    : hasSavedProCredential
+    ? { icon: 'alert-circle', label: 'Device Not Active' }
+    : null;
+  const deviceStatusColor = isProDeviceActive
+    ? colors.primary
+    : colors.textMuted;
 
   const openPayPage = () => {
     Linking.openURL(withUtm(PRO_PAY_PAGE_URL, 'pro-detail')).catch(() => {});
@@ -102,14 +116,32 @@ export const ProDetailScreen: React.FC = () => {
             </View>
             <Text style={styles.logoText}>Off Grid AI Pro</Text>
           </View>
-          {hasRegisteredPro ? (
-            <View style={styles.proActiveBadge}>
-              <Icon name="check" size={12} color={colors.primary} />
-              <Text style={styles.proActiveBadgeText}>Pro Active</Text>
-            </View>
-          ) : (
-            <View style={styles.headerActions}>
-              {/* License-key entry, discoverable without scrolling. */}
+          <View style={styles.headerActions}>
+            {deviceStatus ? (
+              <View
+                style={[
+                  styles.proActiveBadge,
+                  !isProDeviceActive && styles.proInactiveBadge,
+                ]}
+              >
+                <Icon
+                  name={deviceStatus.icon}
+                  size={12}
+                  color={deviceStatusColor}
+                />
+                <Text
+                  style={[
+                    styles.proActiveBadgeText,
+                    !isProDeviceActive && styles.proInactiveBadgeText,
+                  ]}
+                >
+                  {deviceStatus.label}
+                </Text>
+              </View>
+            ) : null}
+            {/* License-key entry stays available while a saved credential needs
+                explicit device reactivation. */}
+            {!isProDeviceActive && !isDevelopmentAccess ? (
               <TouchableOpacity
                 style={styles.headerKeyButton}
                 onPress={openVerifyModal}
@@ -118,19 +150,25 @@ export const ProDetailScreen: React.FC = () => {
               >
                 <Icon name="key" size={16} color={colors.primary} />
               </TouchableOpacity>
+            ) : null}
+            {!hasSavedProCredential && !isDevelopmentAccess ? (
               <TouchableOpacity
                 style={styles.getProButton}
                 onPress={openPayPage}
               >
                 <Text style={styles.getProButtonText}>Get Pro</Text>
               </TouchableOpacity>
-            </View>
-          )}
+            ) : null}
+          </View>
         </View>
 
-        {hasRegisteredPro ? (
-          /* Pro active: skip the marketing, show subscription + devices. */
-          <ProManageSection />
+        {hasSavedProCredential ? (
+          /* A saved credential shows subscription and device management, then what the licence
+             actually opened up. The header separately projects whether this device is admitted. */
+          <>
+            <ProManageSection />
+            <ProIncludedSection />
+          </>
         ) : (
           <>
             {/* Hero */}
@@ -292,6 +330,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 8,
   },
   proActiveBadgeText: { ...TYPOGRAPHY.bodySmall, color: colors.primary },
+  proInactiveBadge: { borderColor: colors.border },
+  proInactiveBadgeText: { color: colors.textMuted },
 
   // Hero
   hero: {
@@ -368,11 +408,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingVertical: SPACING.md,
     alignItems: 'flex-start' as const,
   },
+  // No filled circle behind it: a decorative tile is not information, and the icon reads fine on
+  // the page. Same treatment as the Sync navigation rows.
   pillarIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceLight,
+    width: 28,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
@@ -413,10 +452,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
   },
   desktopIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceLight,
+    width: 28,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
