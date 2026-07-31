@@ -11,6 +11,8 @@ import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
 import { textOverheadMultiplier } from './types';
+import { createSelectedTextModelResolver } from './selectedTextModel';
+import type { DownloadedModel } from '../../types';
 import type {
   ActiveModelInfo,
   ResourceUsage,
@@ -36,6 +38,14 @@ class ActiveModelService {
   private loadedImageModelId: string | null = null;
   private loadedImageModelThreads: number | null = null;
   private textLoadPromise: Promise<void> | null = null;
+  /** Resolves the selection against the downloaded list, tolerating a rebuilt id (see resolveModel). */
+  private readonly selectedTextModel = createSelectedTextModelResolver({
+    read: () => {
+      const store = useAppStore.getState();
+      return { models: store.downloadedModels, selectedId: store.activeModelId };
+    },
+    warn: message => logger.warn(message),
+  });
   private imageLoadPromise: Promise<void> | null = null;
   /** The SINGLE writer for the loaded-text-model id: keeps the private field and the reactive store
    *  projection (loadedTextModelId) in lockstep, so every surface reads one truth for "currently loaded". */
@@ -43,10 +53,17 @@ class ActiveModelService {
     this.loadedTextModelId = id;
     useAppStore.getState().setLoadedTextModelId(id);
   }
+  /**
+   * The selected text model, resolved. The ONE answer to "which text model is chosen", so no surface
+   * repeats the lookup and none of them can disagree about it.
+   */
+  resolveSelectedTextModel(): DownloadedModel | null {
+    return this.selectedTextModel();
+  }
+
   getActiveModels(): ActiveModelInfo {
     const store = useAppStore.getState();
-    const textModel =
-      store.downloadedModels.find(m => m.id === store.activeModelId) ?? null;
+    const textModel = this.resolveSelectedTextModel();
     const imageModel =
       store.downloadedImageModels.find(
         m => m.id === store.activeImageModelId,
