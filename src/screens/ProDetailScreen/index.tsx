@@ -19,6 +19,7 @@ import { PRO_PAY_PAGE_URL } from '../../services/proLicenseService';
 import { withUtm } from '../../utils/utm';
 import { loadProFeatures } from '../../bootstrap/loadProFeatures';
 import { getPricingCopy } from '../../utils/proPricing';
+import { ScreenHeader } from '../../components/ScreenHeader';
 import { ProManageSection } from './ProManageSection';
 import { ProIncludedSection } from './ProIncludedSection';
 import { ProUnlockModal } from './ProUnlockModal';
@@ -96,27 +97,13 @@ export const ProDetailScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.logoRow}>
-            <View style={styles.logoGrid}>
-              <View style={styles.logoDotRow}>
-                <View style={styles.logoDot} />
-                <View style={styles.logoDot} />
-              </View>
-              <View style={styles.logoDotRow}>
-                <View style={styles.logoDot} />
-                <View style={styles.logoDot} />
-              </View>
-            </View>
-            <Text style={styles.logoText}>Off Grid AI Pro</Text>
-          </View>
-          <View style={styles.headerActions}>
+      {/* The app's one header, like every other screen: a back arrow, the title, and this device's
+          entitlement state where a screen's actions go. */}
+      <ScreenHeader
+        title="Off Grid AI Pro"
+        onBack={() => navigation.goBack()}
+        right={
+<View style={styles.headerActions}>
             {deviceStatus ? (
               <View
                 style={[
@@ -160,8 +147,13 @@ export const ProDetailScreen: React.FC = () => {
               </TouchableOpacity>
             ) : null}
           </View>
-        </View>
-
+        }
+      />
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         {hasSavedProCredential ? (
           /* A saved credential shows subscription and device management, then what the licence
              actually opened up. The header separately projects whether this device is admitted. */
