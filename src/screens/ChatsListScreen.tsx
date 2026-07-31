@@ -25,6 +25,7 @@ import { loadModelWithOverride } from '../services/loadModelWithOverride';
 import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { byRecentActivity } from '../utils/conversationOrdering';
+import { chatListPreviewLine } from '@offgrid/sync';
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'ChatsTab'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -174,6 +175,8 @@ export const ChatsListScreen: React.FC = () => {
   const renderChat = ({ item, index }: { item: Conversation; index: number }) => {
     const project = item.projectId ? getProject(item.projectId) : null;
     const lastMessage = item.messages[item.messages.length - 1];
+    // The preview line comes from the shared rule, so this list and the Mac's read the same.
+    const preview = chatListPreviewLine(lastMessage?.role, lastMessage?.content);
 
     return (
       <Swipeable
@@ -195,11 +198,11 @@ export const ChatsListScreen: React.FC = () => {
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {lastMessage && (
+            {preview ? (
               <Text style={styles.chatPreview} numberOfLines={1}>
-                {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
+                {preview}
               </Text>
-            )}
+            ) : null}
             {project && (
               <View style={styles.projectBadge}>
                 <Text style={styles.projectBadgeText}>{project.name}</Text>
