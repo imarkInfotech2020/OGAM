@@ -1,3 +1,4 @@
+export { Accordion } from './Accordion';
 export { AdvancedToggle } from './AdvancedToggle';
 export { Button } from './Button';
 export { Card } from './Card';
