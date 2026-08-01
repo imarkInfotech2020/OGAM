@@ -6,7 +6,7 @@
  * Keygen revalidation updates the cached entitlement after boot.
  */
 
-jest.mock('../../../src/services/keygenClient', () => ({
+jest.mock('../../../pro/licensing/keygenClient', () => ({
   validateKey: jest.fn(),
   activateMachine: jest.fn(),
   listMachines: jest.fn(),
@@ -14,7 +14,7 @@ jest.mock('../../../src/services/keygenClient', () => ({
   KeygenNetworkError: class KeygenNetworkError extends Error {},
 }));
 
-jest.mock('../../../src/services/deviceFingerprint', () => ({
+jest.mock('../../../pro/licensing/deviceFingerprint', () => ({
   getDeviceFingerprint: jest.fn(async () => 'fp-123'),
   getPlatformTag: jest.fn(() => 'ios'),
 }));
@@ -40,7 +40,7 @@ jest.mock('@offgrid/pro', () => ({ activate: jest.fn() }), { virtual: true });
 import { checkProStatus } from '../../../src/services/proLicenseService';
 import { loadProFeatures } from '../../../src/bootstrap/loadProFeatures';
 
-const { validateKey } = require('../../../src/services/keygenClient');
+const { validateKey } = require('../../../pro/licensing/keygenClient');
 const Keychain = require('react-native-keychain');
 const mockGetGenericPassword = Keychain.getGenericPassword;
 const mockSetGenericPassword = Keychain.setGenericPassword;
