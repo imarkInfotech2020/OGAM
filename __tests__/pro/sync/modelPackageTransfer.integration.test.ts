@@ -103,6 +103,16 @@ function packageMetadata(
   };
 }
 
+/**
+ * The pairing code this phone is showing. A peer proves it is the device the user is looking at by
+ * presenting this code, which is why nothing has to be accepted afterwards.
+ */
+function phonePairingCode(): string {
+  const code = useSyncStore.getState().pairingCode.code;
+  if (!code) throw new Error('the phone has not issued a pairing code yet');
+  return code;
+}
+
 describe('Pro mobile model package receiver', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let remoteTransfers: FileTransferManager | undefined;
@@ -161,7 +171,7 @@ describe('Pro mobile model package receiver', () => {
         host: '127.0.0.1',
         port: discovery.publishedPort,
       },
-      'blue-otter-42',
+      phonePairingCode(),
     );
     await waitForState(() =>
       useSyncStore
@@ -173,7 +183,6 @@ describe('Pro mobile model package receiver', () => {
             attempt.stage === 'waiting_for_confirmation',
         ),
     );
-    syncService.acceptIncomingPairing('blue-otter-42');
     await pairing;
     await waitForState(() =>
       useSyncStore

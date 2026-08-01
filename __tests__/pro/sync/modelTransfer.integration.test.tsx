@@ -36,6 +36,7 @@ import {
   createVisionModel,
 } from '../../utils/factories';
 import { ModelTransferSheet } from '../../../pro/ui/ModelTransferSheet';
+import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
 
 jest.unmock('@react-navigation/native');
 
@@ -80,6 +81,8 @@ describe('Pro mobile model transfer journey', () => {
     registerScreen({ name: 'Sync', component: SyncScreen });
     registerScreen({ name: 'SyncActivity', component: SyncActivityScreen });
     useAppStore.getState().setOnboardingComplete(true);
+    // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
+    useAppStore.getState().setProActive(true);
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
@@ -169,16 +172,11 @@ describe('Pro mobile model transfer journey', () => {
         host: '127.0.0.1',
         port: discovery.publishedPort,
       },
-      'green-river-52',
+      await pairingCodeOnScreen(ui),
     );
     await waitFor(() =>
       expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
     );
-    fireEvent.changeText(
-      ui.getByTestId('incoming-pairing-code'),
-      'green-river-52',
-    );
-    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
     await pairing;
     await waitFor(() =>
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),

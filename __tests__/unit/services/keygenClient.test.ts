@@ -4,7 +4,7 @@ import {
   listMachines,
   deactivateMachine,
   KeygenNetworkError,
-} from '../../../src/services/keygenClient';
+} from '../../../pro/licensing/keygenClient';
 import { KEYGEN_PRODUCT_ID } from '../../../src/config/keygen';
 
 const res = (body: any, status = 200) => ({

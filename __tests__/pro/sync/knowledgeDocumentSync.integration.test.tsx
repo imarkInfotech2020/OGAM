@@ -135,6 +135,8 @@ describe('Pro mobile knowledge document sync journey', () => {
     useSyncStore.getState().reset();
     useChatStore.getState().clearAllConversations();
     useAppStore.getState().setOnboardingComplete(true);
+    // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
+    useAppStore.getState().setProActive(true);
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);

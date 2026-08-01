@@ -45,6 +45,7 @@ import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
+import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
 import { createDownloadedModel } from '../../utils/factories';
 
 jest.unmock('@react-navigation/native');
@@ -118,6 +119,8 @@ describe('mobile clipboard Sync journey', () => {
     });
     registerScreen({ name: 'Clipboard', component: ClipboardScreen });
     useAppStore.getState().setOnboardingComplete(true);
+    // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
+    useAppStore.getState().setProActive(true);
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
@@ -405,16 +408,11 @@ describe('mobile clipboard Sync journey', () => {
         host: '127.0.0.1',
         port: discovery.publishedPort,
       },
-      'green-river-42',
+      await pairingCodeOnScreen(ui),
     );
     await waitFor(() =>
       expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
     );
-    fireEvent.changeText(
-      ui.getByTestId('incoming-pairing-code'),
-      'green-river-42',
-    );
-    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
     await pairing;
 
     fireEvent.press(ui.getByTestId('sync-open-sharing'));

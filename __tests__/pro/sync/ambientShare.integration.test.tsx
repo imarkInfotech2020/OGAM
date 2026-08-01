@@ -50,6 +50,7 @@ import {
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
+import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
 import { createDownloadedModel } from '../../utils/factories';
 
 jest.unmock('@react-navigation/native');
@@ -118,6 +119,8 @@ describe('mobile ambient sharing journey', () => {
     registerScreen({ name: 'SyncActivity', component: SyncActivityScreen });
     registerScreen({ name: 'SyncFiles', component: SyncFilesScreen });
     useAppStore.getState().setOnboardingComplete(true);
+    // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
+    useAppStore.getState().setProActive(true);
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
@@ -257,16 +260,11 @@ describe('mobile ambient sharing journey', () => {
         host: '127.0.0.1',
         port: discovery.publishedPort,
       },
-      'blue-otter-42',
+      await pairingCodeOnScreen(ui),
     );
     await waitFor(() =>
       expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
     );
-    fireEvent.changeText(
-      ui.getByTestId('incoming-pairing-code'),
-      'blue-otter-42',
-    );
-    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
     await pairing;
     await waitFor(() =>
       expect(

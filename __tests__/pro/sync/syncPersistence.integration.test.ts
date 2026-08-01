@@ -41,6 +41,16 @@ const waitFor = async (
   }
 };
 
+/**
+ * The pairing code this phone is showing. A peer proves it is the device the user is looking at by
+ * presenting this code, which is why nothing has to be accepted afterwards.
+ */
+function phonePairingCode(): string {
+  const code = useSyncStore.getState().pairingCode.code;
+  if (!code) throw new Error('the phone has not issued a pairing code yet');
+  return code;
+}
+
 describe('Pro Sync app-lifetime pairing persistence', () => {
   let persistedPairings: string | undefined;
 
@@ -102,7 +112,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
 
     const firstPairing = remote.engine.pair(
       { ...mobile!, host: '127.0.0.1', port: firstDiscovery!.publishedPort! },
-      'blue-otter-42',
+      phonePairingCode(),
     );
     await waitFor(
       () =>
@@ -117,7 +127,6 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       3000,
       'initial incoming pairing',
     );
-    syncService.acceptIncomingPairing('blue-otter-42');
     await firstPairing;
     await waitFor(
       () =>
@@ -186,7 +195,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
 
     const secondPairing = remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: firstDiscovery.publishedPort },
-      'blue-otter-42',
+      phonePairingCode(),
     );
     await waitFor(() =>
       useSyncStore
@@ -198,7 +207,6 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
             attempt.stage === 'waiting_for_confirmation',
         ),
     );
-    syncService.acceptIncomingPairing('blue-otter-42');
     await secondPairing;
     await waitFor(() =>
       useSyncStore
@@ -243,8 +251,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       'one-sided trust repair state',
     );
 
-    useSyncStore.getState().setPairingCode('blue-otter-42');
-    await syncService.pair(remoteDevice);
+    await syncService.pair(remoteDevice, 'blue-otter-42');
     await waitFor(
       () =>
         useSyncStore
@@ -265,8 +272,9 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     expect(useSyncStore.getState().knownDevices).toEqual([]);
     expect(JSON.parse(persistedPairings ?? '{}')).toEqual(
       expect.objectContaining({
-        version: 3,
+        version: 4,
         pairings: {},
+        stagedPairings: {},
         pendingRevocations: {},
       }),
     );
@@ -304,7 +312,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
 
     const pairing = remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: firstDiscovery.publishedPort },
-      'blue-otter-42',
+      phonePairingCode(),
     );
     await waitFor(() =>
       useSyncStore
@@ -315,7 +323,6 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
             attempt.stage === 'waiting_for_confirmation',
         ),
     );
-    syncService.acceptIncomingPairing('blue-otter-42');
     await pairing;
     await waitFor(() =>
       useSyncStore

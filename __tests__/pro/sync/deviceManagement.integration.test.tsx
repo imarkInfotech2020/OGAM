@@ -34,6 +34,7 @@ import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
+import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
 import { createDownloadedModel } from '../../utils/factories';
 import { MembershipPersistenceBoundary } from '../../utils/membershipPersistenceBoundary';
 
@@ -70,6 +71,8 @@ describe('Pro mobile saved-device management journey', () => {
     registerScreen({ name: 'Sync', component: SyncScreen });
     registerSlot(SLOTS.homeSyncCard, SyncHomeCard);
     useAppStore.getState().setOnboardingComplete(true);
+    // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
+    useAppStore.getState().setProActive(true);
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
@@ -152,19 +155,9 @@ describe('Pro mobile saved-device management journey', () => {
     }
     const pairing = remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
-      'blue-otter-42',
+      await pairingCodeOnScreen(ui),
     );
-    await waitFor(() =>
-      expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
-    );
-    expect(
-      ui.getByText('Confirm the same pairing code on both devices.'),
-    ).toBeTruthy();
-    fireEvent.changeText(
-      ui.getByTestId('incoming-pairing-code'),
-      'blue-otter-42',
-    );
-    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
+    // Nothing to confirm: the peer presented this phone's own code, so pairing completes.
     await pairing;
 
     const connectedRow = await waitFor(() =>
@@ -261,7 +254,22 @@ describe('Pro mobile saved-device management journey', () => {
         `sync-retry-eviction-${remoteDevice.id}`,
       ),
     ).toBeTruthy();
+    expect(
+      within(pendingEviction).getByTestId(
+        `sync-dismiss-eviction-${remoteDevice.id}`,
+      ),
+    ).toBeTruthy();
     expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
+    fireEvent.press(
+      within(pendingEviction).getByTestId(
+        `sync-dismiss-eviction-${remoteDevice.id}`,
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        ui!.queryByTestId(`sync-discovered-${remoteDevice.id}`),
+      ).toBeNull(),
+    );
 
     remote = buildSyncEngine({
       localDevice: remoteDevice,
@@ -279,24 +287,21 @@ describe('Pro mobile saved-device management journey', () => {
     );
     await waitFor(() =>
       expect(
-        useSyncStore
-          .getState()
-          .membershipRevocations.some(
-            revocation =>
-              revocation.device.id === remoteDevice.id &&
-              revocation.stage === 'completed',
-          ),
-      ).toBe(true),
+        JSON.parse(storedPairings ?? '{}').pendingRevocations,
+      ).toEqual({}),
     );
-    expect(
-      within(ui.getByTestId(`sync-discovered-${remoteDevice.id}`)).getByTestId(
-        `sync-pair-${remoteDevice.id}`,
-      ),
-    ).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        within(
+          ui!.getByTestId(`sync-discovered-${remoteDevice.id}`),
+        ).getByTestId(`sync-pair-${remoteDevice.id}`),
+      ).toBeTruthy(),
+    );
     expect(JSON.parse(storedPairings ?? '{}')).toEqual(
       expect.objectContaining({
-        version: 3,
+        version: 4,
         pairings: {},
+        stagedPairings: {},
         pendingRevocations: {},
       }),
     );

@@ -29,15 +29,32 @@ export class MembershipPersistenceBoundary
   implements PairingPersistence, MembershipRevocationPersistence
 {
   private active = new Map<string, PairedDevice>();
+  private staged = new Map<string, PairedDevice>();
   private pending = new Map<string, PendingMembershipRevocation>();
   private tombstones = new Map<string, MembershipRevocationTombstone>();
 
-  save(device: PairedDevice): void {
-    this.active.set(device.id, { ...device });
+  begin(device: PairedDevice): void {
+    this.staged.set(device.id, { ...device });
   }
 
-  remove(deviceId: string): void {
-    this.active.delete(deviceId);
+  commit(device: PairedDevice): void {
+    const staged = this.staged.get(device.id);
+    if (
+      staged?.sharedSecret !== device.sharedSecret ||
+      staged.membershipId !== device.membershipId
+    ) {
+      throw new Error('Pairing trust was not staged for this membership.');
+    }
+    this.active.set(device.id, { ...device });
+    this.staged.delete(device.id);
+    this.pending.delete(device.id);
+    for (const [key, tombstone] of this.tombstones) {
+      if (tombstone.deviceId === device.id) this.tombstones.delete(key);
+    }
+  }
+
+  rollback(deviceId: string): void {
+    this.staged.delete(deviceId);
   }
 
   getActive(deviceId: string): PairedDevice | undefined {
@@ -113,6 +130,23 @@ export class MembershipPersistenceBoundary
       tombstoneKey(tombstone.deviceId, tombstone.membershipId),
       { ...tombstone },
     );
+    return true;
+  }
+
+  setPendingDismissed(
+    deviceId: string,
+    revocationId: string,
+    dismissedAt?: number,
+  ): boolean {
+    const pending = this.pending.get(deviceId);
+    if (!pending || pending.revocationId !== revocationId) return false;
+    this.pending.set(deviceId, {
+      ...pending,
+      ...(dismissedAt === undefined ? {} : { dismissedAt }),
+    });
+    if (dismissedAt === undefined) {
+      delete this.pending.get(deviceId)?.dismissedAt;
+    }
     return true;
   }
 

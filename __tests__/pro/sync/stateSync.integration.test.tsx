@@ -41,6 +41,7 @@ import {
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
 import { createDownloadedModel } from '../../utils/factories';
+import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
 
 jest.unmock('@react-navigation/native');
 
@@ -90,6 +91,8 @@ describe('Pro mobile state sync journey', () => {
       component: SyncSharingSettingsScreen,
     });
     useAppStore.getState().setOnboardingComplete(true);
+    // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
+    useAppStore.getState().setProActive(true);
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
@@ -230,21 +233,11 @@ describe('Pro mobile state sync journey', () => {
     expect(ui.queryByTestId('sync-rescan-error')).toBeNull();
     expect(discovery.publishedPort).toBeGreaterThan(0);
 
+    // The peer presents the code this phone is showing, which is the whole confirmation.
     const firstPairing = remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
-      'violet-lake-27',
+      await pairingCodeOnScreen(ui),
     );
-    await waitFor(() =>
-      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
-    );
-    expect(
-      ui.getByText('Confirm the same pairing code on both devices.'),
-    ).toBeTruthy();
-    fireEvent.changeText(
-      ui.getByTestId('incoming-pairing-code'),
-      'violet-lake-27',
-    );
-    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
     await firstPairing;
     await waitFor(() =>
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
