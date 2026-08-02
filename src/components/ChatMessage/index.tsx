@@ -157,6 +157,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     onLongPress={onLongPress}
     delayLongPress={300}
   >
+    {/* Above the reply, because that is when they happened. A locally generated turn shows its tool
+        results as their own messages BEFORE the answer; a synced turn carries them on the assistant
+        message, and rendering them underneath told the opposite story - as if the model answered and
+        then went looking. */}
+    <SyncedToolArtifacts message={message} styles={styles} colors={colors} />
+
     <View style={bubbleStyle}>
       {hasAttachments && (
         <MessageAttachments
@@ -179,8 +185,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         styles={styles}
       />
     </View>
-
-    <SyncedToolArtifacts message={message} styles={styles} colors={colors} />
 
     <RoutedToolsRow
       message={message}

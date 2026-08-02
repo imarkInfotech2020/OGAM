@@ -6,23 +6,9 @@ import { AnimatedListItem } from '../../../components/AnimatedListItem';
 import { useTheme, useThemedStyles } from '../../../theme';
 import { createStyles } from '../styles';
 import { Conversation } from '../../../types';
+import { formatWhen } from '../../../utils/localTime';
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-  if (diffDays === 1) {
-    return 'Yesterday';
-  }
-  if (diffDays < 7) {
-    return date.toLocaleDateString([], { weekday: 'short' });
-  }
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
+const formatDate = (dateStr: string): string => formatWhen(dateStr);
 
 type Props = {
   conversations: Conversation[];

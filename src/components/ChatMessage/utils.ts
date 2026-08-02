@@ -6,10 +6,8 @@ export { parseThinkingContent, parseModelOutput } from '../../utils/messageConte
 
 
 
-export function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
+/** A message's time, from the one formatter that answers in the device's own zone. */
+export { formatClockTime as formatTime } from '../../utils/localTime';
 
 export function formatDuration(ms: number): string {
   if (ms < 1000) {

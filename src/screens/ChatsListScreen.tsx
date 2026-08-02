@@ -26,6 +26,7 @@ import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
 import { byRecentActivity } from '../utils/conversationOrdering';
 import { chatListPreviewLine } from '@offgrid/sync';
+import { formatWhen } from '../utils/localTime';
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'ChatsTab'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -147,21 +148,7 @@ export const ChatsListScreen: React.FC = () => {
     ));
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return 'Yesterday';
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: 'short' });
-    } 
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    
-  };
+  const formatDate = (dateString: string): string => formatWhen(dateString);
 
   const renderRightActions = (conversation: Conversation) => (
     <TouchableOpacity

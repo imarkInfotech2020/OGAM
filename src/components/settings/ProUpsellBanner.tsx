@@ -29,9 +29,15 @@ interface Props {
 export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  // Never upsell a Pro user — isProActive covers keychain/dev-unlocked Pro too, which
-  // hasRegisteredPro alone misses.
-  const show = useAppStore((s) => !s.proBannerDismissed && !s.hasRegisteredPro && !s.isProActive);
+  // A saved credential may need device reactivation, but it is never an upsell.
+  // Debug access and active Pro features remain separate projections.
+  const show = useAppStore(
+    (s) =>
+      !s.proBannerDismissed &&
+      !s.hasSavedProCredential &&
+      !s.hasRegisteredPro &&
+      !s.isProActive,
+  );
   const dismiss = useAppStore((s) => s.setProBannerDismissed);
   const pricing = getPricingCopy();
 

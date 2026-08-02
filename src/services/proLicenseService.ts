@@ -23,6 +23,7 @@ export const PRO_TIER_META: Record<
 
 export interface ProLicenseInfo {
   isPro: boolean;
+  credentialSaved?: boolean;
   tier: ProTier | null;
   expiry: string | null;
   verifiedAt: number;
@@ -40,6 +41,7 @@ const UNAVAILABLE_PROVIDER: ProEntitlementProvider = {
   readActive: async () => false,
   getInfo: async () => ({
     isPro: false,
+    credentialSaved: false,
     tier: null,
     expiry: null,
     verifiedAt: 0,

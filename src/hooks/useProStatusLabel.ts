@@ -12,24 +12,29 @@ import {
  * "<Tier> · active") when Pro.
  */
 export function useProStatusLabel(): {
-  hasRegisteredPro: boolean;
   proStatusLabel: string;
 } {
-  const hasRegisteredPro = useAppStore(s => s.hasRegisteredPro);
+  const hasSavedProCredential = useAppStore(s => s.hasSavedProCredential);
   const isProActive = useAppStore(s => s.isProActive);
+  const isProDeviceActive = useAppStore(s => s.isProDeviceActive);
   const [info, setInfo] = useState<ProLicenseInfo | null>(null);
   useEffect(() => {
-    if (isProActive)
+    if (hasSavedProCredential)
       getProLicenseInfo()
         .then(setInfo)
         .catch(() => {});
     else setInfo(null);
-  }, [isProActive]);
+  }, [hasSavedProCredential]);
 
   // Drive off the tier's `renews` flag (single source), not a concrete-tier check.
   const meta = info?.tier ? PRO_TIER_META[info.tier] : null;
-  const proStatusLabel = !isProActive
+  const isDevelopmentAccess = __DEV__ && isProActive && !hasSavedProCredential;
+  const proStatusLabel = isDevelopmentAccess
+    ? 'Development access'
+    : !hasSavedProCredential
     ? 'Unlock premium features'
+    : !isProDeviceActive
+    ? 'Credential saved - device not active'
     : info?.isPro && meta?.renews && info.expiry
     ? `Active until ${new Date(info.expiry).toLocaleDateString(undefined, {
         month: 'short',
@@ -42,5 +47,5 @@ export function useProStatusLabel(): {
     ? 'Development · active'
     : 'Pro · active';
 
-  return { hasRegisteredPro, proStatusLabel };
+  return { proStatusLabel };
 }
