@@ -23,7 +23,7 @@
 22,5 Models,Send list is not empty,"Sync > saved device > Send model",All installed GGUF models are listed with sizes,P0,,,,"Was empty before today because vision models were refused"
 23,5 Models,Small model send starts fast,"Send Qwen3.5 0.8B to the iPhone","'Preparing...' appears, then real progress within seconds - no endless spinner",P0,,,,"NEW today: native hashing. A long spinner = the hash is back on the JS thread"
 24,5 Models,Progress survives hiding the sheet,"Mid-transfer tap Hide, reopen the same device's Send model sheet",The transfer is still shown running,P0,,,,"NEW today"
-25,5 Models,Progress is the MODEL not another file,"While a screenshot or download is also syncing, watch the sheet",It shows the model, not 'Sending some.pdf',P1,,,,"The mime filter"
+25,5 Models,Progress is the MODEL not another file,"While a screenshot or download is also syncing, watch the sheet","It shows the model, not 'Sending some.pdf'",P1,,,,"The mime filter"
 26,5 Models,Activity shows it on BOTH devices,"Open Sync > Activity on sender and receiver","Described as a model ('Sending a model...' / 'Receiving a model...') with progress",P0,,,,"NEW today"
 27,5 Models,Vision package arrives as one model,"Send SmolVLM-256M (model + mmproj)",Two files transfer; ONE model appears in Models on the far side,P0,,,,"NEW today"
 28,5 Models,Received model actually loads,"On the receiving device open Models and load the received model",Loads and can answer a prompt,P0,,,,"Proves the checksum and install path, not just the bytes"
