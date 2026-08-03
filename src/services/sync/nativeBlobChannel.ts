@@ -35,6 +35,8 @@ interface BlobNativeModule {
     nonceBase64: string;
     /** The frame size, passed down so one place decides the format for every platform. */
     frameBytes: number;
+    /** Payload bytes already on disk; the arriving stream continues from here. */
+    offset: number;
     ttlMs: number;
   }): Promise<{ url: string } | null>;
   stream(options: {
@@ -45,6 +47,7 @@ interface BlobNativeModule {
     keyBase64: string;
     nonceBase64: string;
     frameBytes: number;
+    offset: number;
   }): Promise<{ bytes: number }>;
   release(requestId: string): void;
   abort(requestId: string): void;
@@ -129,6 +132,7 @@ export function createNativeBlobChannel(
         keyBase64: material.keyBase64,
         nonceBase64: material.nonceBase64,
         frameBytes: BLOB_FRAME_BYTES,
+        offset: request.offset ?? 0,
         ttlMs: BLOB_TOKEN_TTL_MS,
       });
       if (!offered) {
@@ -164,6 +168,7 @@ export function createNativeBlobChannel(
           keyBase64: blobKeyBase64(secret, transfer.requestId),
           nonceBase64: endpoint.nonce,
           frameBytes: BLOB_FRAME_BYTES,
+          offset: transfer.offset ?? 0,
         });
         logger.log(`[BLOB] streamed ${transfer.fileSize} bytes natively`);
       } finally {

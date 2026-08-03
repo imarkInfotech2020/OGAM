@@ -55,6 +55,7 @@ class BlobChannelModule(
                         keyBase64 = options.requireText("keyBase64"),
                         nonceBase64 = options.requireText("nonceBase64"),
                         frameBytes = options.getDouble("frameBytes").toInt(),
+                        offset = options.getDouble("offset").toLong(),
                         expiresAt = System.currentTimeMillis() + options.getDouble("ttlMs").toLong(),
                     ),
                 )
@@ -93,6 +94,7 @@ class BlobChannelModule(
                 val sent = BlobUploader.upload(
                     BlobUploader.Request(
                         requestId = requestId,
+                        offset = options.getDouble("offset").toLong(),
                         sourcePath = options.requireText("sourcePath"),
                         url = options.requireText("url"),
                         token = options.requireText("token"),

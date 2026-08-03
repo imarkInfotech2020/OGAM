@@ -48,6 +48,14 @@ struct BlobFrameCipher {
   /// The whole sealed body, which the sender declares before it sends a byte.
   var sealedLength: Int { fileSize + frameCount * Self.tagBytes }
 
+  /// The frame a resume begins on: offsets are always a whole number of frames.
+  func frame(at offset: Int) -> Int { offset / frameBytes }
+
+  /// What is left on the wire when the receiver already holds `offset` payload bytes.
+  func sealedRemainder(from offset: Int) -> Int {
+    fileSize - offset + (frameCount - frame(at: offset)) * Self.tagBytes
+  }
+
   func seal(_ plain: Data, index: Int) throws -> Data {
     let box = try AES.GCM.seal(
       plain,

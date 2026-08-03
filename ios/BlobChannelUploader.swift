@@ -38,6 +38,8 @@ final class BlobChannelUploader {
     let nonce: Data
     /// The frame size, passed down rather than restated, so one place decides it for all platforms.
     let frameBytes: Int
+    /// Payload bytes the receiver already holds. Nothing before this is read or sent again.
+    let offset: Int
   }
 
   /// Move the file. Answers the number of payload bytes sent, or throws.
@@ -86,10 +88,14 @@ final class BlobChannelUploader {
       connection.cancel()
     }
 
-    try send(head(request, bodyLength: cipher.sealedLength), over: connection)
-    var sent = 0
+    try send(
+      head(request, bodyLength: cipher.sealedRemainder(from: request.offset)),
+      over: connection)
+    var sent = request.offset
+    // Skip what the receiver already has rather than re-reading it from disk.
+    if request.offset > 0 { file.seek(toFileOffset: UInt64(request.offset)) }
     // One frame at a time: read it, seal it, hand it to the socket. Memory holds a frame, never a file.
-    for index in 0..<cipher.frameCount {
+    for index in cipher.frame(at: request.offset)..<cipher.frameCount {
       // Read until the frame is full: a single read is allowed to return less than it was asked for,
       // and treating a short read as the end of the file would seal the wrong bytes.
       var plain = Data()

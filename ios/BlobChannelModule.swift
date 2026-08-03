@@ -58,6 +58,7 @@ final class BlobChannelModule: RCTEventEmitter {
             key: key,
             nonce: nonce,
             frameBytes: (options["frameBytes"] as? NSNumber)?.intValue ?? 0,
+            offset: (options["offset"] as? NSNumber)?.intValue ?? 0,
             expiresAt: Date().addingTimeInterval(
               ((options["ttlMs"] as? NSNumber)?.doubleValue ?? 0) / 1000)))
         let encoded =
@@ -100,7 +101,8 @@ final class BlobChannelModule: RCTEventEmitter {
         let sent = try BlobChannelUploader.upload(
           .init(
             requestId: requestId, sourcePath: source, url: url, token: token, key: key,
-            nonce: nonce, frameBytes: (options["frameBytes"] as? NSNumber)?.intValue ?? 0)
+            nonce: nonce, frameBytes: (options["frameBytes"] as? NSNumber)?.intValue ?? 0,
+            offset: (options["offset"] as? NSNumber)?.intValue ?? 0)
         ) { [weak self] bytes in
           self?.report(requestId: requestId, bytes: bytes)
         }

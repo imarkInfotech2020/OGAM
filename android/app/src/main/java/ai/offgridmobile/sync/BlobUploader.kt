@@ -54,14 +54,16 @@ object BlobUploader {
             setRequestProperty("content-type", "application/octet-stream")
             // Declared up front, which is also what stops HttpURLConnection from buffering the whole
             // body in memory before it sends anything - fatal for a model larger than the phone's RAM.
-            setFixedLengthStreamingMode(cipher.sealedLength())
+            setFixedLengthStreamingMode(cipher.sealedRemainder(request.offset))
         }
         inFlight[request.requestId] = connection
         try {
-            var sent = 0L
+            var sent = request.offset
             connection.outputStream.use { sink ->
                 file.inputStream().use { source ->
-                    for (index in 0 until cipher.frameCount) {
+                    // Skip what the receiver already has rather than re-reading it from disk.
+                    if (request.offset > 0) source.skip(request.offset)
+                    for (index in cipher.frameAt(request.offset) until cipher.frameCount) {
                         val length = cipher.frameLength(index)
                         val plain = ByteArray(length)
                         // Read until the frame is full: a single read may return less than asked, and
@@ -93,6 +95,8 @@ object BlobUploader {
     class Request(
         /** The transfer this is, so a cancel can find it. */
         val requestId: String,
+        /** Payload bytes the receiver already holds. Nothing before this is read or sent again. */
+        val offset: Long,
         val sourcePath: String,
         val url: String,
         val token: String,

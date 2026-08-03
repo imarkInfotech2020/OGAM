@@ -34,6 +34,8 @@ class BlobServer(
         val nonceBase64: String,
         /** The frame size, passed down rather than restated, so one place decides it everywhere. */
         val frameBytes: Int,
+        /** Payload bytes already on disk; the arriving stream continues from here. */
+        val offset: Long,
         val expiresAt: Long,
     )
 
@@ -108,14 +110,20 @@ class BlobServer(
             fileSize = transfer.fileSize,
             frameBytes = transfer.frameBytes,
         )
-        if (request.contentLength != cipher.sealedLength()) {
+        if (request.contentLength != cipher.sealedRemainder(transfer.offset)) {
             throw IllegalStateException("the body is not the length this payload should be")
         }
-        var landed = 0L
+        // Whatever lay past the resume point was part of a frame that never finished arriving, so it
+        // goes: the side that writes the payload owns what is already in it.
+        if (transfer.offset > 0 && destination.exists()) {
+            java.io.RandomAccessFile(destination, "rw").use { it.setLength(transfer.offset) }
+        }
+        var landed = transfer.offset
         // Nothing reaches the file until the frame it belongs to has verified, so memory holds one
         // frame - never the payload - and a tampered or truncated transfer fails instead of landing.
-        destination.outputStream().use { sink ->
-            for (index in 0 until cipher.frameCount) {
+        // Appending when resuming: what is already here was verified when it arrived.
+        java.io.FileOutputStream(destination, transfer.offset > 0).use { sink ->
+            for (index in cipher.frameAt(transfer.offset) until cipher.frameCount) {
                 val length = cipher.sealedLength(index)
                 val sealed = ByteArray(length)
                 var filled = 0

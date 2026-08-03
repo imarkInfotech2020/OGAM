@@ -18,6 +18,8 @@ final class BlobChannelServer {
     let nonce: Data
     /// The frame size, passed down rather than restated, so one place decides it for all platforms.
     let frameBytes: Int
+    /// Payload bytes already on disk; the arriving stream continues from here.
+    let offset: Int
     let expiresAt: Date
   }
 
@@ -189,12 +191,23 @@ final class BlobChannelServer {
       try? FileManager.default.createDirectory(
         at: URL(fileURLWithPath: path).deletingLastPathComponent(),
         withIntermediateDirectories: true)
-      FileManager.default.createFile(atPath: path, contents: nil)
+      if transfer.offset == 0 || !FileManager.default.fileExists(atPath: path) {
+        FileManager.default.createFile(atPath: path, contents: nil)
+      }
       guard let handle = FileHandle(forWritingAtPath: path),
         let frames = try? BlobFrameCipher(
           key: transfer.key, nonce: transfer.nonce, fileSize: transfer.fileSize,
           frameBytes: transfer.frameBytes)
       else { return false }
+      // Resuming appends: what is already here was verified when it arrived, so it stays and the
+      // count continues from it. Whatever lay past the resume point was part of a frame that never
+      // finished arriving, so it goes - the side that writes the payload owns what is in it.
+      if transfer.offset > 0 {
+        try? handle.truncate(atOffset: UInt64(transfer.offset))
+        handle.seek(toFileOffset: UInt64(transfer.offset))
+        written = transfer.offset
+        frame = frames.frame(at: transfer.offset)
+      }
       file = handle
       cipher = frames
       return true

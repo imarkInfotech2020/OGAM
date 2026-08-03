@@ -49,7 +49,7 @@ if mode == "serve" {
       requestId: requestId,
       transfer: .init(
         token: token, destinationPath: destination, fileSize: fileSize, key: key, nonce: nonce,
-        frameBytes: frameBytes, expiresAt: Date().addingTimeInterval(300)))
+        frameBytes: frameBytes, offset: 0, expiresAt: Date().addingTimeInterval(300)))
     let address = BlobChannelSupport.lanAddress() ?? "127.0.0.1"
     let encoded = requestId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? requestId
     say(["url": "http://\(address):\(port)/blob/\(encoded)"])
@@ -75,7 +75,7 @@ if mode == "stream" {
     let sent = try BlobChannelUploader.upload(
       .init(
         requestId: requestId, sourcePath: source, url: url, token: token, key: key, nonce: nonce,
-        frameBytes: Int(arguments[8]) ?? 0)
+        frameBytes: Int(arguments[8]) ?? 0, offset: 0)
     ) { _ in }
     say(["sent": true, "bytes": sent])
     exit(0)

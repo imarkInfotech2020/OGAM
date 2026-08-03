@@ -34,6 +34,13 @@ class BlobFrameCipher(
     val frameCount: Int =
         maxOf(1, ((fileSize + frameBytes - 1) / frameBytes).toInt())
 
+    /** The frame a resume begins on: offsets are always a whole number of frames. */
+    fun frameAt(offset: Long): Int = (offset / frameBytes).toInt()
+
+    /** What is left on the wire when the receiver already holds [offset] payload bytes. */
+    fun sealedRemainder(offset: Long): Long =
+        fileSize - offset + (frameCount - frameAt(offset)).toLong() * TAG_BYTES
+
     /** How many payload bytes are in a given frame. Only the last one is short. */
     fun frameLength(index: Int): Int =
         if (index < frameCount - 1) {
