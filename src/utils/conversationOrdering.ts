@@ -1,4 +1,4 @@
-import type { Conversation } from '../types';
+import type { Conversation, Message } from '../types';
 
 /**
  * Conversations newest-first, by last activity.
@@ -29,4 +29,21 @@ export function mostRecentConversations(
   limit: number,
 ): Conversation[] {
   return byRecentActivity(conversations).slice(0, limit);
+}
+
+/**
+ * A conversation's messages in the order they were WRITTEN, not the order they arrived.
+ *
+ * Sync makes out-of-order arrival normal: a message written on the Mac at 10:55 can reach a phone at
+ * 16:25, after one the phone itself wrote at 14:00. Appending it left the two devices showing the same
+ * conversation in different orders - the reply above the question on one of them.
+ *
+ * Ties keep their current relative position, so a message that is mid-generation does not jump around
+ * as its own timestamp settles, and two messages written in the same millisecond stay as they are.
+ */
+export function byWrittenOrder(messages: readonly Message[]): Message[] {
+  return messages
+    .map((message, index) => ({ message, index }))
+    .sort((a, b) => a.message.timestamp - b.message.timestamp || a.index - b.index)
+    .map(({ message }) => message);
 }
