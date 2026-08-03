@@ -18,6 +18,20 @@ import java.net.URL
 object BlobUploader {
     private const val TIMEOUT_MS = 30_000
 
+    /** Uploads still in flight, so cancel can reach the bytes rather than only stop watching them. */
+    private val inFlight = java.util.concurrent.ConcurrentHashMap<String, HttpURLConnection>()
+
+    /**
+     * Stop an upload that is still going.
+     *
+     * Disconnecting the connection makes the write fail, which unwinds the loop and closes the file:
+     * without it, a cancelled transfer carries on sending a four gigabyte model to a peer that is no
+     * longer expecting it.
+     */
+    fun abort(requestId: String) {
+        inFlight.remove(requestId)?.disconnect()
+    }
+
     fun upload(
         request: Request,
         onProgress: (bytes: Long) -> Unit,
@@ -42,6 +56,7 @@ object BlobUploader {
             // body in memory before it sends anything - fatal for a model larger than the phone's RAM.
             setFixedLengthStreamingMode(cipher.sealedLength())
         }
+        inFlight[request.requestId] = connection
         try {
             var sent = 0L
             connection.outputStream.use { sink ->
@@ -70,11 +85,14 @@ object BlobUploader {
             if (status != 200) throw IllegalStateException("the endpoint answered $status")
             return sent
         } finally {
+            inFlight.remove(request.requestId)
             connection.disconnect()
         }
     }
 
     class Request(
+        /** The transfer this is, so a cancel can find it. */
+        val requestId: String,
         val sourcePath: String,
         val url: String,
         val token: String,

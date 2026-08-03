@@ -9,6 +9,8 @@ RCT_EXTERN_METHOD(serve:(NSDictionary *)options
 
 RCT_EXTERN_METHOD(release:(NSString *)requestId)
 
+RCT_EXTERN_METHOD(abort:(NSString *)requestId)
+
 RCT_EXTERN_METHOD(stream:(NSDictionary *)options
                   resolve:(RCTPromiseResolveBlock)resolve
                   withRejecter:(RCTPromiseRejectBlock)reject)

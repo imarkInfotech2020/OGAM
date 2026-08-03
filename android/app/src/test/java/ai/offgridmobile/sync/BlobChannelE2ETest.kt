@@ -61,6 +61,7 @@ class BlobChannelE2ETest {
             val endpoint = mac.nextJson()
             val sent = BlobUploader.upload(
                 BlobUploader.Request(
+                    requestId = requestId,
                     sourcePath = source.absolutePath,
                     url = endpoint.getString("url"),
                     token = endpoint.getString("token"),
@@ -224,6 +225,7 @@ class BlobChannelE2ETest {
             val offered = iphone.nextJson()
             val sent = BlobUploader.upload(
                 BlobUploader.Request(
+                    requestId = requestId,
                     sourcePath = source.absolutePath,
                     url = offered.getString("url"),
                     token = material.getString("token"),

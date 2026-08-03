@@ -75,6 +75,12 @@ final class BlobChannelModule: RCTEventEmitter {
     server.release(requestId: requestId)
   }
 
+  /// Stop sending a payload that is still going out.
+  @objc(abort:)
+  func abort(_ requestId: String) {
+    BlobChannelUploader.abort(requestId)
+  }
+
   /// Send a local file through the endpoint a peer offered, sealing it on the way out.
   @objc(stream:resolve:withRejecter:)
   func stream(

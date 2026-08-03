@@ -1,5 +1,6 @@
 import { NativeEventEmitter, NativeModules } from 'react-native';
 import {
+  BLOB_FRAME_BYTES,
   BLOB_TOKEN_TTL_MS,
   blobKeyBase64,
   createBlobMaterial,
@@ -32,6 +33,8 @@ interface BlobNativeModule {
     token: string;
     keyBase64: string;
     nonceBase64: string;
+    /** The frame size, passed down so one place decides the format for every platform. */
+    frameBytes: number;
     ttlMs: number;
   }): Promise<{ url: string } | null>;
   stream(options: {
@@ -41,11 +44,14 @@ interface BlobNativeModule {
     token: string;
     keyBase64: string;
     nonceBase64: string;
+    frameBytes: number;
   }): Promise<{ bytes: number }>;
   release(requestId: string): void;
+  abort(requestId: string): void;
 }
 
 const PROGRESS_EVENT = 'SyncBlobProgress';
+const OUTCOME_EVENT = 'SyncBlobOutcome';
 
 function nativeChannel(): BlobNativeModule | undefined {
   // Android registers under the module's own name; iOS under its class. Same contract either way.
@@ -70,26 +76,37 @@ export function createNativeBlobChannel(
   const listeners = new Map<string, (bytes: number) => void>();
   const channel = nativeChannel();
   let emitter: NativeEventEmitter | undefined;
-  let subscription: { remove(): void } | undefined;
+  const subscriptions: { remove(): void }[] = [];
 
   /** One subscription for every transfer: progress arrives tagged with the transfer it belongs to. */
   const watch = (requestId: string, onProgress?: (bytes: number) => void): void => {
     if (onProgress) listeners.set(requestId, onProgress);
-    if (subscription || !channel) return;
+    if (subscriptions.length > 0 || !channel) return;
     emitter = new NativeEventEmitter(channel as never);
-    subscription = emitter.addListener(
-      PROGRESS_EVENT,
-      (event: { requestId: string; bytes: number }) => {
-        listeners.get(event.requestId)?.(event.bytes);
-      },
+    subscriptions.push(
+      emitter.addListener(
+        PROGRESS_EVENT,
+        (event: { requestId: string; bytes: number }) => {
+          listeners.get(event.requestId)?.(event.bytes);
+        },
+      ),
+      // A payload that failed to verify has to be heard about. Without this the transfer sits at
+      // whatever the last byte count was until it times out, which reads as a stall, not a refusal.
+      emitter.addListener(
+        OUTCOME_EVENT,
+        (event: { requestId: string; landed: boolean }) => {
+          if (!event.landed) {
+            logger.log(`[BLOB] a payload for ${event.requestId} did not verify`);
+          }
+        },
+      ),
     );
   };
 
   const forget = (requestId: string): void => {
     listeners.delete(requestId);
     if (listeners.size > 0) return;
-    subscription?.remove();
-    subscription = undefined;
+    for (const subscription of subscriptions.splice(0)) subscription.remove();
   };
 
   return {
@@ -111,6 +128,7 @@ export function createNativeBlobChannel(
         token: material.token,
         keyBase64: material.keyBase64,
         nonceBase64: material.nonceBase64,
+        frameBytes: BLOB_FRAME_BYTES,
         ttlMs: BLOB_TOKEN_TTL_MS,
       });
       if (!offered) {
@@ -145,6 +163,7 @@ export function createNativeBlobChannel(
           token: endpoint.token,
           keyBase64: blobKeyBase64(secret, transfer.requestId),
           nonceBase64: endpoint.nonce,
+          frameBytes: BLOB_FRAME_BYTES,
         });
         logger.log(`[BLOB] streamed ${transfer.fileSize} bytes natively`);
       } finally {
@@ -154,6 +173,17 @@ export function createNativeBlobChannel(
 
     release(requestId) {
       channel?.release(requestId);
+      forget(requestId);
+    },
+
+    /**
+     * Stop sending a payload that is still going out.
+     *
+     * Cancel has to reach the bytes: stopping the promise only stops the watching, and the platform
+     * would carry on sending a model to a peer that is no longer expecting it.
+     */
+    abort(requestId) {
+      channel?.abort(requestId);
       forget(requestId);
     },
   };

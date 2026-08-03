@@ -78,6 +78,12 @@ class BlobChannelModule(
         server.release(requestId)
     }
 
+    /** Stop sending a payload that is still going out. */
+    @ReactMethod
+    fun abort(requestId: String) {
+        BlobUploader.abort(requestId)
+    }
+
     /** Send a local file through the endpoint a peer offered, sealing it on the way out. */
     @ReactMethod
     fun stream(options: ReadableMap, promise: Promise) {
@@ -86,6 +92,7 @@ class BlobChannelModule(
                 val requestId = options.requireText("requestId")
                 val sent = BlobUploader.upload(
                     BlobUploader.Request(
+                        requestId = requestId,
                         sourcePath = options.requireText("sourcePath"),
                         url = options.requireText("url"),
                         token = options.requireText("token"),

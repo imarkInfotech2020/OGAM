@@ -7,6 +7,28 @@ import Network
 /// nothing is copied: a model larger than this phone's memory moves without ever being held in it.
 /// The length is declared up front, which is what lets the receiver authorise before a byte arrives.
 final class BlobChannelUploader {
+  /// Uploads still in flight, so cancel can reach the bytes rather than only stop watching them.
+  private static let live = LiveUploads()
+
+  /// Stop an upload that is still going. Cancelling the connection makes the next send fail, which
+  /// unwinds the loop: without it a cancelled transfer keeps sending a model nobody is waiting for.
+  static func abort(_ requestId: String) {
+    live.take(requestId)?.cancel()
+  }
+
+  private final class LiveUploads {
+    private let queue = DispatchQueue(label: "ai.offgridmobile.blob-uploads")
+    private var connections: [String: NWConnection] = [:]
+
+    func hold(_ requestId: String, _ connection: NWConnection) {
+      queue.sync { connections[requestId] = connection }
+    }
+
+    func take(_ requestId: String) -> NWConnection? {
+      queue.sync { connections.removeValue(forKey: requestId) }
+    }
+  }
+
   struct Request {
     let requestId: String
     let sourcePath: String
@@ -58,7 +80,11 @@ final class BlobChannelUploader {
     connection.start(queue: queue)
     _ = ready.wait(timeout: .now() + 15)
     if let problem { throw problem }
-    defer { connection.cancel() }
+    live.hold(request.requestId, connection)
+    defer {
+      _ = live.take(request.requestId)
+      connection.cancel()
+    }
 
     try send(head(request, bodyLength: cipher.sealedLength), over: connection)
     var sent = 0
