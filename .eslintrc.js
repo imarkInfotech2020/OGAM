@@ -72,8 +72,21 @@ module.exports = {
   },
   overrides: [
     {
+      files: ['scripts/physical-sync/**/*.mjs'],
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+      },
+    },
+    {
       // Relax structural rules in test files — large test suites and helpers are acceptable
-      files: ['__tests__/**/*', '*.test.ts', '*.test.tsx', 'jest.setup.ts'],
+      files: [
+        '__tests__/**/*',
+        'scripts/physical-sync/__tests__/**/*.mjs',
+        '*.test.ts',
+        '*.test.tsx',
+        'jest.setup.ts',
+      ],
       rules: {
         'max-lines': 'off',
         'max-lines-per-function': 'off',
