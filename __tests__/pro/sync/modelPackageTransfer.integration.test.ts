@@ -12,6 +12,7 @@ import {
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import { modelManager } from '../../../src/services/modelManager';
+import { useAppStore } from '../../../src/stores/appStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { whisperService } from '../../../src/services/whisperService';
 import { useWhisperStore } from '../../../src/stores/whisperStore';
@@ -23,6 +24,8 @@ import {
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
+import { createPeerEntitlement } from '../../harness/peerEntitlement';
+import { createKeygenFake } from '../../harness/keygenFake';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -50,6 +53,16 @@ jest.mock('react-native-fs', () => {
 });
 
 const nativeTcpBoundary = TcpSocket as unknown as RnTcpModule;
+
+/**
+ * The licence both devices end up on. The peer sponsors the phone into it, and the phone then
+ * registers its own installation for real - against an in-memory Keygen, because the provider's HTTP
+ * endpoint is the only part of that path that is not ours.
+ */
+const LICENCE_KEY = 'OFFGRID-TEST-LICENCE';
+const keygen = createKeygenFake();
+/** The provider's id for that licence, which is what a credential carries as its entitlement. */
+let licenceId = '';
 
 async function waitForState(
   condition: () => boolean,
@@ -119,22 +132,36 @@ describe('Pro mobile model package receiver', () => {
 
   beforeEach(async () => {
     modelTransferFsBoundary.reset();
+    keygen.reset();
+    keygen.install();
+    licenceId = keygen.addLicence({ key: LICENCE_KEY, seats: 3 });
     await AsyncStorage.clear();
     resetDiscoveryBoundaries();
     useSyncStore.getState().reset();
+    // Pairing is a Pro capability, so a receiver that is not Pro refuses the Mac before any model is
+    // offered. The rest of this suite is about what happens AFTER two devices are paired.
+    useAppStore.getState().setProActive(true);
     await useWhisperStore.getState().refreshPresentModels();
     (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
     (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
   });
 
   afterEach(async () => {
+    keygen.restore();
     await remoteTransfers?.dispose();
     await remote?.engine.stop();
     await syncService.stop();
     await modelTransferService.stop();
   });
 
-  it('admits grouped vision and Whisper packages while rejecting image and Parakeet', async () => {
+  /**
+   * A paired, connected Mac, arrived at the way a user does: it presents the code this phone is
+   * showing, and the phone admits it without anything else to accept.
+   */
+  async function connectDesktop(): Promise<{
+    mobile: DeviceInfo;
+    transfers: FileTransferManager;
+  }> {
     const remoteDevice: DeviceInfo = {
       id: 'desktop-package-source',
       name: 'Off Grid AI Desktop',
@@ -146,14 +173,22 @@ describe('Pro mobile model package receiver', () => {
     remote = buildSyncEngine({
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
+      // Pairing is a licensed transaction. A stand-in peer with no entitlement cannot pair at all, so
+      // it carries one - and the phone under test uses its own real adapter throughout.
+      pairingEntitlement: createPeerEntitlement({
+        licensed: true,
+        entitlementId: licenceId,
+        secret: LICENCE_KEY,
+      }),
       onMessage: (deviceId, message) => {
         remoteTransfers?.handleMessage(deviceId, message);
       },
     });
-    remoteTransfers = new FileTransferManager({
+    const transfers = new FileTransferManager({
       send: (deviceId, message) => remote!.engine.send(deviceId, message),
       createSink: async () => null,
     });
+    remoteTransfers = transfers;
 
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
@@ -192,6 +227,11 @@ describe('Pro mobile model package receiver', () => {
             device.id === remoteDevice.id && device.status === 'connected',
         ),
     );
+    return { mobile, transfers };
+  }
+
+  it('admits grouped vision and Whisper packages while rejecting image and Parakeet', async () => {
+    const { mobile, transfers } = await connectDesktop();
 
     const primary = modelBytes(96 * 1024 + 4, 0x31);
     const projector = modelBytes(64 * 1024 + 4, 0x32);
@@ -213,7 +253,7 @@ describe('Pro mobile model package receiver', () => {
         },
       ],
     };
-    await remoteTransfers.sendFile(
+    await transfers.sendFile(
       mobile.id,
       packageSource(
         primary,
@@ -229,7 +269,7 @@ describe('Pro mobile model package receiver', () => {
     ).resolves.toBe(false);
     await expect(modelManager.getDownloadedModels()).resolves.toHaveLength(0);
 
-    await remoteTransfers.sendFile(
+    await transfers.sendFile(
       mobile.id,
       packageSource(
         projector,
@@ -261,7 +301,7 @@ describe('Pro mobile model package receiver', () => {
         },
       ],
     };
-    await remoteTransfers.sendFile(
+    await transfers.sendFile(
       mobile.id,
       packageSource(
         whisper,
@@ -282,6 +322,9 @@ describe('Pro mobile model package receiver', () => {
       name: 'Mobile Image',
       kind: 'image',
       source: 'downloaded',
+      // A sender states where a non-portable model came from, which is what makes the refusal
+      // specific instead of "one of you did not say".
+      platform: 'macos',
       files: [
         {
           name: 'mobile-image.gguf',
@@ -291,7 +334,7 @@ describe('Pro mobile model package receiver', () => {
       ],
     };
     await expect(
-      remoteTransfers.sendFile(
+      transfers.sendFile(
         mobile.id,
         packageSource(
           primary,
@@ -299,7 +342,7 @@ describe('Pro mobile model package receiver', () => {
         ),
       ),
     ).rejects.toThrow(
-      'only text, vision, and Whisper transcription models can be sent to Off Grid Mobile',
+      'this model runs only on Mac, so it cannot be sent to iPhone or iPad',
     );
 
     const parakeet = Buffer.alloc(4096, 0x50);
@@ -317,7 +360,7 @@ describe('Pro mobile model package receiver', () => {
       ],
     };
     await expect(
-      remoteTransfers.sendFile(
+      transfers.sendFile(
         mobile.id,
         packageSource(
           parakeet,
