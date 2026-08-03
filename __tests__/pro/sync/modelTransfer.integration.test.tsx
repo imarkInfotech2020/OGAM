@@ -352,7 +352,11 @@ describe('Pro mobile model transfer journey', () => {
       port: 51000,
     };
 
-    ui = render(<ModelTransferSheet target={iPhone} progress={null} onClose={() => {}} />);
+    ui = render(
+      <NavigationContainer>
+        <ModelTransferSheet target={iPhone} onClose={() => {}} />
+      </NavigationContainer>,
+    );
 
     // The vision model is offerable: GGUF runs on any Off Grid AI device, mmproj included.
     await waitFor(() => expect(ui!.getByTestId(`transfer-model-${vision.id}`)).toBeTruthy());
