@@ -14,6 +14,7 @@ import ai.offgridmobile.devicememory.DeviceMemoryPackage
 import ai.offgridmobile.clipboard.SyncClipboardPackage
 import ai.offgridmobile.directory.SyncDirectorySourcePackage
 import ai.offgridmobile.downloads.SyncDownloadsPackage
+import ai.offgridmobile.sync.BlobChannelPackage
 import ai.offgridmobile.screenshot.SyncScreenshotPackage
 import ai.offgridmobile.sync.MeshResidencyPackage
 
@@ -35,6 +36,7 @@ class MainApplication : Application(), ReactApplication {
           add(MeshResidencyPackage())
           add(SyncScreenshotPackage())
           add(SyncDownloadsPackage())
+          add(BlobChannelPackage())
         },
     )
   }
