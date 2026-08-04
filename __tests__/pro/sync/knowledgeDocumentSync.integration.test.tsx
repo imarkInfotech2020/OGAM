@@ -4,6 +4,7 @@ import {
   installNativeBoundary,
   requireRTL,
 } from '../../harness/nativeBoundary';
+import { createLicensedMesh } from '../../harness/licensedMesh';
 
 jest.unmock('@react-navigation/native');
 
@@ -43,6 +44,9 @@ async function waitForCondition(
     await new Promise(resolve => setTimeout(resolve, 10));
   }
 }
+
+/** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
+const mesh = createLicensedMesh();
 
 describe('Pro mobile knowledge document sync journey', () => {
   it('stages file-first input, indexes it visibly, sends a picked file back, and applies a tombstone', async () => {
@@ -172,6 +176,7 @@ describe('Pro mobile knowledge document sync journey', () => {
     let remoteState: InstanceType<typeof StateSync>;
     let remoteTransfers: InstanceType<typeof FileTransferManager>;
     const remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: TcpSocket,
       onMessage: (deviceId: string, message: Record<string, unknown>) => {

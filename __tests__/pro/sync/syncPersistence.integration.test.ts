@@ -11,6 +11,7 @@ import {
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
 import { MembershipPersistenceBoundary } from '../../utils/membershipPersistenceBoundary';
+import { createLicensedMesh } from '../../harness/licensedMesh';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -51,10 +52,14 @@ function phonePairingCode(): string {
   return code;
 }
 
+/** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
+const mesh = createLicensedMesh();
+
 describe('Pro Sync app-lifetime pairing persistence', () => {
   let persistedPairings: string | undefined;
 
   beforeEach(async () => {
+    mesh.reset();
     await syncService.stop();
     await AsyncStorage.clear();
     useSyncStore.getState().reset();
@@ -80,6 +85,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
   });
 
   afterEach(async () => {
+    mesh.restore();
     await syncService.stop();
   });
 
@@ -94,6 +100,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       port: 0,
     };
     const remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getSharedSecret: deviceId =>
@@ -176,6 +183,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       port: 0,
     };
     let remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getSharedSecret: deviceId =>
@@ -229,6 +237,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     );
     remotePersistence.dropActive(mobile.id);
     remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getPassphrase: () => 'blue-otter-42',
@@ -293,6 +302,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       port: 0,
     };
     let remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getSharedSecret: deviceId =>
@@ -365,6 +375,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     );
 
     remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getSharedSecret: deviceId =>

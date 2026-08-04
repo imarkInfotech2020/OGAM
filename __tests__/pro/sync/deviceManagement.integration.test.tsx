@@ -37,6 +37,7 @@ import {
 import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
 import { createDownloadedModel } from '../../utils/factories';
 import { MembershipPersistenceBoundary } from '../../utils/membershipPersistenceBoundary';
+import { createLicensedMesh } from '../../harness/licensedMesh';
 
 jest.unmock('@react-navigation/native');
 
@@ -56,6 +57,9 @@ jest.mock('react-native-zeroconf', () => {
 
 const nativeTcpBoundary = TcpSocket as unknown as RnTcpModule;
 
+/** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
+const mesh = createLicensedMesh();
+
 describe('Pro mobile saved-device management journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let ui: ReturnType<typeof render> | undefined;
@@ -63,6 +67,14 @@ describe('Pro mobile saved-device management journey', () => {
   let failNextPairingSave = false;
 
   beforeEach(async () => {
+    mesh.reset();
+    // The desktop this test pairs with has been on the licence all along, as a real peer would be: the
+    // roster is built from installations, so a peer with none is a peer the phone cannot show.
+    mesh.register({
+      id: 'desktop-managed-peer',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+    });
     await AsyncStorage.clear();
     resetDiscoveryBoundaries();
     _clearScreensForTesting();
@@ -104,6 +116,7 @@ describe('Pro mobile saved-device management journey', () => {
   });
 
   afterEach(async () => {
+    mesh.restore();
     ui?.unmount();
     await remote?.engine.stop();
     await syncService.stop();
@@ -123,6 +136,7 @@ describe('Pro mobile saved-device management journey', () => {
     };
     const remotePersistence = new MembershipPersistenceBoundary();
     remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getSharedSecret: deviceId =>
@@ -160,6 +174,14 @@ describe('Pro mobile saved-device management journey', () => {
     // Nothing to confirm: the peer presented this phone's own code, so pairing completes.
     await pairing;
 
+    const { useSyncStore: probeStore } = require('../../../pro/sync/syncStore');
+    process.stderr.write(
+      `[probe] registry=${JSON.stringify(
+        probeStore.getState().entitlementReconciliation?.registry,
+      )} known=${JSON.stringify(
+        probeStore.getState().knownDevices.map((d: { id: string }) => d.id),
+      )}\n`,
+    );
     const connectedRow = await waitFor(() =>
       ui!.getByTestId(`sync-paired-${remoteDevice.id}`),
     );
@@ -272,6 +294,7 @@ describe('Pro mobile saved-device management journey', () => {
     );
 
     remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getSharedSecret: deviceId =>
@@ -319,6 +342,7 @@ describe('Pro mobile saved-device management journey', () => {
     };
     const passphraseResolvers: Array<(passphrase: string | null) => void> = [];
     remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       getPassphrase: (_device, context) =>

@@ -276,14 +276,18 @@ describe('Pro mobile model package receiver', () => {
         packageMetadata('vision-package', visionManifest, 1),
       ),
     );
+    // The projector lands under the name THIS device gives a projector - the model's own stem, the same
+    // rule a download uses - not the name the sender happened to have for it. That is what keeps the
+    // vision link alive, and what stops two models colliding on a shared `mmproj-F16.gguf`.
+    const projectorHere = 'mobile-vision-mmproj-F16.gguf';
     await expect(modelManager.getDownloadedModels()).resolves.toEqual([
       expect.objectContaining({
         id: `off-grid/mobile-vision/${visionManifest.files[0].name}`,
         name: 'Mobile Vision',
         engine: 'llama',
         isVisionModel: true,
-        mmProjFileName: visionManifest.files[1].name,
-        mmProjPath: `${modelsDirectory}/${visionManifest.files[1].name}`,
+        mmProjFileName: projectorHere,
+        mmProjPath: `${modelsDirectory}/${projectorHere}`,
       }),
     ]);
 
@@ -349,6 +353,9 @@ describe('Pro mobile model package receiver', () => {
     const parakeetManifest: TransferredModelManifest = {
       id: 'nvidia/parakeet',
       name: 'Parakeet',
+      // A sender states where a non-portable model came from. Parakeet transcription exists only on the
+      // Mac, so a phone is told which device it belongs to rather than a vague "one of you did not say".
+      platform: 'macos',
       kind: 'transcription',
       source: 'catalog',
       files: [
@@ -368,7 +375,7 @@ describe('Pro mobile model package receiver', () => {
         ),
       ),
     ).rejects.toThrow(
-      'only text, vision, and Whisper transcription models can be sent to Off Grid Mobile',
+      'this model runs only on Mac, so it cannot be sent to iPhone or iPad',
     );
   }, 30_000);
 });

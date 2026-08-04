@@ -48,6 +48,18 @@ const JSON_API = 'application/vnd.api+json';
 export interface KeygenFake {
   /** Add a licence the tests can validate and activate against. Answers its provider id. */
   addLicence(licence: KeygenFakeLicence): string;
+  /**
+   * Put an installation on a licence directly, without the app having to ask.
+   *
+   * For a device that was already there when the test starts - the peer that has been paired for weeks.
+   * The fingerprint is what the app reads back as the installation's sync device id.
+   */
+  activate(input: {
+    key: string;
+    fingerprint: string;
+    name?: string;
+    platform?: string;
+  }): void;
   /** Every installation currently on a licence, as the provider sees it. */
   machines(key: string): readonly StoredMachine[];
   /** Take the network away, to exercise what the app does offline. */
@@ -243,6 +255,22 @@ export function createKeygenFake(): KeygenFake {
 
   return {
     calls,
+    activate({ key, fingerprint, name, platform }) {
+      const licence = licenceByKey(key);
+      if (!licence) throw new Error(`no licence for ${key}`);
+      const machine: StoredMachine = {
+        id: nextId('machine'),
+        licenseId: licence.id,
+        fingerprint,
+        hostname: null,
+        platform: platform ?? null,
+        name: name ?? null,
+        created: now(),
+        updated: now(),
+      };
+      machines.set(machine.id, machine);
+    },
+
     addLicence(licence) {
       const stored: StoredLicence = { ...licence, id: nextId('licence') };
       licences.set(stored.id, stored);

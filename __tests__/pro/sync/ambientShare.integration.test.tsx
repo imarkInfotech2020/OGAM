@@ -52,6 +52,7 @@ import {
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
 import { createDownloadedModel } from '../../utils/factories';
+import { createLicensedMesh } from '../../harness/licensedMesh';
 
 jest.unmock('@react-navigation/native');
 
@@ -100,12 +101,16 @@ const desktopDevice: DeviceInfo = {
   port: 0,
 };
 
+/** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
+const mesh = createLicensedMesh();
+
 describe('mobile ambient sharing journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let ui: ReturnType<typeof render> | undefined;
   let screenshotListener: ((event: ScreenshotEvent) => void) | undefined;
 
   beforeEach(async () => {
+    mesh.reset();
     modelTransferFsBoundary.reset();
     resetDiscoveryBoundaries();
     await AsyncStorage.clear();
@@ -144,6 +149,7 @@ describe('mobile ambient sharing journey', () => {
   });
 
   afterEach(async () => {
+    mesh.restore();
     await ambientShareService.setRule({
       source: 'screenshot',
       destinationId: desktopDevice.id,
@@ -184,6 +190,7 @@ describe('mobile ambient sharing journey', () => {
     });
 
     remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: desktopDevice,
       tcpModule: TcpSocket as unknown as RnTcpModule,
       onMessage: (deviceId, message) => {

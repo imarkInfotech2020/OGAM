@@ -37,6 +37,7 @@ import {
 } from '../../utils/factories';
 import { ModelTransferSheet } from '../../../pro/ui/ModelTransferSheet';
 import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
+import { createLicensedMesh } from '../../harness/licensedMesh';
 
 jest.unmock('@react-navigation/native');
 
@@ -67,12 +68,16 @@ jest.mock('react-native-fs', () => {
 
 const nativeTcpBoundary = TcpSocket as unknown as RnTcpModule;
 
+/** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
+const mesh = createLicensedMesh();
+
 describe('Pro mobile model transfer journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let remoteTransfers: FileTransferManager | undefined;
   let ui: ReturnType<typeof render> | undefined;
 
   beforeEach(async () => {
+    mesh.reset();
     modelTransferFsBoundary.reset();
     await AsyncStorage.clear();
     resetDiscoveryBoundaries();
@@ -92,6 +97,7 @@ describe('Pro mobile model transfer journey', () => {
   });
 
   afterEach(async () => {
+    mesh.restore();
     ui?.unmount();
     await remoteTransfers?.dispose();
     await remote?.engine.stop();
@@ -114,6 +120,7 @@ describe('Pro mobile model transfer journey', () => {
     let returnedFileName: string | undefined;
 
     remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       onMessage: (deviceId, message) => {
@@ -158,7 +165,7 @@ describe('Pro mobile model transfer journey', () => {
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
     await waitFor(() =>
-      expect(ui!.getByText(/Discoverable on .*Wi-Fi/)).toBeTruthy(),
+      expect(ui!.getByText('Discoverable')).toBeTruthy(),
     );
 
     const mobile = useSyncStore.getState().thisDevice;

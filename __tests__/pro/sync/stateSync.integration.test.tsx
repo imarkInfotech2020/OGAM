@@ -42,6 +42,7 @@ import {
 } from '../../utils/nativeSyncBoundaries';
 import { createDownloadedModel } from '../../utils/factories';
 import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
+import { createLicensedMesh } from '../../harness/licensedMesh';
 
 jest.unmock('@react-navigation/native');
 
@@ -73,11 +74,15 @@ class RemoteRecords implements Materializer {
   }
 }
 
+/** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
+const mesh = createLicensedMesh();
+
 describe('Pro mobile state sync journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let ui: ReturnType<typeof render> | undefined;
 
   beforeEach(async () => {
+    mesh.reset();
     _clearHooksForTesting();
     await stateSyncService.stop();
     await syncService.stop();
@@ -109,6 +114,7 @@ describe('Pro mobile state sync journey', () => {
   });
 
   afterEach(async () => {
+    mesh.restore();
     ui?.unmount();
     _clearHooksForTesting();
     await stateSyncService.stop();
@@ -137,6 +143,7 @@ describe('Pro mobile state sync journey', () => {
     });
     let remoteState: StateSync;
     remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       onPaired: device => remoteState.onConnect(device.id),

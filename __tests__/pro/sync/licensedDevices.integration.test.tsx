@@ -152,11 +152,31 @@ describe('Settings to Sync licensed-device management', () => {
     ui.unmount();
   });
 
-  // NOT covered here, deliberately: freeing that seat. The Forget button on this row is visible and
-  // enabled, but evicting an installation this phone never paired with throws `mapping_required` from
-  // pairingSecretStore.prepareCapacityReplacement - which requires an active LOCAL pairing - and
-  // SyncScreen's onForget swallows it. So the tap does nothing, silently, and the seat stays occupied.
-  // Recorded in docs/GAPS_BACKLOG.md rather than asserted, because asserting today's behaviour would
-  // bless a dead button.
+  it('frees the seat a replaced device was holding, at the provider and not only on screen', async () => {
+    await syncService.start();
+    const ui = await openSync();
+    await waitFor(() =>
+      expect(
+        ui.getByText(`2 of ${PERSONAL_MESH_DEVICE_CAP} devices saved`),
+      ).toBeTruthy(),
+    );
 
+    // Forget, then confirm in the sheet - this app never uses a system modal for a confirmation.
+    fireEvent.press(ui.getByTestId(`sync-forget-${RETIRED_FINGERPRINT}`));
+    fireEvent.press(await waitFor(() => ui.getByText('Evict device')));
+
+    // The seat comes back on the LICENCE, not merely off this list. That is the difference between
+    // being able to pair a new phone and being told the mesh is full.
+    await waitFor(() =>
+      expect(
+        ui.getByText(`1 of ${PERSONAL_MESH_DEVICE_CAP} devices saved`),
+      ).toBeTruthy(),
+    );
+    expect(mesh.installations().map(({ fingerprint }) => fingerprint)).toEqual([
+      THIS_FINGERPRINT,
+    ]);
+    expect(ui.queryByText('Old Android')).toBeNull();
+
+    ui.unmount();
+  });
 });

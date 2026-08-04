@@ -47,6 +47,7 @@ import {
 } from '../../utils/nativeSyncBoundaries';
 import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
 import { createDownloadedModel } from '../../utils/factories';
+import { createLicensedMesh } from '../../harness/licensedMesh';
 
 jest.unmock('@react-navigation/native');
 
@@ -100,11 +101,15 @@ const device = (id: string, platform: DeviceInfo['platform']): DeviceInfo => ({
 const BASE_TIME = Date.UTC(2026, 6, 28, 12, 0, 0);
 const CLIPBOARD_HISTORY_STORAGE_KEY = 'offgrid-sync-clipboard-history-v1';
 
+/** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
+const mesh = createLicensedMesh();
+
 describe('mobile clipboard Sync journey', () => {
   let remote: ReturnType<typeof buildSyncEngine> | undefined;
   let ui: ReturnType<typeof render> | undefined;
 
   beforeEach(async () => {
+    mesh.reset();
     await clipboardSyncService.stop();
     await AsyncStorage.clear();
     await clipboardSyncService.clearHistory();
@@ -130,6 +135,7 @@ describe('mobile clipboard Sync journey', () => {
   });
 
   afterEach(async () => {
+    mesh.restore();
     ui?.unmount();
     await remote?.engine.stop();
     await syncService.stop();
@@ -150,6 +156,7 @@ describe('mobile clipboard Sync journey', () => {
     const receivedByDesktop: unknown[] = [];
 
     const mobile = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: mobileDevice,
       tcpModule,
       getPassphrase: async () => 'green-river-42',
@@ -161,6 +168,7 @@ describe('mobile clipboard Sync journey', () => {
       },
     });
     const desktop = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: desktopDevice,
       tcpModule,
       getPassphrase: async () => 'green-river-42',
@@ -378,6 +386,7 @@ describe('mobile clipboard Sync journey', () => {
       port: 0,
     };
     remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: TcpSocket as unknown as RnTcpModule,
     });
@@ -395,7 +404,8 @@ describe('mobile clipboard Sync journey', () => {
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
-    await waitFor(() => expect(ui!.getByText(/Discoverable on/)).toBeTruthy());
+    // The status line is one word now: the route detail moved off it deliberately.
+    await waitFor(() => expect(ui!.getByText('Discoverable')).toBeTruthy());
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);

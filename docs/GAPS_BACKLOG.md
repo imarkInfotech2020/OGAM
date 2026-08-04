@@ -430,10 +430,15 @@ target. The shared layer is largely complete; these are the app-side holes.
 - **Android discovery and advertise.** `react-native-zeroconf` acquires a `MulticastLock` in both its NSD and rx2dnssd backends, `CHANGE_WIFI_MULTICAST_STATE` is declared, and Android supports `registerService`, so it advertises rather than only browsing. Android reports `['lan']` while the iOS-only proximity route surfaces as route data - the capability-as-data pattern, not a `Platform.OS` branch.
 - **Clipboard provenance.** Records carry immutable `provenance` plus a derived `isLocal`, so an Off Grid receipt is attributed to the sending device and an Apple Universal Clipboard pickup is recorded as a local pasteboard observation - never as an Off Grid transfer. Android has no Universal Clipboard, so that false-attribution risk does not exist there.
 
-### Open bug: Forget does nothing on a licensed device this phone never paired with
+### RESOLVED: Forget did nothing on a licensed device this phone never paired with
 
-Found by `__tests__/pro/sync/licensedDevices.integration.test.tsx` while covering licence capacity.
-Held open pending manual reproduction. Not fixed.
+Fixed. An eviction's local side may now be empty: `prepareCapacityReplacement` no longer refuses when
+there is no active pairing, and `finalizeMembershipEviction` owns the rule that an empty local side is a
+no-op (both the immediate and the restart-recovery path go through it). The failure is also no longer
+swallowed - `KnownDevicesSection` reports it on the same error surface disconnect and reconnect use.
+Covered by `licensedDevices.integration.test.tsx`, which asserts the seat comes back at the PROVIDER.
+
+Original report follows.
 
 **Symptom.** Sync lists a device that holds a seat on your licence but that this phone has never paired
 with - a phone you replaced, say. Its row offers Forget, the button is enabled, tapping it opens the usual
