@@ -15,10 +15,13 @@ describe('replies generating on another device', () => {
   ): ChatStreamPreview =>
     ({
       conversationId: 'chat-7',
+      messageId: 'message-1',
+      content: 'thinking about it',
+      seq: 1,
       deviceId: 'the-mac',
-      text: 'thinking about it',
+      updatedAt: 1_700_000_000_000,
       ...overrides,
-    } as ChatStreamPreview);
+    } satisfies ChatStreamPreview);
 
   beforeEach(() => {
     useRemoteChatStreamStore.setState({ previews: [] });
@@ -39,15 +42,15 @@ describe('replies generating on another device', () => {
   it('replaces the whole set, because it is a projection and not a log', () => {
     useRemoteChatStreamStore
       .getState()
-      .setPreviews([preview({ text: 'thinking' })]);
+      .setPreviews([preview({ content: 'thinking', seq: 1 })]);
 
     useRemoteChatStreamStore
       .getState()
-      .setPreviews([preview({ text: 'thinking about it more' })]);
+      .setPreviews([preview({ content: 'thinking about it more', seq: 2 })]);
 
     // Appending would leave the earlier half of a reply on screen underneath the newer one.
     expect(useRemoteChatStreamStore.getState().previews).toEqual([
-      preview({ text: 'thinking about it more' }),
+      preview({ content: 'thinking about it more', seq: 2 }),
     ]);
   });
 
@@ -62,11 +65,11 @@ describe('replies generating on another device', () => {
 
   it('keeps one preview per conversation apart from another', () => {
     useRemoteChatStreamStore.getState().setPreviews([
-      preview({ conversationId: 'chat-7', text: 'on the Mac' }),
+      preview({ conversationId: 'chat-7', content: 'on the Mac' }),
       preview({
         conversationId: 'chat-9',
         deviceId: 'the-ipad',
-        text: 'on the iPad',
+        content: 'on the iPad',
       }),
     ]);
 
