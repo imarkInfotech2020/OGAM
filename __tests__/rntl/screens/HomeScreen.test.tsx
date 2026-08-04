@@ -16,6 +16,7 @@
  * - Loading overlay
  */
 
+import { formatShortDate, formatWeekday } from '../../../src/utils/localTime';
 import React from 'react';
 import { render, fireEvent, act, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -1507,7 +1508,7 @@ describe('HomeScreen', () => {
 
       const { getByText } = renderHomeScreen();
       // Should show a short weekday like "Mon", "Tue", etc.
-      const expectedDay = threeDaysAgo.toLocaleDateString([], { weekday: 'short' });
+      const expectedDay = formatWeekday(threeDaysAgo);
       expect(getByText(expectedDay)).toBeTruthy();
     });
 
@@ -1522,7 +1523,10 @@ describe('HomeScreen', () => {
       useChatStore.setState({ conversations: [conv] });
 
       const { getByText } = renderHomeScreen();
-      const expectedDate = twoWeeksAgo.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      // Asserted through the app's own formatter. Built with toLocaleDateString this answered in UTC on
+      // a Hermes build with no ICU data - the exact bug src/utils/localTime.ts exists to fix, so the test
+      // was checking the app against behaviour it had deliberately dropped.
+      const expectedDate = formatShortDate(twoWeeksAgo);
       expect(getByText(expectedDate)).toBeTruthy();
     });
   });
