@@ -127,6 +127,36 @@ describe('Settings to Sync licensed-device management', () => {
     ui.unmount();
   });
 
+  it('says so when a seat cannot be freed, instead of looking like nothing happened', async () => {
+    await syncService.start();
+    const ui = await openSync();
+    await waitFor(() =>
+      expect(
+        ui.getByText(`2 of ${PERSONAL_MESH_DEVICE_CAP} devices saved`),
+      ).toBeTruthy(),
+    );
+
+    // The provider goes away between opening the screen and confirming - a plane, a captive portal, a
+    // bad afternoon at Keygen. The seat cannot be released, and that is worth a sentence: this action
+    // used to swallow its failure, so confirming produced no error, no change, and no explanation.
+    mesh.keygen.setOffline(true);
+    fireEvent.press(ui.getByTestId(`sync-forget-${RETIRED_FINGERPRINT}`));
+    fireEvent.press(await waitFor(() => ui.getByText('Evict device')));
+
+    // What matters is that SOMETHING is said and that it names a failure - the sentence itself is the
+    // provider's, passed through rather than invented, so the wording is not pinned here.
+    const complaint = await waitFor(() => ui.getByRole('alert'));
+    expect(String(complaint.props.children)).toMatch(
+      /failed|could not|unreachable|unavailable/i,
+    );
+    // And nothing was quietly half-done: the device still holds its seat on the licence.
+    expect(
+      mesh.installations().map(({ fingerprint }) => fingerprint),
+    ).toContain(RETIRED_FINGERPRINT);
+
+    ui.unmount();
+  });
+
   it('frees the seat a replaced device was holding, at the provider and not only on screen', async () => {
     await syncService.start();
     const ui = await openSync();
