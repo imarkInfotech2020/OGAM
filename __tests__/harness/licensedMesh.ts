@@ -191,3 +191,31 @@ export function installLicensedPhone(
   );
   return secrets;
 }
+
+/**
+ * Put THIS phone on the licence, under the fingerprint it actually has.
+ *
+ * The fingerprint is generated once and cached for the lifetime of the module, so a suite cannot decide
+ * what it will be - by the second test in a file it is whatever the first test caused to be minted. A
+ * harness that registers a fingerprint of its own choosing therefore registers a device that is not this
+ * one: validation answers NO_MACHINE, Pro switches itself off, and every screen behind it goes quiet for
+ * a reason that looks nothing like the cause.
+ *
+ * So the phone is asked what it is, and that is what gets registered.
+ */
+export async function registerThisPhone(
+  mesh: LicensedMesh,
+  device: { name?: string; platform?: string } = {},
+): Promise<string> {
+  const { getDeviceFingerprint } =
+    require('../../pro/licensing/deviceFingerprint') as {
+      getDeviceFingerprint: () => Promise<string>;
+    };
+  const fingerprint = await getDeviceFingerprint();
+  mesh.register({
+    id: fingerprint,
+    name: device.name ?? 'This phone',
+    platform: device.platform ?? 'ios',
+  });
+  return fingerprint;
+}

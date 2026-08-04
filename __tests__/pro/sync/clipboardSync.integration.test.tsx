@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Alert,
   NativeEventEmitter,
   NativeModules,
   type EmitterSubscription,
@@ -12,6 +11,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import {
   CLIPBOARD_CHANNEL,
+  isClipboardAckMessage,
   MAX_CLIPBOARD_TEXT_BYTES,
   type DeviceInfo,
 } from '@offgrid/sync';
@@ -32,6 +32,8 @@ import { useSyncStore } from '../../../pro/sync/syncStore';
 import { ClipboardScreen } from '../../../pro/ui/ClipboardScreen';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
+import { SyncActivityScreen } from '../../../pro/ui/SyncScreen/SyncActivityScreen';
+import { SyncFilesScreen } from '../../../pro/ui/SyncScreen/SyncFilesScreen';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
@@ -45,9 +47,20 @@ import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
-import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
+import { sheetAction } from '../../utils/sheets';
+import {
+  pairingCodeOnScreen,
+  TYPED_PAIRING_CODE,
+} from '../../utils/pairFromPeer';
 import { createDownloadedModel } from '../../utils/factories';
-import { createLicensedMesh } from '../../harness/licensedMesh';
+import {
+  createLicensedMesh,
+  installLicensedPhone,
+  registerThisPhone,
+} from '../../harness/licensedMesh';
+
+/** This phone's fingerprint, which is also the sync device id its installation registers under. */
+const PHONE_FINGERPRINT = 'fp-this-phone';
 
 jest.unmock('@react-navigation/native');
 
@@ -123,6 +136,9 @@ describe('mobile clipboard Sync journey', () => {
       component: SyncSharingSettingsScreen,
     });
     registerScreen({ name: 'Clipboard', component: ClipboardScreen });
+    // Sync links on to these, so they are registered the way pro/index.ts registers them.
+    registerScreen({ name: 'SyncActivity', component: SyncActivityScreen });
+    registerScreen({ name: 'SyncFiles', component: SyncFilesScreen });
     useAppStore.getState().setOnboardingComplete(true);
     // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
     useAppStore.getState().setProActive(true);
@@ -130,7 +146,10 @@ describe('mobile clipboard Sync journey', () => {
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
     useSyncStore.getState().reset();
-    (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
+    // The second journey pairs the app's own service with a joining desktop, so this phone has to be the
+    // licensed side: two unlicensed devices cannot pair at all.
+    installLicensedPhone(mesh, { fingerprint: PHONE_FINGERPRINT });
+    await registerThisPhone(mesh);
     (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
   });
 
@@ -154,12 +173,17 @@ describe('mobile clipboard Sync journey', () => {
       (deviceId: string, channel: string, data: unknown) => void
     >();
     const receivedByDesktop: unknown[] = [];
+    /** What the desktop was sent as CONTENT. An acknowledgement is a receipt, not a clip. */
+    const contentReceivedByDesktop = (): unknown[] =>
+      receivedByDesktop.filter(message => !isClipboardAckMessage(message));
 
     const mobile = buildSyncEngine({
+      // One side sponsors, the other joins - two licensed devices that were never registered is the one
+      // arrangement that cannot happen, and two unlicensed ones cannot pair at all.
       pairingEntitlement: mesh.peer(),
       localDevice: mobileDevice,
       tcpModule,
-      getPassphrase: async () => 'green-river-42',
+      getPassphrase: async () => TYPED_PAIRING_CODE,
       onPaired: peer => connected.add(peer.id),
       onAppMessage: (deviceId, channel, data) => {
         for (const listener of mobileAppListeners) {
@@ -168,10 +192,13 @@ describe('mobile clipboard Sync journey', () => {
       },
     });
     const desktop = buildSyncEngine({
-      pairingEntitlement: mesh.peer(),
+      pairingEntitlement: mesh.joiner({
+        name: desktopDevice.name,
+        platform: desktopDevice.platform,
+      }),
       localDevice: desktopDevice,
       tcpModule,
-      getPassphrase: async () => 'green-river-42',
+      getPassphrase: async () => TYPED_PAIRING_CODE,
       onAppMessage: (_deviceId, channel, data) => {
         if (channel === CLIPBOARD_CHANNEL) receivedByDesktop.push(data);
       },
@@ -217,18 +244,22 @@ describe('mobile clipboard Sync journey', () => {
 
     await Promise.all([mobile.engine.start(0), desktop.engine.start(0)]);
     desktopDevice.port = desktop.transport.boundPort ?? 0;
-    await mobile.engine.pair(desktopDevice, 'green-river-42');
+    await mobile.engine.pair(desktopDevice, TYPED_PAIRING_CODE);
     await waitFor(() => expect(connected.has(desktopDevice.id)).toBe(true));
     await service.start();
+    // Pro is an entitlement the service is TOLD about, exactly as pro/index.ts tells it on activation.
+    // Without it `enabled()` stays false however the preference is set, so native observation never
+    // starts and nothing is ever copied - a silence that reads like a broken clipboard.
+    service.setEntitlementActive(true);
 
     nativeClipboard.copy('disabled stays on phone', clock);
-    expect(receivedByDesktop).toEqual([]);
+    expect(contentReceivedByDesktop()).toEqual([]);
 
     await service.setEnabled(true);
     expect(nativeClipboard.enabled).toBe(true);
     nativeClipboard.copy('copied on iPhone', clock);
     await waitFor(() =>
-      expect(receivedByDesktop).toEqual([
+      expect(contentReceivedByDesktop()).toEqual([
         expect.objectContaining({
           t: 'text',
           v: 2,
@@ -282,7 +313,7 @@ describe('mobile clipboard Sync journey', () => {
     );
     expect(service.historySnapshot()).toHaveLength(3);
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(receivedByDesktop).toHaveLength(1);
+    expect(contentReceivedByDesktop()).toHaveLength(1);
 
     desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, inbound);
     desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, {
@@ -318,6 +349,8 @@ describe('mobile clipboard Sync journey', () => {
       },
     });
     await restored.start();
+    // A relaunch is told about the entitlement again, the way activation tells it every time.
+    restored.setEntitlementActive(true);
     expect(restored.enabled()).toBe(true);
     expect(restoredBoundary.enabled).toBe(true);
     expect(restored.historySnapshot()).toEqual(
@@ -386,13 +419,16 @@ describe('mobile clipboard Sync journey', () => {
       port: 0,
     };
     remote = buildSyncEngine({
-      pairingEntitlement: mesh.peer(),
+      pairingEntitlement: mesh.joiner(),
       localDevice: remoteDevice,
       tcpModule: TcpSocket as unknown as RnTcpModule,
     });
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
     await syncService.start();
+    // Pro is an entitlement the clipboard service is TOLD about, as pro/index.ts tells it on activation.
+    // Without it the toggle flips, the preference is saved, and native observation never starts.
+    clipboardSyncService.setEntitlementActive(true);
 
     ui = render(
       <>
@@ -403,8 +439,16 @@ describe('mobile clipboard Sync journey', () => {
       </>,
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
-    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
-    // The status line is one word now: the route detail moved off it deliberately.
+    // Settings has to be the visible screen before its rows can be pressed: a press delivered while the
+    // tab is still transitioning is dropped, and the journey then reads as a screen that never arrived.
+    await waitFor(() => expect(ui!.getByText('Model Settings')).toBeTruthy());
+    fireEvent.press(ui.getByTestId('open-sync-settings'));
+    // Wait for the Sync screen itself before reading anything off it. The status line is one word now -
+    // the route detail moved off it deliberately - and asking for that word while still on Settings
+    // reports a missing status rather than a screen that has not arrived.
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-pairing-code-value')).toBeTruthy(),
+    );
     await waitFor(() => expect(ui!.getByText('Discoverable')).toBeTruthy());
 
     const mobile = useSyncStore.getState().thisDevice;
@@ -420,9 +464,8 @@ describe('mobile clipboard Sync journey', () => {
       },
       await pairingCodeOnScreen(ui),
     );
-    await waitFor(() =>
-      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
-    );
+    // Waited on the outcome, not the progress sheet: pairing over an in-memory transport is done in a
+    // couple of milliseconds and the sheet has been and gone.
     await pairing;
 
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
@@ -482,12 +525,17 @@ describe('mobile clipboard Sync journey', () => {
     fireEvent.press(ui.getByLabelText('Delete text from Off Grid AI Desktop'));
     await waitFor(() => expect(ui!.queryByText('copied on Mac')).toBeNull());
 
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    // Confirmed in an in-app sheet, like every other confirmation here - never a system modal. The
+    // question says what will be lost and where from, so it is read on screen and answered by pressing.
     fireEvent.press(ui.getByTestId('clipboard-clear'));
-    const clear = (alert.mock.calls[0][2] ?? []).find(
-      button => button.style === 'destructive',
+    await waitFor(() =>
+      expect(ui!.getByText('Clear clipboard history?')).toBeTruthy(),
     );
-    clear?.onPress?.();
+    expect(
+      ui.getByText('This removes every saved text clip from this phone.'),
+    ).toBeTruthy();
+    // "Clear" is also the button that opened this sheet, so the one INSIDE it is found by the question.
+    fireEvent.press(sheetAction(ui, 'Clear clipboard history?', 'Clear'));
     await waitFor(() =>
       expect(ui!.getByTestId('clipboard-empty')).toBeTruthy(),
     );

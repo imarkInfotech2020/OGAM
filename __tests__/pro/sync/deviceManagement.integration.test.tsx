@@ -47,29 +47,7 @@ import {
 } from '../../harness/licensedMesh';
 
 import { PAIRING_TRUST_FORMAT_VERSION } from '../../../pro/sync/pairingTrustDocument';
-
-/**
- * The action in the header of the sheet with this title.
- *
- * Every sheet in this app puts its dismiss action in its own header, and more than one of them says
- * "Cancel" - the pairing-code sheet and the attempt sheet are both open at once during a pair. The title
- * sits beside the action in that header, so it is what tells them apart; a bare text query picks
- * whichever mounted first and a count says nothing about which sheet can be dismissed.
- */
-function sheetHeaderAction(
-  ui: RenderAPI,
-  title: string,
-  action: string,
-): ReactTestInstance {
-  const heading = ui.getByText(title);
-  // Climb from the title until an ancestor also contains the action. React inserts wrapper nodes, so the
-  // header is not reliably the immediate parent - but it is the nearest ancestor holding both.
-  for (let node = heading.parent; node; node = node.parent) {
-    const [found] = within(node).queryAllByText(action);
-    if (found) return found;
-  }
-  throw new Error(`the "${title}" sheet offers no "${action}"`);
-}
+import { sheetAction } from '../../utils/sheets';
 
 /**
  * Retry a pairing attempt the way the sheet requires: enter the code, then press Retry.
@@ -470,16 +448,12 @@ describe('Pro mobile saved-device management journey', () => {
     await waitFor(() =>
       expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
     );
-    expect(
-      sheetHeaderAction(ui, 'Waiting for confirmation', 'Cancel'),
-    ).toBeTruthy();
+    expect(sheetAction(ui, 'Waiting for confirmation', 'Cancel')).toBeTruthy();
     // Two installations: this phone and the Mac. Both are on the licence throughout - what the pairing
     // adds is the trust between them, not a seat.
     expect(ui.getByText('2 of 5 devices saved')).toBeTruthy();
     await waitFor(() => expect(passphraseResolvers).toHaveLength(1));
-    fireEvent.press(
-      sheetHeaderAction(ui, 'Waiting for confirmation', 'Cancel'),
-    );
+    fireEvent.press(sheetAction(ui, 'Waiting for confirmation', 'Cancel'));
 
     await waitFor(() =>
       expect(ui!.getByText('Pairing cancelled')).toBeTruthy(),
