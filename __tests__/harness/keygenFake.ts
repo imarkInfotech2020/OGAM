@@ -1,7 +1,4 @@
-import {
-  KEYGEN_API_BASE,
-  KEYGEN_PRODUCT_ID,
-} from '../../src/config/keygen';
+import { KEYGEN_API_BASE, KEYGEN_PRODUCT_ID } from '../../src/config/keygen';
 
 /**
  * Keygen, in memory, answering at the network boundary.
@@ -60,6 +57,13 @@ export interface KeygenFake {
     name?: string;
     platform?: string;
   }): void;
+  /**
+   * Forget an installation server-side, the way freeing the seat from ANOTHER device does.
+   *
+   * The local registry keeps its own map of provider records, so this is how a test reaches the state where
+   * that map names a machine the provider no longer has.
+   */
+  forget(fingerprint: string): void;
   /** Every installation currently on a licence, as the provider sees it. */
   machines(key: string): readonly StoredMachine[];
   /** Take the network away, to exercise what the app does offline. */
@@ -80,9 +84,10 @@ export function createKeygenFake(): KeygenFake {
   const realFetch = globalThis.fetch;
 
   const nextId = (prefix: string): string => `${prefix}-${++sequence}`;
-  const now = (): string => new Date(1700000000000 + sequence * 1000).toISOString();
+  const now = (): string =>
+    new Date(1700000000000 + sequence * 1000).toISOString();
   const licenceByKey = (key: string): StoredLicence | undefined =>
-    [...licences.values()].find((licence) => licence.key === key);
+    [...licences.values()].find(licence => licence.key === key);
   const licenceFromAuthorization = (
     headers: Headers,
   ): StoredLicence | undefined => {
@@ -109,7 +114,9 @@ export function createKeygenFake(): KeygenFake {
       updated: machine.updated,
       lastHeartbeat: machine.updated,
     },
-    relationships: { license: { data: { type: 'licenses', id: machine.licenseId } } },
+    relationships: {
+      license: { data: { type: 'licenses', id: machine.licenseId } },
+    },
   });
 
   const licenceResource = (licence: StoredLicence): unknown => ({
@@ -124,33 +131,42 @@ export function createKeygenFake(): KeygenFake {
 
   const validate = async (request: Request): Promise<Response> => {
     const body = (await request.json().catch(() => ({}))) as {
-      meta?: { key?: string; scope?: { product?: string; fingerprint?: string } };
+      meta?: {
+        key?: string;
+        scope?: { product?: string; fingerprint?: string };
+      };
     };
     const key = body.meta?.key ?? '';
     const fingerprint = body.meta?.scope?.fingerprint ?? '';
     const licence = licenceByKey(key);
     if (!licence) {
-      return json(200, { meta: { valid: false, code: 'NOT_FOUND' }, data: null });
+      return json(200, {
+        meta: { valid: false, code: 'NOT_FOUND' },
+        data: null,
+      });
     }
-    if (body.meta?.scope?.product && body.meta.scope.product !== KEYGEN_PRODUCT_ID) {
+    if (
+      body.meta?.scope?.product &&
+      body.meta.scope.product !== KEYGEN_PRODUCT_ID
+    ) {
       return json(200, {
         meta: { valid: false, code: 'PRODUCT_SCOPE_MISMATCH' },
         data: licenceResource(licence),
       });
     }
     const activated = [...machines.values()].filter(
-      (machine) => machine.licenseId === licence.id,
+      machine => machine.licenseId === licence.id,
     );
-    const mine = activated.find((machine) => machine.fingerprint === fingerprint);
+    const mine = activated.find(machine => machine.fingerprint === fingerprint);
     // Keygen's own vocabulary, which the app branches on: a key with no installations yet is valid
     // to import, a fingerprint it does not know is not yet activated, and over the cap it says so.
     const code = mine
       ? 'VALID'
       : activated.length === 0
-        ? 'NO_MACHINES'
-        : activated.length >= licence.seats
-          ? 'TOO_MANY_MACHINES'
-          : 'NO_MACHINE';
+      ? 'NO_MACHINES'
+      : activated.length >= licence.seats
+      ? 'TOO_MANY_MACHINES'
+      : 'NO_MACHINE';
     return json(200, {
       meta: { valid: code === 'VALID', code },
       data: licenceResource(licence),
@@ -162,19 +178,25 @@ export function createKeygenFake(): KeygenFake {
     if (!licence) return json(401, { errors: [{ code: 'UNAUTHORIZED' }] });
     const body = (await request.json().catch(() => ({}))) as {
       data?: {
-        attributes?: { fingerprint?: string; hostname?: string; platform?: string; name?: string };
+        attributes?: {
+          fingerprint?: string;
+          hostname?: string;
+          platform?: string;
+          name?: string;
+        };
         relationships?: { license?: { data?: { id?: string } } };
       };
     };
     const attributes = body.data?.attributes ?? {};
     const fingerprint = attributes.fingerprint ?? '';
     const existing = [...machines.values()].find(
-      (machine) => machine.licenseId === licence.id && machine.fingerprint === fingerprint,
+      machine =>
+        machine.licenseId === licence.id && machine.fingerprint === fingerprint,
     );
     // Activating the same installation twice is not a second seat.
     if (existing) return json(201, { data: machineResource(existing) });
     const activated = [...machines.values()].filter(
-      (machine) => machine.licenseId === licence.id,
+      machine => machine.licenseId === licence.id,
     );
     if (activated.length >= licence.seats) {
       return json(422, {
@@ -202,10 +224,14 @@ export function createKeygenFake(): KeygenFake {
 
   const handle = async (request: Request, path: string): Promise<Response> => {
     calls.push({ method: request.method, path });
-    if (path === '/licenses/actions/validate-key' && request.method === 'POST') {
+    if (
+      path === '/licenses/actions/validate-key' &&
+      request.method === 'POST'
+    ) {
       return validate(request);
     }
-    if (path === '/machines' && request.method === 'POST') return activate(request);
+    if (path === '/machines' && request.method === 'POST')
+      return activate(request);
 
     const listing = /^\/licenses\/([^/]+)\/machines$/.exec(path);
     if (listing && request.method === 'GET') {
@@ -215,7 +241,7 @@ export function createKeygenFake(): KeygenFake {
       }
       return json(200, {
         data: [...machines.values()]
-          .filter((machine) => machine.licenseId === licence.id)
+          .filter(machine => machine.licenseId === licence.id)
           .map(machineResource),
       });
     }
@@ -237,7 +263,9 @@ export function createKeygenFake(): KeygenFake {
         return json(404, { errors: [{ code: 'NOT_FOUND' }] });
       }
       const body = (await request.json().catch(() => ({}))) as {
-        data?: { attributes?: { hostname?: string; name?: string; platform?: string } };
+        data?: {
+          attributes?: { hostname?: string; name?: string; platform?: string };
+        };
       };
       const attributes = body.data?.attributes ?? {};
       const updated: StoredMachine = {
@@ -271,6 +299,12 @@ export function createKeygenFake(): KeygenFake {
       machines.set(machine.id, machine);
     },
 
+    forget(fingerprint) {
+      for (const [id, machine] of machines) {
+        if (machine.fingerprint === fingerprint) machines.delete(id);
+      }
+    },
+
     addLicence(licence) {
       const stored: StoredLicence = { ...licence, id: nextId('licence') };
       licences.set(stored.id, stored);
@@ -279,7 +313,9 @@ export function createKeygenFake(): KeygenFake {
     machines(key) {
       const licence = licenceByKey(key);
       return licence
-        ? [...machines.values()].filter((machine) => machine.licenseId === licence.id)
+        ? [...machines.values()].filter(
+            machine => machine.licenseId === licence.id,
+          )
         : [];
     },
     setOffline(next) {
@@ -293,8 +329,16 @@ export function createKeygenFake(): KeygenFake {
       sequence = 0;
     },
     install() {
-      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      globalThis.fetch = (async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+            ? input.href
+            : input.url;
         if (!url.startsWith(KEYGEN_API_BASE)) {
           // Anything else is not this fake's business and must not silently succeed.
           throw new Error(`unexpected request to ${url}`);
