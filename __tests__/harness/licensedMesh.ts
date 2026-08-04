@@ -36,6 +36,15 @@ export interface LicensedMesh {
   /** The other device, licensed and ready to sponsor this one. */
   peer(): PeerEntitlement;
   /**
+   * The other device with NO entitlement yet, waiting to be brought onto this licence.
+   *
+   * The faithful stand-in for a device being paired for the first time: the licensed side sponsors it and
+   * registers its installation, which is what puts it on the roster. A licensed peer that was never
+   * registered is the one arrangement that cannot happen in life - reconciliation retires a device it
+   * finds trusted but absent from the licence, so such a peer pairs and is dropped moments later.
+   */
+  joiner(device?: { name?: string; platform?: string }): PeerEntitlement;
+  /**
    * Put a device on the licence, the way one that has been paired for a while already is.
    *
    * A saved device only appears in the roster if the registry lists an installation for it - the
@@ -88,6 +97,32 @@ export function createLicensedMesh(): LicensedMesh {
         secret: MESH_LICENCE_KEY,
       });
     },
+
+    joiner(device) {
+      const peer = createPeerEntitlement({
+        licensed: false,
+        entitlementId: licenceId,
+        secret: MESH_LICENCE_KEY,
+      });
+      const commitImport = peer.commitImport.bind(peer);
+      return Object.assign(peer, {
+        async commitImport(preparedId: string): Promise<void> {
+          await commitImport(preparedId);
+          // A device brought onto a licence registers its OWN installation - the sponsor only makes room.
+          // Leaving that out is what made a newly paired peer vanish: reconciliation found it trusted
+          // but absent from the roster and retired it, seconds after a pairing that had gone perfectly.
+          const syncDeviceId = peer.imported[peer.imported.length - 1];
+          if (syncDeviceId) {
+            keygen.activate({
+              key: MESH_LICENCE_KEY,
+              fingerprint: syncDeviceId,
+              name: device?.name ?? syncDeviceId,
+              platform: device?.platform ?? 'macos',
+            });
+          }
+        },
+      });
+    },
   };
 }
 
@@ -119,12 +154,17 @@ export function installLicensedPhone(
 ): Map<string, string> {
   const keychain = require('react-native-keychain');
   const secrets = options.secrets ?? new Map<string, string>();
+  // One Keychain entry carries two readings of the same credential: the licence client reads
+  // `licenseId`, and the pairing-entitlement authority reads `entitlementId`. Both name the same licence.
+  // Omitting the second one is not a smaller lie: without it the phone cannot SPONSOR another device, so
+  // a first-time pairing never registers the new device and it is retired at the next reconciliation.
   secrets.set(
     'off-grid-pro-license',
     JSON.stringify({
       isPro: true,
       key: MESH_LICENCE_KEY,
       licenseId: mesh.licenceId,
+      entitlementId: mesh.licenceId,
       expiry: null,
       verifiedAt: 0,
     }),

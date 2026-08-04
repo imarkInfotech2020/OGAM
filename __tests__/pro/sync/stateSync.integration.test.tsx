@@ -42,7 +42,13 @@ import {
 } from '../../utils/nativeSyncBoundaries';
 import { createDownloadedModel } from '../../utils/factories';
 import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
-import { createLicensedMesh } from '../../harness/licensedMesh';
+import {
+  createLicensedMesh,
+  installLicensedPhone,
+} from '../../harness/licensedMesh';
+
+/** This phone's fingerprint, which is also the sync device id its installation registers under. */
+const PHONE_FINGERPRINT = 'fp-this-phone';
 
 jest.unmock('@react-navigation/native');
 
@@ -109,7 +115,14 @@ describe('Pro mobile state sync journey', () => {
     registerHook(HOOKS.syncRecordLocalMutation, (mutation: SyncMutation) => {
       stateSyncService.recordMutation(mutation);
     });
-    (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
+    // A licensed phone that has activated its own machine: without both, the provider never admits the
+    // licence, the roster is never requested, and a peer that pairs has nowhere to appear.
+    installLicensedPhone(mesh, { fingerprint: PHONE_FINGERPRINT });
+    mesh.register({
+      id: PHONE_FINGERPRINT,
+      name: 'This phone',
+      platform: 'ios',
+    });
     (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
   });
 
@@ -143,7 +156,10 @@ describe('Pro mobile state sync journey', () => {
     });
     let remoteState: StateSync;
     remote = buildSyncEngine({
-      pairingEntitlement: mesh.peer(),
+      pairingEntitlement: mesh.joiner({
+        name: remoteDevice.name,
+        platform: remoteDevice.platform,
+      }),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
       onPaired: device => remoteState.onConnect(device.id),
@@ -290,13 +306,24 @@ describe('Pro mobile state sync journey', () => {
               ?.messages.at(-1)?.uuid
           }`,
         ),
-      ).toMatchObject({
-        content: 'The phone checked the notes.',
-        context: JSON.stringify({
-          reasoning: 'I should send the reasoning back to Desktop.',
-        }),
-      }),
+      ).toMatchObject({ content: 'The phone checked the notes.' }),
     );
+    // The context is read as the structure it is, not as an exact string. It carries the reasoning AND
+    // now a status, and pinning the whole blob turns every future field into a failure while proving
+    // nothing more about the field under test.
+    const deliveredContext = JSON.parse(
+      (remoteRecords.records.get(
+        `${CORE_SYNC_ENTITIES.message}:${
+          useChatStore
+            .getState()
+            .conversations.find(item => item.id === 'remote-conversation')
+            ?.messages.at(-1)?.uuid
+        }`,
+      )?.context ?? '{}') as string,
+    );
+    expect(deliveredContext).toMatchObject({
+      reasoning: 'I should send the reasoning back to Desktop.',
+    });
 
     fireEvent.press(ui.getByTestId('projects-tab'));
     fireEvent.press(ui.getByText('New'));
@@ -432,16 +459,18 @@ describe('Pro mobile state sync journey', () => {
       ),
     ).toMatchObject({ value_json: '0.85' });
 
+    // Pairing again after the peer restarted. There is no accept step: the peer presents the code this
+    // phone is showing and a code that matches IS the confirmation, so nothing is waiting to be tapped.
     await remote.engine.start(0);
-    const secondPairing = remote.engine.pair(
+    // Read from the store rather than the screen: this part of the journey is on another screen, and
+    // the store holds the same code the Sync screen renders.
+    const currentCode = useSyncStore.getState().pairingCode.code;
+    if (!currentCode)
+      throw new Error('the phone has not issued a pairing code');
+    await remote.engine.pair(
       { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
-      'violet-lake-27',
+      currentCode,
     );
-    await waitFor(() =>
-      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
-    );
-    fireEvent.press(ui.getByTestId('accept-incoming-pairing'));
-    await secondPairing;
     await waitFor(() =>
       expect(syncService.connectedDeviceIds()).toContain(remoteDevice.id),
     );
@@ -471,7 +500,11 @@ describe('Pro mobile state sync journey', () => {
     ui = undefined;
     await stateSyncService.stop();
     await stateSyncService.start();
-    expect(stateSyncService.opCount()).toBe(persistedOpCount);
+    // The log is collapsed at startup, so it comes back SMALLER, not identical - superseded ops are
+    // dropped and only the winner for each record is kept. What has to survive is the state itself,
+    // which the temperature below is read for. A log that came back empty, or bigger, would be wrong.
+    expect(stateSyncService.opCount()).toBeGreaterThan(0);
+    expect(stateSyncService.opCount()).toBeLessThanOrEqual(persistedOpCount);
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
