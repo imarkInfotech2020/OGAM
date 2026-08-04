@@ -87,12 +87,29 @@ describe('keygenClient', () => {
   });
 
   describe('listMachines / deactivateMachine', () => {
-    it('maps machine records', async () => {
+    it('maps machine records, keeping the times the eviction rule needs', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce(
         res({ data: [{ id: 'm1', attributes: { fingerprint: 'fp-1', platform: 'ios', name: 'Phone', created: 't' } }] }),
       );
       const machines = await listMachines('key/abc', 'lic-1');
-      expect(machines).toEqual([{ id: 'm1', fingerprint: 'fp-1', platform: 'ios', name: 'Phone', lastSeen: 't' }]);
+      // lastActiveAt and updatedAt are the fields the mesh reads to decide WHICH device gives up its
+      // seat when a sixth one pairs. A mapping that dropped them - as this assertion did, by listing
+      // only five keys - would leave that choice to be made from a created date, and the device evicted
+      // would be the oldest one the user owns rather than the one they have not touched in months. Null
+      // where Keygen said nothing, rather than absent, so a missing time is a fact and not a gap.
+      expect(machines).toEqual([
+        {
+          id: 'm1',
+          fingerprint: 'fp-1',
+          platform: 'ios',
+          name: 'Phone',
+          hostname: null,
+          lastSeen: 't',
+          createdAt: 't',
+          updatedAt: null,
+          lastActiveAt: null,
+        },
+      ]);
     });
 
     it('deactivates on 204', async () => {

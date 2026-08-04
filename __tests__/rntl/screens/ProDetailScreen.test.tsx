@@ -8,6 +8,7 @@
 import React from 'react';
 import { Alert, Linking } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { projectPersonalMeshActivationFailure } from '@offgrid/sync';
 import { useAppStore } from '../../../src/stores/appStore';
 import { OFF_GRID_DESKTOP_URL } from '../../../src/constants';
 import { withUtm } from '../../../src/utils/utm';
@@ -156,17 +157,26 @@ describe('ProDetailScreen', () => {
     expect(getByText('License not accepted')).toBeTruthy();
   });
 
-  it('shows a retryable error when automatic device replacement fails', async () => {
-    mockActivateProByKey.mockResolvedValueOnce({ ok: false, reason: 'limit' });
+  it.each([
+    ['a licence with no room left', 'capacity_full'],
+    ['a seat that could not be freed', 'replacement_failed'],
+    ['a licence the provider will not accept', 'invalid_credential'],
+  ])('says what went wrong for %s', async (_why, reason) => {
+    mockActivateProByKey.mockResolvedValueOnce({ ok: false, reason });
     const { getByText, getByTestId } = render(<ProDetailScreen />);
     fireEvent.press(getByText('I have a license key'));
-    fireEvent.changeText(getByTestId('license-key-input'), 'key/full');
+    fireEvent.changeText(getByTestId('license-key-input'), 'key/abc123');
     fireEvent.press(getByTestId('unlock-cta'));
-    await waitFor(() =>
-      expect(
-        getByText(/could not replace the least recently seen device/),
-      ).toBeTruthy(),
+
+    // Read from the shared projection rather than restated here. The test used to pass reason: 'limit'
+    // - not a code the app has - and assert copy from a different failure, so it was checking the words
+    // of one error against the code of another. Asserting through the projection means the screen and
+    // this test cannot disagree, and a copy change cannot silently pass.
+    const expected = projectPersonalMeshActivationFailure(
+      reason as Parameters<typeof projectPersonalMeshActivationFailure>[0],
     );
+    await waitFor(() => expect(getByText(expected.title)).toBeTruthy());
+    expect(getByText(expected.description)).toBeTruthy();
   });
 
   it('keeps the activate button disabled until a key is entered', async () => {
@@ -212,7 +222,16 @@ describe('ProDetailScreen', () => {
     // "Pro Active" is about THIS DEVICE being admitted to the licence, not merely about owning one:
     // isProDeviceActive is set once the roster confirms this install, and a device holding a licence it
     // has not been admitted under is exactly the state the other label ("Device Not Active") is for.
-    useAppStore.setState({ hasRegisteredPro: true, isProDeviceActive: true });
+    // Three separate facts, and the screen reads a different one for each part of itself:
+    // hasSavedProCredential decides whether the management card exists at all (a credential is saved),
+    // isProDeviceActive decides the header label (this install is admitted to the licence), and
+    // hasRegisteredPro is what every upsell gate reads. Setting only the last two rendered the header
+    // and no card, which is what these tests were failing on.
+    useAppStore.setState({
+      hasRegisteredPro: true,
+      hasSavedProCredential: true,
+      isProDeviceActive: true,
+    });
     const { getByText } = render(<ProDetailScreen />);
     expect(getByText('Pro Active')).toBeTruthy();
     // ProManageSection loads license info async, then shows the status line.
@@ -222,7 +241,11 @@ describe('ProDetailScreen', () => {
   });
 
   it('shows the yearly status line and a Manage subscription link for a recurring license', async () => {
-    useAppStore.setState({ hasRegisteredPro: true, isProDeviceActive: true });
+    useAppStore.setState({
+      hasRegisteredPro: true,
+      hasSavedProCredential: true,
+      isProDeviceActive: true,
+    });
     mockGetProLicenseInfo.mockResolvedValue({
       isPro: true,
       tier: 'yearly',
@@ -235,7 +258,7 @@ describe('ProDetailScreen', () => {
   });
 
   it('shows a lifetime status line and NO Manage subscription link for a one-time license', async () => {
-    useAppStore.setState({ hasRegisteredPro: true });
+    useAppStore.setState({ hasRegisteredPro: true, hasSavedProCredential: true });
     mockGetProLicenseInfo.mockResolvedValue({
       isPro: true,
       tier: 'lifetime',
