@@ -1,8 +1,43 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import {
+  fireEvent,
+  render,
+  waitFor,
+  within,
+} from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
+
+/**
+ * The activity row a rendered node sits in.
+ *
+ * Rows carry `sync-activity-<id>`, and a test does not know the id the transfer was given, so the row
+ * is found by walking up from something inside it. Worth the few lines: this screen also has a
+ * "Received" direction FILTER, so an unscoped text query matches the chip as readily as the row and
+ * would pass even if the row said Sent.
+ */
+function activityRow(node: ReactTestInstance): ReactTestInstance {
+  // The row is `sync-activity-<id>`. Its own controls are `sync-activity-open-<id>` and friends, and
+  // the file name lives inside one of them - so matching the prefix alone finds the BUTTON, whose
+  // subtree has no status text in it. The actions are named out to keep the row unambiguous.
+  const notARow = /^sync-activity-(open|retry|cancel|dismiss|filter|filters)\b/;
+  for (
+    let current: ReactTestInstance | null = node;
+    current;
+    current = current.parent
+  ) {
+    const testID = current.props?.testID;
+    if (
+      typeof testID === 'string' &&
+      testID.startsWith('sync-activity-') &&
+      !notARow.test(testID)
+    ) {
+      return current;
+    }
+  }
+  throw new Error('that node is not inside an activity row');
+}
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Keychain from 'react-native-keychain';
 import TcpSocket from 'react-native-tcp-socket';
 import {
   FileTransferManager,
@@ -37,7 +72,13 @@ import {
 } from '../../utils/factories';
 import { ModelTransferSheet } from '../../../pro/ui/ModelTransferSheet';
 import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
-import { createLicensedMesh } from '../../harness/licensedMesh';
+import {
+  createLicensedMesh,
+  installLicensedPhone,
+} from '../../harness/licensedMesh';
+
+/** This phone's fingerprint, which is also the sync device id its installation registers under. */
+const PHONE_FINGERPRINT = 'fp-this-phone';
 
 jest.unmock('@react-navigation/native');
 
@@ -92,8 +133,15 @@ describe('Pro mobile model transfer journey', () => {
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
     useSyncStore.getState().reset();
-    (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
-    (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
+    // A licensed phone has activated its OWN machine on the licence. Without that the provider answers
+    // NO_MACHINE, the licence is never admitted, the installation roster is never even requested, and
+    // the saved-device list has nothing to build a row from.
+    installLicensedPhone(mesh, { fingerprint: PHONE_FINGERPRINT });
+    mesh.register({
+      id: PHONE_FINGERPRINT,
+      name: 'This phone',
+      platform: 'ios',
+    });
   });
 
   afterEach(async () => {
@@ -235,8 +283,10 @@ describe('Pro mobile model transfer journey', () => {
     });
 
     fireEvent.press(ui.getByTestId('sync-open-activity'));
-    await waitFor(() => expect(ui!.getByText(fileName)).toBeTruthy());
-    expect(ui.getByText('Received')).toBeTruthy();
+    const arrival = await waitFor(() => ui!.getByText(fileName));
+    // Scoped to the row. "Received" is also a direction filter on this screen, so an unscoped query
+    // matches the filter chip as readily as the row and would pass even if the row said Sent.
+    expect(within(activityRow(arrival)).getByText(/Received/)).toBeTruthy();
     await expect(modelManager.getDownloadedModels()).resolves.toEqual([
       expect.objectContaining({
         id: `google/gemma-mobile/${fileName}`,
@@ -288,8 +338,13 @@ describe('Pro mobile model transfer journey', () => {
           new Uint8Array(invalidPayload.subarray(offset, offset + length)),
       }),
     ).rejects.toThrow('receiver could not verify or register the file');
-    await waitFor(() => expect(ui!.getByText(invalidFileName)).toBeTruthy());
-    expect(ui.getByText('Could not receive')).toBeTruthy();
+    // A refused arrival is listed under the model it claimed to be, and its status node reads
+    // "Could not receive - 100%" - one Text with the progress appended - so the status is matched
+    // loosely and the row is found from the name the row actually shows.
+    const refusal = await waitFor(() => ui!.getByText('Invalid model'));
+    expect(
+      within(activityRow(refusal)).getByText(/Could not receive/),
+    ).toBeTruthy();
     await expect(modelManager.getDownloadedModels()).resolves.toHaveLength(1);
     await expect(
       modelTransferFsBoundary.exists(
@@ -320,9 +375,9 @@ describe('Pro mobile model transfer journey', () => {
     );
     expect(returnedFileName).toBe(fileName);
     expect(returnedModel).toEqual(payload);
-    expect(ui.getAllByText(`Sent ${fileName}`).length).toBeGreaterThanOrEqual(
-      1,
-    );
+    // Not asserted: the sheet's "Sent <file>" progress line. The completion state replaces it, so
+    // matching it means catching a moment that has already passed - and the outcome is covered twice
+    // over, by the sentence the user reads and by the peer holding the exact bytes.
   });
 
   // A phone whose every model is vision-capable used to be told it had nothing to send: the send side
