@@ -25,16 +25,25 @@ jest.mock('../../../src/services/proLicenseService', () => ({
   deactivateProDevice: (...args: unknown[]) => mockDeactivateProDevice(...args),
   // ProManageSection renders the status line from this map — mirror the real export
   // so the mock can't diverge (an omitted map made PRO_TIER_META[tier] throw).
-  PRO_TIER_META: { lifetime: { label: 'Lifetime', renews: false }, yearly: { label: 'Yearly', renews: true } },
+  PRO_TIER_META: {
+    lifetime: { label: 'Lifetime', renews: false },
+    yearly: { label: 'Yearly', renews: true },
+  },
   PRO_PAY_PAGE_URL: 'https://offgridmobileai.co/pay',
-}));
-
-jest.mock('../../../src/services/deviceFingerprint', () => ({
-  getDeviceFingerprint: jest.fn().mockResolvedValue('fp-this-device'),
 }));
 
 import { ProDetailScreen } from '../../../src/screens/ProDetailScreen';
 
+/**
+ * PARTIALLY GREEN, and the four that remain red are red for one reason: this suite mocks
+ * `proLicenseService`, which is our own code. The assertions therefore describe the mock rather than the
+ * app, which is how they came to drift without anything failing - the module could not even be resolved
+ * for a while and every test in the file was skipped in silence.
+ *
+ * The remaining four assert the management card (status line, renewal link, replacement error) through
+ * that mock. Fixing them means running the real licence stack over the in-memory provider, the way the
+ * sync journeys do, rather than teaching the mock new tricks.
+ */
 describe('ProDetailScreen', () => {
   let alertSpy: jest.SpyInstance;
   let linkingSpy: jest.SpyInstance;
@@ -43,9 +52,16 @@ describe('ProDetailScreen', () => {
     jest.clearAllMocks();
     useAppStore.setState({ hasRegisteredPro: false });
     alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    linkingSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
+    linkingSpy = jest
+      .spyOn(Linking, 'openURL')
+      .mockResolvedValue(true as never);
     // Defaults for the Pro-active management section.
-    mockGetProLicenseInfo.mockResolvedValue({ isPro: true, tier: 'lifetime', expiry: null, verifiedAt: 0 });
+    mockGetProLicenseInfo.mockResolvedValue({
+      isPro: true,
+      tier: 'lifetime',
+      expiry: null,
+      verifiedAt: 0,
+    });
     mockListProDevices.mockResolvedValue([]);
     mockDeactivateProDevice.mockResolvedValue(true);
   });
@@ -79,7 +95,9 @@ describe('ProDetailScreen', () => {
   it('shows the Off Grid AI Desktop link to Pro-active users too', async () => {
     useAppStore.setState({ hasRegisteredPro: true });
     const { getByText } = render(<ProDetailScreen />);
-    await waitFor(() => expect(getByText('Get Off Grid AI Desktop')).toBeTruthy());
+    await waitFor(() =>
+      expect(getByText('Get Off Grid AI Desktop')).toBeTruthy(),
+    );
     fireEvent.press(getByText('Get Off Grid AI Desktop'));
     expect(linkingSpy).toHaveBeenCalledWith(
       withUtm(OFF_GRID_DESKTOP_URL, 'pro-detail'),
@@ -90,7 +108,11 @@ describe('ProDetailScreen', () => {
     const { getByText } = render(<ProDetailScreen />);
     fireEvent.press(getByText('I have a license key'));
     expect(getByText('Enter your license key')).toBeTruthy();
-    expect(getByText('Paste the license key from your email. It works on up to 5 devices.')).toBeTruthy();
+    expect(
+      getByText(
+        'Paste the license key from your email. It works on up to 5 devices.',
+      ),
+    ).toBeTruthy();
   });
 
   it('activates the license key and shows the success card', async () => {
@@ -99,7 +121,9 @@ describe('ProDetailScreen', () => {
     fireEvent.press(getByText('I have a license key'));
     fireEvent.changeText(getByTestId('license-key-input'), 'key/abc123');
     fireEvent.press(getByTestId('unlock-cta'));
-    await waitFor(() => expect(mockActivateProByKey).toHaveBeenCalledWith('key/abc123'));
+    await waitFor(() =>
+      expect(mockActivateProByKey).toHaveBeenCalledWith('key/abc123'),
+    );
     await waitFor(() => expect(getByText('Pro activated')).toBeTruthy());
   });
 
@@ -115,12 +139,21 @@ describe('ProDetailScreen', () => {
   });
 
   it('shows an inline error when the key is invalid', async () => {
-    mockActivateProByKey.mockResolvedValueOnce({ ok: false, reason: 'invalid' });
+    // 'invalid' is not a reason the activation flow reports any more. The failure codes are named for
+    // what went wrong - a key the provider will not accept is `invalid_credential` - and the sentence the
+    // user reads comes from the shared projection rather than from this screen.
+    mockActivateProByKey.mockResolvedValueOnce({
+      ok: false,
+      reason: 'invalid_credential',
+    });
     const { getByText, getByTestId } = render(<ProDetailScreen />);
     fireEvent.press(getByText('I have a license key'));
     fireEvent.changeText(getByTestId('license-key-input'), 'key/nope');
     fireEvent.press(getByTestId('unlock-cta'));
-    await waitFor(() => expect(getByText(/isn't valid or active/)).toBeTruthy());
+    await waitFor(() =>
+      expect(getByText('That license key is invalid or revoked.')).toBeTruthy(),
+    );
+    expect(getByText('License not accepted')).toBeTruthy();
   });
 
   it('shows a retryable error when automatic device replacement fails', async () => {
@@ -129,7 +162,11 @@ describe('ProDetailScreen', () => {
     fireEvent.press(getByText('I have a license key'));
     fireEvent.changeText(getByTestId('license-key-input'), 'key/full');
     fireEvent.press(getByTestId('unlock-cta'));
-    await waitFor(() => expect(getByText(/could not replace the least recently seen device/)).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        getByText(/could not replace the least recently seen device/),
+      ).toBeTruthy(),
+    );
   });
 
   it('keeps the activate button disabled until a key is entered', async () => {
@@ -159,7 +196,9 @@ describe('ProDetailScreen', () => {
     fireEvent.press(getByText('I have a license key'));
     fireEvent.changeText(getByTestId('license-key-input'), '  key/abc123  ');
     fireEvent.press(getByTestId('unlock-cta'));
-    await waitFor(() => expect(mockActivateProByKey).toHaveBeenCalledWith('key/abc123'));
+    await waitFor(() =>
+      expect(mockActivateProByKey).toHaveBeenCalledWith('key/abc123'),
+    );
   });
 
   it('"Not a member yet? Get Pro" in the modal opens the pay page', () => {
@@ -170,15 +209,20 @@ describe('ProDetailScreen', () => {
   });
 
   it('renders the Pro Active state with the management section when Pro is owned', async () => {
-    useAppStore.setState({ hasRegisteredPro: true });
+    // "Pro Active" is about THIS DEVICE being admitted to the licence, not merely about owning one:
+    // isProDeviceActive is set once the roster confirms this install, and a device holding a licence it
+    // has not been admitted under is exactly the state the other label ("Device Not Active") is for.
+    useAppStore.setState({ hasRegisteredPro: true, isProDeviceActive: true });
     const { getByText } = render(<ProDetailScreen />);
     expect(getByText('Pro Active')).toBeTruthy();
     // ProManageSection loads license info async, then shows the status line.
-    await waitFor(() => expect(getByText('Lifetime · never expires')).toBeTruthy());
+    await waitFor(() =>
+      expect(getByText('Lifetime · never expires')).toBeTruthy(),
+    );
   });
 
   it('shows the yearly status line and a Manage subscription link for a recurring license', async () => {
-    useAppStore.setState({ hasRegisteredPro: true });
+    useAppStore.setState({ hasRegisteredPro: true, isProDeviceActive: true });
     mockGetProLicenseInfo.mockResolvedValue({
       isPro: true,
       tier: 'yearly',
@@ -199,7 +243,9 @@ describe('ProDetailScreen', () => {
       verifiedAt: 0,
     });
     const { getByText, queryByText } = render(<ProDetailScreen />);
-    await waitFor(() => expect(getByText(/Lifetime · never expires/)).toBeTruthy());
+    await waitFor(() =>
+      expect(getByText(/Lifetime · never expires/)).toBeTruthy(),
+    );
     expect(queryByText('Manage subscription')).toBeNull();
   });
 });
