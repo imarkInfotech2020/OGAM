@@ -10,7 +10,9 @@ import {
   render,
   waitFor,
   within,
+  type RenderAPI,
 } from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Keychain from 'react-native-keychain';
 import TcpSocket from 'react-native-tcp-socket';
@@ -33,6 +35,14 @@ import {
   registerScreen,
 } from '../../../src/navigation/screenRegistry';
 import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
+import {
+  _clearSlotsForTesting,
+  registerSlot,
+  SLOTS,
+} from '../../../src/bootstrap/slotRegistry';
+import { SyncNotificationsScreen } from '../../../pro/ui/SyncNotificationsScreen';
+import { HomeNotificationsButton } from '../../../pro/ui/HomeNotificationsButton';
+import { SyncHomeCard } from '../../../pro/ui/SyncHomeCard';
 import { useAppStore } from '../../../src/stores/appStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { stateSyncService } from '../../../pro/sync/stateSyncService';
@@ -52,7 +62,40 @@ import {
 import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
 import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
 import { createDownloadedModel } from '../../utils/factories';
-import { createLicensedMesh } from '../../harness/licensedMesh';
+import {
+  createLicensedMesh,
+  installLicensedPhone,
+} from '../../harness/licensedMesh';
+
+/**
+ * The approval row asking a given question, found by walking up from the question itself.
+ *
+ * Rows are `sync-approval-<id>` and the id is minted per approval, so a test cannot name it up front.
+ * The row's own buttons are `sync-approval-approve-<id>` and `-reject-<id>`, which share the prefix -
+ * hence naming them out, or the walk stops on a button whose subtree holds no question.
+ */
+function approvalRow(ui: RenderAPI, question: RegExp): ReactTestInstance {
+  const heading = ui.getByText(question);
+  for (let node = heading.parent; node; node = node.parent) {
+    const testID = node.props?.testID;
+    if (
+      typeof testID === 'string' &&
+      testID.startsWith('sync-approval-') &&
+      !/^sync-approval-(approve|reject)-/.test(testID)
+    ) {
+      return node;
+    }
+  }
+  throw new Error(`no approval row asks ${question}`);
+}
+
+/** The approval id carried by a row, for addressing its buttons. */
+function approvalId(row: ReactTestInstance): string {
+  return String(row.props.testID).replace('sync-approval-', '');
+}
+
+/** This phone's fingerprint, which is also the sync device id its installation registers under. */
+const PHONE_FINGERPRINT = 'fp-this-phone';
 
 jest.unmock('@react-navigation/native');
 
@@ -123,6 +166,15 @@ describe('mobile ambient sharing journey', () => {
     });
     registerScreen({ name: 'SyncActivity', component: SyncActivityScreen });
     registerScreen({ name: 'SyncFiles', component: SyncFilesScreen });
+    // An ambient share waits for an answer on the Notifications screen, reached from the bell on Home -
+    // so both have to be registered, the way pro/index.ts registers them when the app starts.
+    registerScreen({
+      name: 'Notifications',
+      component: SyncNotificationsScreen,
+    });
+    _clearSlotsForTesting();
+    registerSlot(SLOTS.homeNotificationsButton, HomeNotificationsButton);
+    registerSlot(SLOTS.homeSyncCard, SyncHomeCard);
     useAppStore.getState().setOnboardingComplete(true);
     // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
     useAppStore.getState().setProActive(true);
@@ -130,7 +182,14 @@ describe('mobile ambient sharing journey', () => {
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
     useSyncStore.getState().reset();
-    (Keychain.getGenericPassword as jest.Mock).mockResolvedValue(false);
+    // A licensed phone with its own machine activated: the saved-device list is built from the licence
+    // roster, so without both the desktop pairs and appears nowhere.
+    installLicensedPhone(mesh, { fingerprint: PHONE_FINGERPRINT });
+    mesh.register({
+      id: PHONE_FINGERPRINT,
+      name: 'This phone',
+      platform: 'ios',
+    });
     (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
 
     NativeModules.SyncScreenshotModule = {
@@ -190,7 +249,10 @@ describe('mobile ambient sharing journey', () => {
     });
 
     remote = buildSyncEngine({
-      pairingEntitlement: mesh.peer(),
+      pairingEntitlement: mesh.joiner({
+        name: desktopDevice.name,
+        platform: desktopDevice.platform,
+      }),
       localDevice: desktopDevice,
       tcpModule: TcpSocket as unknown as RnTcpModule,
       onMessage: (deviceId, message) => {
@@ -241,6 +303,11 @@ describe('mobile ambient sharing journey', () => {
       recordStateMutation: mutation =>
         stateSyncService.recordMutation(mutation),
       requestStateSync: deviceId => stateSyncService.requestSync(deviceId),
+      // Wired as the app wires it. Without this the control record is never published and every send
+      // throws "This shared file is not ready to send" - which reads as a transfer failure and is
+      // actually a half-built service.
+      publishControl: (deviceId, syncId) =>
+        stateSyncService.sendSharedFileRecord(deviceId, syncId),
     });
     await stateSyncService.start();
     await syncService.start();
@@ -269,9 +336,8 @@ describe('mobile ambient sharing journey', () => {
       },
       await pairingCodeOnScreen(ui),
     );
-    await waitFor(() =>
-      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
-    );
+    // Waited on the outcome below rather than the progress sheet, which is gone in a couple of
+    // milliseconds over an in-memory transport.
     await pairing;
     await waitFor(() =>
       expect(
@@ -282,7 +348,16 @@ describe('mobile ambient sharing journey', () => {
     );
 
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
-    fireEvent.press(ui.getByTestId(`ambient-destination-${desktopDevice.id}`));
+    // Ambient sharing is behind an accordion on that screen, so it has to be opened before any of its
+    // controls exist - the same two taps a user makes.
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('sync-ambient-accordion')),
+    );
+    fireEvent.press(
+      await waitFor(() =>
+        ui!.getByTestId(`ambient-destination-${desktopDevice.id}`),
+      ),
+    );
     fireEvent.press(ui.getByTestId('ambient-screenshot-ask'));
     await waitFor(() => expect(screenshotListener).toBeDefined());
 
@@ -291,13 +366,37 @@ describe('mobile ambient sharing journey', () => {
       name: 'Screenshot-rejected.png',
       contents: 'not approved',
     });
-    await waitFor(() => expect(ui!.getByText('Share this item?')).toBeTruthy());
+    // An approval waits on the Notifications screen now, not in a sheet over whatever you were doing.
+    // The question names the file and the device, so it can be answered without guessing what it is
+    // about - and it is matched loosely because the two names are separate text children.
+    // Sharing sits two screens deep, so Home is two Backs away. Each step waits for the screen it lands
+    // on: a screen navigated away from stays MOUNTED but hidden, and a query skips hidden elements - so
+    // pressing on before the transition settles finds nothing while the tree still shows everything.
+    // The bell lives on Home, and this journey opened Sync from the SETTINGS tab - so backing out lands
+    // on Settings, not Home. Out of the pushed screen first, then across by the tab bar, which is only
+    // on screen once nothing is pushed over it.
+    fireEvent.press(ui.getByLabelText('Back'));
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-open-sharing')).toBeTruthy(),
+    );
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(await waitFor(() => ui!.getByTestId('home-tab')));
+    fireEvent.press(await waitFor(() => ui!.getByTestId('home-notifications')));
+    const rejectedRow = await waitFor(() =>
+      approvalRow(ui!, /Share Screenshot-rejected\.png with/),
+    );
     expect(
       remoteRecords.has(`${SHARED_FILE_ENTITY}:${rejectedScreenshot.syncId}`),
     ).toBe(false);
     expect(receivedFiles).toHaveLength(0);
-    fireEvent.press(ui.getByTestId('ambient-share-reject'));
-    await waitFor(() => expect(ui!.queryByText('Share this item?')).toBeNull());
+    fireEvent.press(
+      within(rejectedRow).getByTestId(
+        `sync-approval-reject-${approvalId(rejectedRow)}`,
+      ),
+    );
+    await waitFor(() =>
+      expect(ui!.queryByText(/Share Screenshot-rejected\.png with/)).toBeNull(),
+    );
     expect(receivedFiles).toHaveLength(0);
 
     rejectTransfers = true;
@@ -306,10 +405,22 @@ describe('mobile ambient sharing journey', () => {
       name: 'Screenshot-retry.png',
       contents: 'share after recovery',
     });
-    await waitFor(() => expect(ui!.getByText('Share this item?')).toBeTruthy());
-    fireEvent.press(ui.getByTestId('ambient-share-accept'));
+    const retryRow = await waitFor(() =>
+      approvalRow(ui!, /Share Screenshot-retry\.png with/),
+    );
+    fireEvent.press(
+      within(retryRow).getByTestId(
+        `sync-approval-approve-${approvalId(retryRow)}`,
+      ),
+    );
+    // Back out of Notifications to Home, then into Sync from the card there. Activity is where the
+    // outcome of an approved share is recorded, so that is where the rest of this journey happens.
     fireEvent.press(ui.getByLabelText('Back'));
-    fireEvent.press(ui.getByTestId('sync-open-activity'));
+    await waitFor(() => expect(ui!.getByTestId('home-screen')).toBeTruthy());
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('open-sync-from-home')),
+    );
+    fireEvent.press(await waitFor(() => ui!.getByTestId('sync-open-activity')));
 
     const activityId = sharedFileActivityId(
       desktopDevice.id,
@@ -317,7 +428,9 @@ describe('mobile ambient sharing journey', () => {
     );
     await waitFor(() => {
       const failedActivity = ui!.getByTestId(`sync-activity-${activityId}`);
-      expect(within(failedActivity).getByText('Could not send')).toBeTruthy();
+      // Matched loosely: an activity row's status carries its progress in the same node, as
+      // "Could not send - 0%".
+      expect(within(failedActivity).getByText(/Could not send/)).toBeTruthy();
       expect(
         within(failedActivity).getByText(retriedScreenshot.name),
       ).toBeTruthy();
@@ -338,7 +451,7 @@ describe('mobile ambient sharing journey', () => {
     );
     await waitFor(() => {
       const completedActivity = ui!.getByTestId(`sync-activity-${activityId}`);
-      expect(within(completedActivity).getByText('Sent')).toBeTruthy();
+      expect(within(completedActivity).getByText(/Sent/)).toBeTruthy();
     });
     expect(ui.queryByText('SHARED FILES')).toBeNull();
 
@@ -353,10 +466,15 @@ describe('mobile ambient sharing journey', () => {
       ui.queryByTestId(`sync-file-${rejectedScreenshot.syncId}`),
     ).toBeNull();
     expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
-    expect(ui.getByText('This phone')).toBeTruthy();
-    expect(ui.getByText(/Shared with 1 device/)).toBeTruthy();
+    // One line says where it went, instead of an origin ("This phone") and a count ("Shared with 1
+    // device") that the reader had to put together.
+    expect(ui.getByText(`Sent to ${desktopDevice.name}`)).toBeTruthy();
 
-    fireEvent.press(ui.getByTestId('sync-file-filter-download'));
+    // Filters are behind a disclosure on this screen, the same two taps a user makes.
+    fireEvent.press(ui.getByTestId('sync-files-open-filters'));
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('sync-file-filter-download')),
+    );
     expect(
       ui.getByText('No downloads have crossed your devices yet.'),
     ).toBeTruthy();
