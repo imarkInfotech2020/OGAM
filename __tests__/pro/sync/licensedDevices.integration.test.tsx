@@ -1,14 +1,9 @@
 import React from 'react';
-import { Alert } from 'react-native';
 import * as Keychain from 'react-native-keychain';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationContainer } from '@react-navigation/native';
-import {
-  render,
-  fireEvent,
-  waitFor,
-  within,
-} from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { PERSONAL_MESH_DEVICE_CAP } from '@offgrid/sync';
 
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import {
@@ -21,6 +16,25 @@ import { createDownloadedModel } from '../../utils/factories';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { syncService } from '../../../pro/sync/syncService';
+import {
+  createLicensedMesh,
+  MESH_LICENCE_KEY,
+} from '../../harness/licensedMesh';
+
+/**
+ * How much of your licence is in use, and which devices are using it.
+ *
+ * The user problem: you replaced a phone, the old one still holds a seat, and you cannot bring the new
+ * one on until it lets go. So the mesh has to SHOW what is occupying the licence - a seat you cannot see
+ * is a seat you cannot free.
+ *
+ * The licence stack runs for real - the client, the credential store, the registry, the reconciliation.
+ * Only Keygen's HTTP endpoint is substituted, by a fake that really holds machines and really enforces
+ * the seat limit, so the number this screen shows is emergent rather than arranged.
+ *
+ * This used to drive a separate licensed-machines list with a per-machine deactivate button. That UI is
+ * gone: capacity and membership are one thing now, shown by the mesh, and this suite follows it.
+ */
 
 jest.unmock('@react-navigation/native');
 
@@ -38,19 +52,28 @@ jest.mock('react-native-zeroconf', () => {
   return { __esModule: true, default: createNativeDiscoveryBoundary() };
 });
 
-const originalFetch = global.fetch;
+/** This install's Keygen fingerprint. It is also the sync device id the installation registers under. */
+const THIS_FINGERPRINT = 'fp-current';
+const RETIRED_FINGERPRINT = 'fp-old';
+
+const mesh = createLicensedMesh();
 const storedSecrets = new Map<string, string>();
 
-function response(status: number, body: unknown = {}): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as Response;
+/** Settings, then Sync - the way a user reaches this screen. */
+async function openSync() {
+  const ui = render(
+    <NavigationContainer>
+      <AppNavigator />
+    </NavigationContainer>,
+  );
+  fireEvent.press(ui.getByTestId('settings-tab'));
+  fireEvent.press(await waitFor(() => ui.getByTestId('open-sync-settings')));
+  return ui;
 }
 
 describe('Settings to Sync licensed-device management', () => {
   beforeEach(async () => {
+    mesh.reset(PERSONAL_MESH_DEVICE_CAP);
     await syncService.stop();
     await AsyncStorage.clear();
     jest.clearAllMocks();
@@ -67,17 +90,18 @@ describe('Settings to Sync licensed-device management', () => {
     useSyncStore.getState().reset();
 
     storedSecrets.clear();
+    // The credential names the provider's licence, because the app asks for installations BY that id.
     storedSecrets.set(
       'off-grid-pro-license',
       JSON.stringify({
         isPro: true,
-        key: 'key/abc',
-        licenseId: 'lic-1',
+        key: MESH_LICENCE_KEY,
+        licenseId: mesh.licenceId,
         expiry: null,
         verifiedAt: 0,
       }),
     );
-    storedSecrets.set('off-grid-device-fingerprint', 'fp-current');
+    storedSecrets.set('off-grid-device-fingerprint', THIS_FINGERPRINT);
     (Keychain.getGenericPassword as jest.Mock).mockImplementation(
       async ({ service }: { service: string }) => {
         const value = storedSecrets.get(service);
@@ -95,109 +119,44 @@ describe('Settings to Sync licensed-device management', () => {
       },
     );
 
-    const machines = [
-      {
-        id: 'current',
-        attributes: {
-          fingerprint: 'fp-current',
-          platform: 'ios',
-          name: 'My iPhone',
-          lastHeartbeat: '2026-07-26T00:00:00.000Z',
-        },
-      },
-      {
-        id: 'old',
-        attributes: {
-          fingerprint: 'fp-old',
-          platform: 'android',
-          name: 'Old Android',
-          lastHeartbeat: '2026-01-01T00:00:00.000Z',
-        },
-      },
-    ];
-    global.fetch = jest.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url.endsWith('/licenses/lic-1/machines')) {
-          return response(200, { data: machines });
-        }
-        if (url.endsWith('/machines/old') && init?.method === 'DELETE') {
-          machines.splice(1, 1);
-          return response(204);
-        }
-        return response(404);
-      },
-    ) as typeof fetch;
+    // Two devices already on the licence before the app starts: this phone, and one that was replaced.
+    mesh.register({ id: THIS_FINGERPRINT, name: 'My iPhone', platform: 'ios' });
+    mesh.register({
+      id: RETIRED_FINGERPRINT,
+      name: 'Old Android',
+      platform: 'android',
+    });
   });
 
   afterEach(async () => {
+    mesh.restore();
     await syncService.stop();
-    global.fetch = originalFetch;
     _clearScreensForTesting();
     _clearSectionsForTesting();
   });
 
-  it('opens Sync, shows active machines, and deactivates a previous device', async () => {
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-    const ui = render(
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>,
+  it('shows how much of the licence is in use and which device is using the other seat', async () => {
+    // The app starts Sync itself on launch (pro/index.ts); there is no toggle for the user to press, so
+    // the equivalent arrival here is starting the service. Reconciliation with the licence runs inside it.
+    await syncService.start();
+    const ui = await openSync();
+
+    // Two installations, so two of the five slots are gone - and the retired phone is one of them.
+    await waitFor(() =>
+      expect(
+        ui.getByText(`2 of ${PERSONAL_MESH_DEVICE_CAP} devices saved`),
+      ).toBeTruthy(),
     );
-
-    fireEvent.press(ui.getByTestId('settings-tab'));
-    fireEvent.press(await waitFor(() => ui.getByTestId('open-sync-settings')));
-
-    await waitFor(() => expect(ui.getByText('2 of 5 active')).toBeTruthy());
-    expect(ui.getByText('My iPhone')).toBeTruthy();
-    expect(
-      within(ui.getByTestId('licensed-device-current')).getByText(
-        'THIS DEVICE',
-      ),
-    ).toBeTruthy();
     expect(ui.getByText('Old Android')).toBeTruthy();
 
-    fireEvent.press(ui.getByTestId('deactivate-device-old'));
-    const destructiveAction = (alert.mock.calls[0][2] ?? []).find(
-      button => button.style === 'destructive',
-    );
-    destructiveAction?.onPress?.();
-
-    await waitFor(() => expect(ui.getByText('1 of 5 active')).toBeTruthy());
-    expect(ui.queryByText('Old Android')).toBeNull();
-    expect(ui.getByText('My iPhone')).toBeTruthy();
-    alert.mockRestore();
     ui.unmount();
   });
 
-  it('labels Debug Pro without claiming a Keygen device slot', async () => {
-    storedSecrets.delete('off-grid-pro-license');
-    useAppStore.getState().setHasRegisteredPro(false);
-    useAppStore.getState().setProActive(true);
+  // NOT covered here, deliberately: freeing that seat. The Forget button on this row is visible and
+  // enabled, but evicting an installation this phone never paired with throws `mapping_required` from
+  // pairingSecretStore.prepareCapacityReplacement - which requires an active LOCAL pairing - and
+  // SyncScreen's onForget swallows it. So the tap does nothing, silently, and the seat stays occupied.
+  // Recorded in docs/GAPS_BACKLOG.md rather than asserted, because asserting today's behaviour would
+  // bless a dead button.
 
-    const ui = render(
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>,
-    );
-
-    fireEvent.press(ui.getByTestId('settings-tab'));
-    await waitFor(() =>
-      expect(ui.getByText('Development · active')).toBeTruthy(),
-    );
-    fireEvent.press(await waitFor(() => ui.getByTestId('open-sync-settings')));
-
-    await waitFor(() => expect(ui.getByText('DEVELOPMENT PRO')).toBeTruthy());
-    expect(ui.getByText('Local development access')).toBeTruthy();
-    expect(
-      ui.getByText(
-        'This Debug build unlocks Pro locally. Device slots appear after activating a license key.',
-      ),
-    ).toBeTruthy();
-    expect(ui.queryByText('0 of 5 active')).toBeNull();
-    expect(ui.queryByText('No licensed devices are active.')).toBeNull();
-    expect(ui.getByPlaceholderText('Enter a pairing code')).toBeTruthy();
-
-    ui.unmount();
-  });
 });

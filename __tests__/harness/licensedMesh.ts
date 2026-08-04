@@ -1,0 +1,92 @@
+import { createKeygenFake, type KeygenFake } from './keygenFake';
+import { createPeerEntitlement, type PeerEntitlement } from './peerEntitlement';
+
+/**
+ * Two devices that can actually pair.
+ *
+ * Pairing is a licensed transaction: each side states whether it is licensed, one sponsors the other
+ * into the same entitlement, and the sponsored device registers its own installation with the
+ * provider. A harness missing any part of that cannot pair at all - the attempt fails with
+ * `entitlement_unavailable` or "the new device could not be registered" - so nothing that happens
+ * after pairing can be tested.
+ *
+ * This is the whole arrangement in one place: an in-memory provider at the network boundary, a
+ * licence, and a licensed peer holding a credential for it. The phone under test uses its own real
+ * adapter, its own credential store and its own registry throughout; only the provider's HTTP endpoint
+ * and the other device are substituted, because those are the two things that are genuinely not ours.
+ */
+export const MESH_LICENCE_KEY = 'OFFGRID-TEST-LICENCE';
+
+export interface LicensedMesh {
+  /** The in-memory provider, for asserting what the app asked of it. */
+  readonly keygen: KeygenFake;
+  /**
+   * The provider's id for this licence.
+   *
+   * Needed by any test that has to write a credential the app will read back, because the app asks the
+   * provider for THIS licence's installations by id. Available only after `reset()`.
+   */
+  readonly licenceId: string;
+  /** Installations currently on the licence, as the provider sees them - ids included. */
+  installations(): ReturnType<KeygenFake['machines']>;
+  /** Start fresh: a clean provider holding one licence with room for three devices. */
+  reset(seats?: number): void;
+  /** Give the network back. */
+  restore(): void;
+  /** The other device, licensed and ready to sponsor this one. */
+  peer(): PeerEntitlement;
+  /**
+   * Put a device on the licence, the way one that has been paired for a while already is.
+   *
+   * A saved device only appears in the roster if the registry lists an installation for it - the
+   * fingerprint IS its sync device id - so a peer that never registered is a peer this phone cannot see,
+   * however well the pairing itself went.
+   */
+  register(device: { id: string; name: string; platform: string }): void;
+}
+
+export function createLicensedMesh(): LicensedMesh {
+  const keygen = createKeygenFake();
+  let licenceId = '';
+
+  return {
+    keygen,
+
+    get licenceId() {
+      return licenceId;
+    },
+
+    installations() {
+      return keygen.machines(MESH_LICENCE_KEY);
+    },
+
+    reset(seats = 3) {
+      keygen.reset();
+      keygen.install();
+      licenceId = keygen.addLicence({ key: MESH_LICENCE_KEY, seats });
+    },
+
+    restore() {
+      keygen.restore();
+    },
+
+    register(device) {
+      keygen.activate({
+        key: MESH_LICENCE_KEY,
+        fingerprint: device.id,
+        name: device.name,
+        platform: device.platform,
+      });
+    },
+
+    peer() {
+      // The credential names the provider's licence, because that is what the receiving device will
+      // register its installation against.
+      return createPeerEntitlement({
+        licensed: true,
+        entitlementId: licenceId,
+        secret: MESH_LICENCE_KEY,
+      });
+    },
+  };
+}

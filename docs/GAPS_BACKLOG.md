@@ -429,3 +429,39 @@ target. The shared layer is largely complete; these are the app-side holes.
 
 - **Android discovery and advertise.** `react-native-zeroconf` acquires a `MulticastLock` in both its NSD and rx2dnssd backends, `CHANGE_WIFI_MULTICAST_STATE` is declared, and Android supports `registerService`, so it advertises rather than only browsing. Android reports `['lan']` while the iOS-only proximity route surfaces as route data - the capability-as-data pattern, not a `Platform.OS` branch.
 - **Clipboard provenance.** Records carry immutable `provenance` plus a derived `isLocal`, so an Off Grid receipt is attributed to the sending device and an Apple Universal Clipboard pickup is recorded as a local pasteboard observation - never as an Off Grid transfer. Android has no Universal Clipboard, so that false-attribution risk does not exist there.
+
+### Open bug: Forget does nothing on a licensed device this phone never paired with
+
+Found by `__tests__/pro/sync/licensedDevices.integration.test.tsx` while covering licence capacity.
+Held open pending manual reproduction. Not fixed.
+
+**Symptom.** Sync lists a device that holds a seat on your licence but that this phone has never paired
+with - a phone you replaced, say. Its row offers Forget, the button is enabled, tapping it opens the usual
+confirmation sheet, and confirming "Evict device" does **nothing at all**: no error, no change, the seat
+stays occupied. At the device cap this leaves you unable to pair a new device with no explanation.
+
+**Mechanism.** `syncService.forgetDevice` -> `evictDevice` -> `PersonalMeshDeviceEvictionCoordinator.evict`
+-> `membership.prepareEviction` -> `pairingSecretStore.prepareCapacityReplacement`, which requires an
+active LOCAL pairing:
+
+    const active = activePairing(installation.syncDeviceId);
+    if (!active?.membershipId) throw new PersonalMeshEntitlementError('mapping_required');
+
+There is no local pairing for such a device, so it throws `mapping_required` ("The oldest licensed
+installation cannot be matched to a Sync device.") BEFORE `registry.deregisterInstallation` is reached.
+The seat is therefore never released. `SyncScreen/index.tsx` then calls
+`syncService.forgetDevice(deviceId).catch(() => undefined)`, so the failure never surfaces.
+
+Note the coordinator already has a path for exactly this shape - `revokeUnregistered`, used when the
+registry has no installation for the device - but it does not cover the mirror case: the registry HAS the
+installation and the local device has no pairing.
+
+**Two separable defects, worth deciding on separately:**
+1. The eviction cannot release a seat without a local pairing, when releasing the seat is the entire point.
+2. The failure is swallowed, so a broken action is indistinguishable from a working one. Even once (1) is
+   fixed, an eviction that fails for a real reason (offline, provider error) will still look like nothing
+   happened. This is the "dead button" class in the backlog: capability and handler should travel together
+   so a button that cannot act is not offered as if it can.
+
+Check whether desktop has the same hole: its own `prepareEviction` may impose the same requirement, and
+the ghost-row report there ("repair asks for a pairing code") is the same underlying situation.
