@@ -116,6 +116,13 @@ describe('Pro mobile model transfer journey', () => {
       host: '127.0.0.1',
       port: 0,
     };
+    // A licensed Mac holds an installation on the licence. The phone's saved-device list is built from
+    // the licence roster, so without it the peer pairs successfully and then shows up nowhere.
+    mesh.register({
+      id: remoteDevice.id,
+      name: remoteDevice.name,
+      platform: remoteDevice.platform,
+    });
     let returnedModel: Buffer | undefined;
     let returnedFileName: string | undefined;
 
@@ -179,10 +186,17 @@ describe('Pro mobile model transfer journey', () => {
       },
       await pairingCodeOnScreen(ui),
     );
-    await waitFor(() =>
-      expect(ui!.getByTestId('pairing-attempt-sheet')).toBeTruthy(),
-    );
     await pairing;
+    // Waited on the OUTCOME rather than the progress sheet. A correct pairing over an in-memory
+    // transport finishes in a couple of milliseconds, so the sheet has been and gone before any
+    // assertion can see it - and a test that waits for a flash of UI fails for a reason that has
+    // nothing to do with whether pairing worked. The sheet's own behaviour belongs in a test that
+    // holds an attempt open; here what matters is that the device joined the mesh.
+    // STILL RED, and the reason is understood: the saved-device list is built from the licence roster,
+    // and this phone holds no licence credential, so the roster comes back `unavailable` and there is
+    // nothing to build a row from. The peer pairs and connects correctly - knownDevices shows it as
+    // `connected` - it simply has no row. Giving the phone a licence via installLicensedPhone gets
+    // further and then trips a reconciliation issue (`replacement_incomplete`) that needs its own look.
     await waitFor(() =>
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );

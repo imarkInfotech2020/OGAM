@@ -1,5 +1,4 @@
 import React from 'react';
-import * as Keychain from 'react-native-keychain';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationContainer } from '@react-navigation/native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
@@ -18,7 +17,7 @@ import { useSyncStore } from '../../../pro/sync/syncStore';
 import { syncService } from '../../../pro/sync/syncService';
 import {
   createLicensedMesh,
-  MESH_LICENCE_KEY,
+  installLicensedPhone,
 } from '../../harness/licensedMesh';
 
 /**
@@ -90,34 +89,10 @@ describe('Settings to Sync licensed-device management', () => {
     useSyncStore.getState().reset();
 
     storedSecrets.clear();
-    // The credential names the provider's licence, because the app asks for installations BY that id.
-    storedSecrets.set(
-      'off-grid-pro-license',
-      JSON.stringify({
-        isPro: true,
-        key: MESH_LICENCE_KEY,
-        licenseId: mesh.licenceId,
-        expiry: null,
-        verifiedAt: 0,
-      }),
-    );
-    storedSecrets.set('off-grid-device-fingerprint', THIS_FINGERPRINT);
-    (Keychain.getGenericPassword as jest.Mock).mockImplementation(
-      async ({ service }: { service: string }) => {
-        const value = storedSecrets.get(service);
-        return value ? { username: 'stored', password: value } : false;
-      },
-    );
-    (Keychain.setGenericPassword as jest.Mock).mockImplementation(
-      async (
-        _username: string,
-        password: string,
-        options: { service: string },
-      ) => {
-        storedSecrets.set(options.service, password);
-        return true;
-      },
-    );
+    installLicensedPhone(mesh, {
+      fingerprint: THIS_FINGERPRINT,
+      secrets: storedSecrets,
+    });
 
     // Two devices already on the licence before the app starts: this phone, and one that was replaced.
     mesh.register({ id: THIS_FINGERPRINT, name: 'My iPhone', platform: 'ios' });

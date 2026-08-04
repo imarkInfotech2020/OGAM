@@ -90,3 +90,53 @@ export function createLicensedMesh(): LicensedMesh {
     },
   };
 }
+
+/**
+ * A phone that holds a Pro licence, with a Keychain that really stores things.
+ *
+ * Several journey suites need the same three facts before anything else can work: a licence credential
+ * naming the provider's licence, a stable device fingerprint, and a Keychain that remembers what was
+ * written to it. Without the credential the phone cannot ask for the installation roster, so the mesh
+ * reports `freshness: 'unavailable'` and the saved-device list is empty - a paired device then completes
+ * pairing successfully and appears nowhere, which looks like a pairing bug and is not one.
+ *
+ * Returns the secret store so a test can seed or inspect it - and so a "restart" can reuse it, which is
+ * what makes a credential outlive a service stop.
+ */
+export function installLicensedPhone(
+  mesh: LicensedMesh,
+  options: { fingerprint?: string; secrets?: Map<string, string> } = {},
+): Map<string, string> {
+  const keychain = require('react-native-keychain');
+  const secrets = options.secrets ?? new Map<string, string>();
+  secrets.set(
+    'off-grid-pro-license',
+    JSON.stringify({
+      isPro: true,
+      key: MESH_LICENCE_KEY,
+      licenseId: mesh.licenceId,
+      expiry: null,
+      verifiedAt: 0,
+    }),
+  );
+  secrets.set(
+    'off-grid-device-fingerprint',
+    options.fingerprint ?? 'fp-this-phone',
+  );
+  keychain.getGenericPassword.mockImplementation(
+    async ({ service }: { service: string }) => {
+      const value = secrets.get(service);
+      return value ? { username: 'stored', password: value } : false;
+    },
+  );
+  keychain.setGenericPassword.mockImplementation(
+    async (_username: string, password: string, opts: { service: string }) => {
+      secrets.set(opts.service, password);
+      return true;
+    },
+  );
+  keychain.resetGenericPassword?.mockImplementation?.(
+    async ({ service }: { service: string }) => secrets.delete(service),
+  );
+  return secrets;
+}
