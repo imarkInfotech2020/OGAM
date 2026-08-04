@@ -34,6 +34,8 @@ export interface BuildDiscoveryArgs {
   onDiscoveryStateChanged?: (snapshot: DiscoveryScanSnapshot) => void;
   additionalSources?: DiscoverySource[];
   onSourceError?: (sourceId: string, error: Error) => void;
+  /** A saved device was found but the reconnect could not start. Silence here hides a dead mesh. */
+  onReconnectFailed?: (device: DeviceInfo, error: Error) => void;
 }
 
 export function buildDiscovery(
@@ -66,5 +68,13 @@ export function buildDiscovery(
     onDiscovered: args.onDiscovered,
     onLost: args.onLost,
     onDiscoveryStateChanged: args.onDiscoveryStateChanged,
+    // Without this, a saved device that is seen but cannot be dialled produces NOTHING - no log, no
+    // state, no sign that the mesh is trying and failing. Desktop has always reported it.
+    onReconnectFailed: (device, error) => {
+      logger.warn(
+        `[SYNC] reconnect to ${device.name} (${device.id}) at ${device.host}:${device.port} failed: ${error.message}`,
+      );
+      args.onReconnectFailed?.(device, error);
+    },
   });
 }

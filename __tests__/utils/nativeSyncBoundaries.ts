@@ -1,5 +1,12 @@
 import { Buffer } from 'buffer';
-import { createTxtRecord, type DeviceInfo } from '@offgrid/sync';
+import {
+  createTxtRecord,
+  isDialableAddress,
+  type DeviceInfo,
+} from '@offgrid/sync';
+
+/** A plausible LAN address for an advertised peer. Anything but loopback, which is refused on purpose. */
+export const ADVERTISED_LAN_ADDRESS = '192.168.1.50';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 
 type Handler = (...args: unknown[]) => void;
@@ -39,6 +46,23 @@ class NativeSocketBoundary {
   }
 }
 
+/** Every dial this boundary was asked to make, so a test can tell "never tried" from "tried and failed". */
+export interface TcpDialRecord {
+  port: number;
+  host?: string;
+  refused?: string;
+}
+
+let dials: TcpDialRecord[] = [];
+
+export function getTcpDials(): readonly TcpDialRecord[] {
+  return dials;
+}
+
+export function resetTcpDials(): void {
+  dials = [];
+}
+
 export function createNativeTcpBoundary(): RnTcpModule {
   const servers = new Map<number, (socket: NativeSocketBoundary) => void>();
   let nextPort = 43000;
@@ -62,8 +86,17 @@ export function createNativeTcpBoundary(): RnTcpModule {
     },
     createConnection(options, callback) {
       const onConnection = servers.get(options.port);
-      if (!onConnection)
+      if (!onConnection) {
+        // Recorded before throwing: a dial to a port nothing is listening on is a real outcome, and a
+        // test that only sees the throw cannot tell it apart from a dial that never happened.
+        dials.push({
+          port: options.port,
+          host: options.host,
+          refused: `no native server on port ${options.port}`,
+        });
         throw new Error(`No native server on port ${options.port}`);
+      }
+      dials.push({ port: options.port, host: options.host });
 
       const client = new NativeSocketBoundary();
       const server = new NativeSocketBoundary();
@@ -125,10 +158,20 @@ export function createNativeDiscoveryBoundary(): new () => DiscoveryBoundary {
 
     resolve(device: DeviceInfo): void {
       if (!this.nativeListenersActive) return;
+      // Advertise a LAN address, which is what a real peer advertises.
+      //
+      // Loopback is deliberately NOT dialable (see isDialableAddress): a peer announcing 127.0.0.1 is
+      // announcing itself, and dialling it would reach this device rather than that one. A boundary that
+      // announced loopback had every resolve dropped as undialable, so a paired device was never
+      // rediscovered and never reconnected - a harness that could not exercise the mesh at all. The
+      // sockets themselves are matched by PORT, so the address only has to be plausible.
+      const advertised = isDialableAddress(device.host)
+        ? device.host
+        : ADVERTISED_LAN_ADDRESS;
       this.handlers.get('resolved')?.({
-        txt: createTxtRecord(device),
-        addresses: [device.host],
-        host: device.host,
+        txt: createTxtRecord({ ...device, host: advertised }),
+        addresses: [advertised],
+        host: advertised,
         port: device.port,
         name: `OffGrid-${device.id}`,
       });

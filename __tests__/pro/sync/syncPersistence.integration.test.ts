@@ -162,8 +162,17 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       3000,
       'discovery to start browsing',
     );
+    // The credential has to be back in memory before the peer turns up, or there is nothing to
+    // reconnect with. The store reloads from the Keychain asynchronously after a restart.
+    await waitFor(
+      () =>
+        useSyncStore
+          .getState()
+          .knownDevices.some(d => d.id === remoteDevice.id && d.hasCredential),
+      3000,
+      'credential reloaded after restart',
+    );
     discovery!.resolve(remoteDevice);
-
     await waitFor(
       () =>
         useSyncStore
