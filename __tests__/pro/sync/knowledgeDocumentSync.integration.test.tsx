@@ -4,7 +4,11 @@ import {
   installNativeBoundary,
   requireRTL,
 } from '../../harness/nativeBoundary';
-import { createLicensedMesh } from '../../harness/licensedMesh';
+import {
+  createLicensedMesh,
+  installLicensedPhone,
+  registerThisPhone,
+} from '../../harness/licensedMesh';
 
 jest.unmock('@react-navigation/native');
 
@@ -47,6 +51,18 @@ async function waitForCondition(
 
 /** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
 const mesh = createLicensedMesh();
+
+/**
+ * The pairing code this phone is showing. A peer proves it is the device the user is looking at by
+ * presenting this code, which is why nothing has to be accepted afterwards.
+ */
+function phonePairingCode(): string {
+  const { useSyncStore } =
+    require('../../../pro/sync/syncStore') as typeof import('../../../pro/sync/syncStore');
+  const code = useSyncStore.getState().pairingCode.code;
+  if (!code) throw new Error('the phone has not issued a pairing code yet');
+  return code;
+}
 
 describe('Pro mobile knowledge document sync journey', () => {
   it('stages file-first input, indexes it visibly, sends a picked file back, and applies a tombstone', async () => {
@@ -144,7 +160,19 @@ describe('Pro mobile knowledge document sync journey', () => {
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
-    Keychain.getGenericPassword.mockResolvedValue(false);
+    // A licence to belong to, first. This suite has no beforeEach - it builds everything inside the one
+    // journey - so the provider is started here rather than being assumed.
+    mesh.reset();
+    // A licensed phone under the fingerprint it actually has, and a desktop that holds an installation
+    // like any licensed Mac. Without both, the two sides either refuse each other as different licences
+    // or the peer is retired by reconciliation moments after pairing.
+    installLicensedPhone(mesh);
+    await registerThisPhone(mesh);
+    mesh.register({
+      id: 'desktop-knowledge-peer',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+    });
     Keychain.setGenericPassword.mockResolvedValue(true);
 
     const remoteDevice = {
@@ -238,32 +266,18 @@ describe('Pro mobile knowledge document sync journey', () => {
       if (!mobile || !discovery?.publishedPort) {
         throw new Error('Sync did not publish the mobile device');
       }
-      const pairing = remote.engine.pair(
+      // There is no accept step and no separate passphrase: the peer presents the code THIS phone is
+      // showing, and a code that matches is the whole confirmation. Waiting for the intermediate
+      // `waiting_for_confirmation` stage is also gone - over an in-memory transport the attempt passes
+      // through it in under a millisecond, so it is a frame that has already been and gone.
+      await remote.engine.pair(
         {
           ...mobile,
           host: '127.0.0.1',
           port: discovery.publishedPort,
         },
-        'blue-otter-42',
+        phonePairingCode(),
       );
-      await waitForCondition(
-        () =>
-          useSyncStore
-            .getState()
-            .pairingAttempts.some(
-              (attempt: {
-                device: { id: string };
-                direction: string;
-                stage: string;
-              }) =>
-                attempt.device.id === remoteDevice.id &&
-                attempt.direction === 'incoming' &&
-                attempt.stage === 'waiting_for_confirmation',
-            ),
-        'Mobile did not receive the Desktop pairing request',
-      );
-      syncService.acceptIncomingPairing('blue-otter-42');
-      await pairing;
       await waitForCondition(
         () =>
           remote.engine.isPaired(mobile.id) &&
