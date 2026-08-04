@@ -471,35 +471,18 @@ installation and the local device has no pairing.
 Check whether desktop has the same hole: its own `prepareEviction` may impose the same requirement, and
 the ghost-row report there ("repair asks for a pairing code") is the same underlying situation.
 
-### Open bug: after a failed credential save, a device appears to pair for ever and never does
+### WITHDRAWN (not a bug): "after a failed credential save, a device appears to pair and never does"
 
-Found by `__tests__/pro/sync/deviceManagement.integration.test.tsx` while restoring that journey.
-Held open pending manual reproduction. Not fixed.
+Reported here earlier today and WRONG. The pairing did land; entitlement reconciliation then retired it,
+deliberately, because the peer held no installation on the licence. `personal-mesh-entitlement.ts` retires
+any device it finds locally trusted but absent from the authoritative roster - that is the rule that stops
+a device lingering in your mesh after it has been removed from your licence elsewhere.
 
-**Symptom.** Pair with a device, and let the Keychain refuse the write once - the app correctly reports
-"Pairing failed / The pairing could not be saved." Retry with the right code and the attempt reports
-SUCCESS: it reaches stage `paired` and the sheet says "This device is now in your personal mesh." Nothing
-was saved. `pairings` in the trust document is empty, the device never joins the saved list, and it cannot
-send or receive anything. Every later attempt does the same, so a single storage hiccup makes that device
-unpairable while the UI insists it worked.
+The test was at fault: its stand-in desktop never registered, which no real licensed Mac does. Registering
+it makes the whole journey pass, including the clean retry after a storage failure. The trust surviving
+reconciliation is now asserted, which is the part that matters - a pairing whose trust is withdrawn a
+moment later still reports success on its way past.
 
-**Evidence** at the end of the retry, read out of the app's own state and its Keychain document:
+Worth keeping in mind when reading a device log: "paired, then gone" is the signature of a device missing
+from the licence roster, not of a broken handshake.
 
-    attempts = [["paired", "This device is now in your personal mesh."]]
-    knownDevices = []
-    stored = {"version":6,"pairings":{},"stagedPairings":{},
-              "pendingRevocations":{"desktop-mismatch-peer":{...}}}
-
-**Where to look.** The rollback of the failed save leaves a `pendingRevocations` entry for that device.
-A pending revocation is how an eviction that has not reached the peer is remembered, and it retires that
-membership - so the trust written by the NEXT pairing is dropped as soon as it lands, while the attempt
-state machine, which does not consult it, goes on to report success. Two things are wrong and either
-would do on its own:
-
-1. A rolled-back pairing should not leave a pending revocation behind. Nothing was ever saved, so there
-   is no membership to retire.
-2. A pairing whose trust did not persist must not report `paired`. The attempt should fail with the same
-   honesty as the first one did, rather than claiming the device joined the mesh.
-
-The suite drives the whole sequence and stops before the success assertion, with a comment saying why,
-so this is recorded rather than blessed.

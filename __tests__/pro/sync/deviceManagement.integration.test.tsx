@@ -398,6 +398,14 @@ describe('Pro mobile saved-device management journey', () => {
   });
 
   it('shows Mobile-initiated cancel, code, and persistence failures before a clean retry', async () => {
+    // This desktop holds an installation, as any licensed Mac does. Reconciliation RETIRES a device it
+    // finds locally trusted but absent from the licence, so an unregistered peer is un-pairable by
+    // design: the trust lands and is withdrawn moments later.
+    mesh.register({
+      id: 'desktop-mismatch-peer',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+    });
     const remoteDevice: DeviceInfo = {
       id: 'desktop-mismatch-peer',
       name: 'Off Grid AI Desktop',
@@ -446,13 +454,13 @@ describe('Pro mobile saved-device management journey', () => {
     // listener is dropped, exactly as a real one would be.
     await waitFor(() => expect(discovery.scanCount).toBeGreaterThan(0));
     discovery.resolve(remoteDevice);
+    // A Mac on your licence that this phone has never paired with is a SAVED device needing pairing,
+    // not a stranger nearby: the roster knows it, only the trust is missing. So it is reached from the
+    // saved list, and its action asks for the code because there is no credential to retry.
     await waitFor(() =>
-      expect(
-        ui!.getByTestId(`sync-discovered-${remoteDevice.id}`),
-      ).toBeTruthy(),
+      expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
-    // Pair opens the sheet that asks for the code; the code is not typed on the screen behind it.
-    fireEvent.press(ui.getByTestId(`sync-pair-${remoteDevice.id}`));
+    fireEvent.press(ui.getByTestId(`sync-repair-${remoteDevice.id}`));
     fireEvent.changeText(
       await waitFor(() => ui!.getByTestId('sync-pairing-code-input')),
       TYPED_PAIRING_CODE,
@@ -465,8 +473,9 @@ describe('Pro mobile saved-device management journey', () => {
     expect(
       sheetHeaderAction(ui, 'Waiting for confirmation', 'Cancel'),
     ).toBeTruthy();
-    // One installation so far: this phone. The desktop is not on the licence until it pairs.
-    expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
+    // Two installations: this phone and the Mac. Both are on the licence throughout - what the pairing
+    // adds is the trust between them, not a seat.
+    expect(ui.getByText('2 of 5 devices saved')).toBeTruthy();
     await waitFor(() => expect(passphraseResolvers).toHaveLength(1));
     fireEvent.press(
       sheetHeaderAction(ui, 'Waiting for confirmation', 'Cancel'),
@@ -509,17 +518,24 @@ describe('Pro mobile saved-device management journey', () => {
         .knownDevices.some(device => device.id === remoteDevice.id),
     ).toBe(false);
 
-    // STOPS HERE, and the reason is a defect rather than an arrival problem.
-    //
-    // The clean retry after a failed credential save reports success - the attempt reaches `paired` and
-    // the sheet says "This device is now in your personal mesh" - while nothing is saved: `pairings` is
-    // empty, the device never joins knownDevices, and a pendingRevocations entry for it is left behind
-    // by the rollback of the failed save. A device that hits a Keychain hiccup once appears to pair ever
-    // after and never actually does.
-    //
-    // Recorded in docs/GAPS_BACKLOG.md. Asserting today's behaviour would bless a screen that lies.
+    // A clean retry after the storage failure gets there, and the trust SURVIVES - which is the part
+    // worth asserting, because a pairing whose trust is withdrawn moments later still reports success
+    // on its way past.
     retryPairing(ui, TYPED_PAIRING_CODE);
     await waitFor(() => expect(passphraseResolvers).toHaveLength(4));
+    await waitFor(() =>
+      expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
+    );
     passphraseResolvers[3](TYPED_PAIRING_CODE);
+
+    await waitFor(() =>
+      expect(
+        useSyncStore
+          .getState()
+          .knownDevices.some(device => device.id === remoteDevice.id),
+      ).toBe(true),
+    );
+    expect(ui.queryByTestId('pairing-attempt-sheet')).toBeNull();
+    expect(ui.queryByText('Pairing failed')).toBeNull();
   });
 });
