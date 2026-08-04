@@ -117,15 +117,25 @@ describe('RAG Flow Integration', () => {
       })).rejects.toThrow('Could not extract text');
     });
 
-    it('rejects documents that produce no chunks', async () => {
+    it('indexes a document too short to fill a chunk rather than rejecting it', async () => {
       mockDocService.processDocumentFromPath.mockResolvedValue({
         id: '1', type: 'document', uri: '/f',
         fileName: 'tiny.txt', textContent: 'hi', fileSize: 2,
       });
 
-      await expect(ragService.indexDocument({
-        projectId: 'proj-1', filePath: '/f', fileName: 'tiny.txt', fileSize: 2,
-      })).rejects.toThrow('no indexable content');
+      // This used to assert a rejection, on the assumption that two characters produce no chunks. They
+      // produce ONE: chunking keeps a whole document that is shorter than the minimum, because the
+      // minimum exists to drop short paragraphs out of a long document, and applying it to the document
+      // itself would index a two-line note and leave it permanently unsearchable.
+      await expect(
+        ragService.indexDocument({
+          projectId: 'proj-1', filePath: '/f', fileName: 'tiny.txt', fileSize: 2,
+        }),
+      ).resolves.toBeDefined();
+
+      // Which leaves indexDocument's own "no indexable content" guard unreachable from here - empty and
+      // whitespace-only text is refused by the extraction check above it, with a message that names the
+      // cause. It stays as the second lock on that door.
     });
   });
 
