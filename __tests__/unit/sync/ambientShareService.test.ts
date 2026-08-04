@@ -807,6 +807,100 @@ describe('sharing a file to another device without being asked', () => {
     });
   });
 
+  describe('the edges of the record it keeps', () => {
+    it('shows the most recently answered question first', async () => {
+      const harness = await launch();
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'ask',
+      });
+      for (const name of ['shot-a', 'shot-b']) {
+        harness.files.set(idOf(name), screenshot(name));
+        await harness.service.handleCapture(screenshot(name));
+      }
+      await harness.service.acceptPrompt(idOf('shot-a'), THE_MAC);
+      // Answered a moment later, so "most recent" is a real difference and not two answers in the same
+      // millisecond being ordered by chance.
+      await new Promise(resolve => setTimeout(resolve, 2));
+      await harness.service.rejectPrompt(idOf('shot-b'), THE_MAC);
+
+      // Newest first, because this is a list the user glances at to check what just happened.
+      const results = harness.service.approvalResultSnapshot();
+      expect(results.map(result => result.approval.syncId)).toEqual([
+        idOf('shot-b'),
+        idOf('shot-a'),
+      ]);
+      expect(results[0]!.title).toBe('File kept on this device');
+    });
+
+    it('keeps the last hundred answers and lets the rest go', async () => {
+      const harness = await launch();
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'ask',
+      });
+      for (let index = 0; index < 105; index += 1) {
+        const name = `bulk-${index}`;
+        harness.files.set(idOf(name), screenshot(name));
+        await harness.service.handleCapture(screenshot(name));
+        await harness.service.rejectPrompt(idOf(name), THE_MAC);
+      }
+
+      // This list is written to storage on every answer, so it cannot grow without limit on a phone that
+      // shares hundreds of files - and a hundred is already more history than anyone scrolls.
+      expect(harness.service.approvalResultSnapshot()).toHaveLength(100);
+    });
+
+    it('refuses to share by hand before Sync has started', () => {
+      jest.resetModules();
+      const {
+        ambientShareService,
+      } = require('../../../pro/sync/ambientShareService');
+
+      // Tapping Share in the first second after launch. Told plainly to wait, rather than silently doing
+      // nothing and leaving the user to wonder whether the file went.
+      expect(() =>
+        ambientShareService.shareExplicit(screenshot('shot-1'), [THE_MAC]),
+      ).rejects.toThrow('Sync is not ready yet.');
+    });
+
+    it('leaves another device\'s waiting file alone when one device\'s rule changes', async () => {
+      const harness = await launch();
+      harness.destinations.push({
+        deviceId: THE_IPAD,
+        deviceName: "Mac's iPad",
+        connected: true,
+      });
+      for (const destinationId of [THE_MAC, THE_IPAD]) {
+        await harness.service.setRule({
+          source: 'screenshot',
+          destinationId,
+          mode: 'ask',
+        });
+      }
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+      await harness.service.handleCapture(screenshot('shot-1'));
+      expect(harness.service.deliverySnapshot()).toHaveLength(2);
+
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+
+      // One file, two devices, two separate questions. Answering the Mac's must not answer the iPad's -
+      // they are consents to different devices and the user gave neither on behalf of the other.
+      expect(harness.scheduled.map(item => item.deviceId)).toEqual([THE_MAC]);
+      expect(harness.service.deliverySnapshot()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ destinationId: THE_IPAD, status: 'prompt' }),
+        ]),
+      );
+    });
+  });
+
   describe('what the screen is told', () => {
     it('is repainted once for a burst, not once per change', async () => {
       const harness = await launch();
