@@ -486,3 +486,32 @@ moment later still reports success on its way past.
 Worth keeping in mind when reading a device log: "paired, then gone" is the signature of a device missing
 from the licence roster, not of a broken handshake.
 
+
+### Open bug: evicting an OFFLINE device may not leave the eviction outstanding
+
+Found by `__tests__/pro/sync/syncPersistence.integration.test.ts` ("keeps an offline eviction pending
+across restart and completes it on rediscovery"). Two of that suite's three journeys pass; this one does
+not. Held open. Not fixed.
+
+**What should happen.** Evicting a device that is not reachable releases the licence seat immediately and
+leaves a PENDING revocation, because the other device still holds trust that has to be withdrawn when it
+next appears. That pending record is what survives a restart and completes on rediscovery.
+
+**What happens.** No pending revocation is persisted, so there is nothing to restore after the restart.
+
+**Where to look.** `PersonalMeshDeviceEvictionCoordinator.evict()` announces the registry change BEFORE it
+finalises the transaction:
+
+    await this.options.onRegistryChanged?.(installation)
+    await this.options.membership.finalizeEviction(token)
+
+On mobile that announcement runs reconciliation, and reconciliation calls `resumeCommittedEvictions()`,
+which finalises every committed transaction - including the one the caller is holding. So the local trust
+is retired by the recovery path rather than by the caller, and which of them stages the peer's revocation
+depends on which got there first.
+
+That ordering also made eviction report `replacement_failed` after succeeding, because the caller then
+finalised a transaction that no longer existed. That half is fixed: finalising an already-finalised
+transaction is a no-op rather than an error (finishing twice is not a failure; finishing something never
+committed still is). The remaining question is whether the announcement should happen before the
+transaction closes at all - and it probably should not.

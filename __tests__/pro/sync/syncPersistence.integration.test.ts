@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Keychain from 'react-native-keychain';
 import TcpSocket from 'react-native-tcp-socket';
 import type { DeviceInfo } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
@@ -11,7 +10,12 @@ import {
   resetDiscoveryBoundaries,
 } from '../../utils/nativeSyncBoundaries';
 import { MembershipPersistenceBoundary } from '../../utils/membershipPersistenceBoundary';
-import { createLicensedMesh } from '../../harness/licensedMesh';
+import { PAIRING_TRUST_FORMAT_VERSION } from '../../../pro/sync/pairingTrustDocument';
+import {
+  createLicensedMesh,
+  installLicensedPhone,
+  registerThisPhone,
+} from '../../harness/licensedMesh';
 
 jest.mock('react-native-tcp-socket', () => {
   const {
@@ -56,7 +60,10 @@ function phonePairingCode(): string {
 const mesh = createLicensedMesh();
 
 describe('Pro Sync app-lifetime pairing persistence', () => {
-  let persistedPairings: string | undefined;
+  let secrets: Map<string, string>;
+  /** What the pairing store has written, read back out of the Keychain the app used. */
+  const persistedPairings = (): string | undefined =>
+    secrets.get('off-grid-sync-pairings');
 
   beforeEach(async () => {
     mesh.reset();
@@ -64,24 +71,18 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     await AsyncStorage.clear();
     useSyncStore.getState().reset();
     resetDiscoveryBoundaries();
-    persistedPairings = undefined;
-    (Keychain.getGenericPassword as jest.Mock).mockImplementation(
-      async ({ service }: { service: string }) =>
-        service === 'off-grid-sync-pairings' && persistedPairings
-          ? { username: 'sync-pairings', password: persistedPairings }
-          : false,
-    );
-    (Keychain.setGenericPassword as jest.Mock).mockImplementation(
-      async (
-        _username: string,
-        password: string,
-        options: { service: string },
-      ) => {
-        if (options.service === 'off-grid-sync-pairings')
-          persistedPairings = password;
-        return true;
-      },
-    );
+    // A licensed phone with the fingerprint it actually has: the roster is what saved devices are built
+    // from, and two unlicensed devices cannot pair at all.
+    secrets = installLicensedPhone(mesh);
+    await registerThisPhone(mesh);
+    // The desktop these journeys pair with holds an installation, as any licensed Mac does.
+    // Reconciliation retires a device it finds trusted but absent from the licence, so an unregistered
+    // peer is dropped seconds after a pairing that went perfectly.
+    mesh.register({
+      id: 'desktop-peer',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+    });
   });
 
   afterEach(async () => {
@@ -146,7 +147,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       3000,
       'initial connected device',
     );
-    await waitFor(() => Boolean(persistedPairings));
+    await waitFor(() => Boolean(persistedPairings()));
 
     await syncService.stop();
     expect(useSyncStore.getState().status).toBe('idle');
@@ -257,7 +258,8 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: nativeTcpBoundary,
-      getPassphrase: () => 'blue-otter-42',
+      // The rebuilt desktop presents the code this phone is showing, which is the whole confirmation.
+      getPassphrase: () => phonePairingCode(),
       getSharedSecret: deviceId =>
         remotePersistence.getActive(deviceId)?.sharedSecret,
       pairingPersistence: remotePersistence,
@@ -266,6 +268,11 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
 
+    await waitFor(
+      () => getDiscoveryBoundaries().at(-1)!.scanCount > 0,
+      3000,
+      'discovery to start browsing',
+    );
     getDiscoveryBoundaries().at(-1)!.resolve(remoteDevice);
     await waitFor(
       () =>
@@ -277,7 +284,9 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       'one-sided trust repair state',
     );
 
-    await syncService.pair(remoteDevice, 'blue-otter-42');
+    // Repairing asks for the code again, and the code has a shape the parser enforces - a phrase like
+    // 'blue-otter-42' never reaches the other device at all.
+    await syncService.pair(remoteDevice, phonePairingCode());
     await waitFor(
       () =>
         useSyncStore
@@ -296,9 +305,11 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       'remote membership revocation',
     );
     expect(useSyncStore.getState().knownDevices).toEqual([]);
-    expect(JSON.parse(persistedPairings ?? '{}')).toEqual(
+    // Nothing left that could reconnect this device. The format version is read from the app rather
+    // than written down here, so a bump does not read as a failure.
+    expect(JSON.parse(persistedPairings() ?? '{}')).toEqual(
       expect.objectContaining({
-        version: 4,
+        version: PAIRING_TRUST_FORMAT_VERSION,
         pairings: {},
         stagedPairings: {},
         pendingRevocations: {},
@@ -341,15 +352,9 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       { ...mobile, host: '127.0.0.1', port: firstDiscovery.publishedPort },
       phonePairingCode(),
     );
-    await waitFor(() =>
-      useSyncStore
-        .getState()
-        .pairingAttempts.some(
-          attempt =>
-            attempt.device.id === remoteDevice.id &&
-            attempt.stage === 'waiting_for_confirmation',
-        ),
-    );
+    // Not waiting on `waiting_for_confirmation`: over an in-memory transport the attempt passes through
+    // it in under a millisecond, so watching for it is watching for a frame that has already gone. The
+    // device joining the mesh is the outcome, and that is what is waited for.
     await pairing;
     await waitFor(() =>
       useSyncStore
@@ -367,9 +372,17 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       3000,
       'offline peer',
     );
+    // STILL RED from here, and worth understanding before it is assumed to be arrival drift.
+    //
+    // Evicting an OFFLINE device should leave a pending revocation behind: the licence seat goes at once,
+    // the peer's own trust cannot be reached, so the eviction stays outstanding until the device turns up.
+    // No pending revocation is persisted. The eviction announces the registry change BEFORE it finalises,
+    // and on this host that announcement drives reconciliation, which resumes committed evictions and
+    // finalises the transaction early - so which side ends up staging the peer's revocation depends on
+    // who got there first. Recorded in docs/GAPS_BACKLOG.md.
     await syncService.forgetDevice(remoteDevice.id);
     await waitFor(() => {
-      const stored = JSON.parse(persistedPairings ?? '{}') as {
+      const stored = JSON.parse(persistedPairings() ?? '{}') as {
         pendingRevocations?: Record<string, unknown>;
       };
       return Boolean(stored.pendingRevocations?.[remoteDevice.id]);
@@ -402,6 +415,11 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     });
     await remote.engine.start(0);
     remoteDevice.port = remote.transport.boundPort ?? 0;
+    await waitFor(
+      () => getDiscoveryBoundaries().at(-1)!.scanCount > 0,
+      3000,
+      'discovery to start browsing',
+    );
     getDiscoveryBoundaries().at(-1)!.resolve(remoteDevice);
 
     await waitFor(
@@ -410,7 +428,7 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
       'rediscovered peer revocation',
     );
     await waitFor(() => {
-      const stored = JSON.parse(persistedPairings ?? '{}') as {
+      const stored = JSON.parse(persistedPairings() ?? '{}') as {
         pendingRevocations?: Record<string, unknown>;
       };
       return Object.keys(stored.pendingRevocations ?? {}).length === 0;
