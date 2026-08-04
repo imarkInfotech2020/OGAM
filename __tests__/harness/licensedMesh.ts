@@ -105,7 +105,17 @@ export function createLicensedMesh(): LicensedMesh {
  */
 export function installLicensedPhone(
   mesh: LicensedMesh,
-  options: { fingerprint?: string; secrets?: Map<string, string> } = {},
+  options: {
+    fingerprint?: string;
+    secrets?: Map<string, string>;
+    /**
+     * Called before a write lands, so a test can make the Keychain refuse one.
+     *
+     * Throwing here is how a suite exercises "the credential could not be saved" without replacing the
+     * whole store and losing the licence with it.
+     */
+    beforeWrite?: (service: string) => void;
+  } = {},
 ): Map<string, string> {
   const keychain = require('react-native-keychain');
   const secrets = options.secrets ?? new Map<string, string>();
@@ -131,6 +141,7 @@ export function installLicensedPhone(
   );
   keychain.setGenericPassword.mockImplementation(
     async (_username: string, password: string, opts: { service: string }) => {
+      options.beforeWrite?.(opts.service);
       secrets.set(opts.service, password);
       return true;
     },

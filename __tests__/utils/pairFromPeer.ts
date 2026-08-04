@@ -1,5 +1,9 @@
 import { waitFor, type RenderAPI } from '@testing-library/react-native';
-import type { DeviceInfo } from '@offgrid/sync';
+import {
+  PAIRING_CODE_ALPHABET,
+  PAIRING_CODE_LENGTH,
+  type DeviceInfo,
+} from '@offgrid/sync';
 
 /**
  * Pair a fake peer with this phone the way a real one does.
@@ -35,3 +39,20 @@ export async function pairPeerWithPhone(input: {
     code,
   );
 }
+
+/**
+ * A code of the shape the product defines, for a test that has to TYPE one.
+ *
+ * Derived from the alphabet and length the app enforces rather than written as a literal: those are
+ * product rules, and a hand-typed string like 'blue-otter-42' is refused by the parser before it ever
+ * reaches the other device - so a test using one stops exercising what it meant to.
+ *
+ * The two differ, which is what makes one of them wrong on purpose.
+ */
+export const TYPED_PAIRING_CODE = PAIRING_CODE_ALPHABET.slice(
+  0,
+  PAIRING_CODE_LENGTH,
+);
+export const WRONG_TYPED_PAIRING_CODE = PAIRING_CODE_ALPHABET.slice(
+  -PAIRING_CODE_LENGTH,
+);
