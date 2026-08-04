@@ -8,6 +8,16 @@
  * the user granted) both be driven from a test.
  */
 
+import { resetReactNativeBoundary } from './reactNativeBoundary';
+
+export {
+  denyPermissions,
+  grantPermissions,
+  nativeModules,
+  permissionsAndroid,
+  platform,
+} from './reactNativeBoundary';
+
 export interface DirectoryCandidate {
   sourceId: string;
   name: string;
@@ -88,104 +98,43 @@ export class DownloadsFake {
 
 export const OPERATION_CANCELED = 'OPERATION_CANCELED';
 
-const GRANTED = 'granted';
-
-interface BoundaryState {
-  nativeModules: {
-    SyncDirectorySourceModule?: DirectorySourceFake;
-    SyncDownloadsModule?: DownloadsFake;
-  };
-  platform: { OS: string; Version: string | number };
-  permissions: { outcomes: Record<string, string>; requested: string[][] };
-  pickerState: { result: unknown; failure: unknown; calls: unknown[] };
+interface PickerState {
+  result: unknown;
+  failure: unknown;
+  calls: unknown[];
 }
 
-/**
- * One device, however many times this file is evaluated.
- *
- * The code under test remembers the access it holds in module state, so a test that wants a device which has
- * never asked has to load it fresh - and a fresh module registry re-evaluates this file too, along with the
- * `react-native` mock that reads from it. Hanging the device off the global keeps the reloaded module looking
- * at the same one the test is configuring.
- */
-const state: BoundaryState = ((
-  globalThis as { __offgridDirectoryBoundary?: BoundaryState }
-).__offgridDirectoryBoundary ??= {
-  nativeModules: {},
-  platform: { OS: 'android', Version: 33 },
-  permissions: { outcomes: {}, requested: [] },
-  pickerState: { result: undefined, failure: undefined, calls: [] },
+/** Pinned like the device is, for the same reason: a reloaded module re-evaluates this file. */
+const pickerState: PickerState = ((
+  globalThis as { __offgridPickerBoundary?: PickerState }
+).__offgridPickerBoundary ??= {
+  result: undefined,
+  failure: undefined,
+  calls: [],
 });
-
-export const nativeModules = state.nativeModules;
-
-/** Mutable: the OS and its version decide which permissions are even askable. */
-export const platform = state.platform;
-
-export const permissionsAndroid = {
-  RESULTS: {
-    GRANTED,
-    DENIED: 'denied',
-    NEVER_ASK_AGAIN: 'never_ask_again',
-  },
-  /** What the system dialog will answer, keyed by permission. */
-  outcomes: state.permissions.outcomes,
-  requested: state.permissions.requested,
-  async requestMultiple(
-    permissions: string[],
-  ): Promise<Record<string, string>> {
-    state.permissions.requested.push(permissions);
-    return Object.fromEntries(
-      permissions.map(permission => [
-        permission,
-        state.permissions.outcomes[permission] ?? 'denied',
-      ]),
-    );
-  },
-};
 
 /** The system folder picker: it either returns a grant, or throws the way the real one does. */
 export const picker = {
   errorCodes: { OPERATION_CANCELED },
   isErrorWithCode: (error: unknown): boolean =>
     typeof error === 'object' && error !== null && 'code' in error,
-  calls: state.pickerState.calls,
+  calls: pickerState.calls,
   answers(result: unknown): void {
-    state.pickerState.result = result;
+    pickerState.result = result;
   },
   fails(failure: unknown): void {
-    state.pickerState.failure = failure;
+    pickerState.failure = failure;
   },
   async pickDirectory(options: unknown): Promise<unknown> {
-    state.pickerState.calls.push(options);
-    if (state.pickerState.failure) throw state.pickerState.failure;
-    return state.pickerState.result;
+    pickerState.calls.push(options);
+    if (pickerState.failure) throw pickerState.failure;
+    return pickerState.result;
   },
 };
 
 export function resetDirectoryAccessBoundary(): void {
-  delete state.nativeModules.SyncDirectorySourceModule;
-  delete state.nativeModules.SyncDownloadsModule;
-  state.platform.OS = 'android';
-  state.platform.Version = 33;
-  for (const key of Object.keys(state.permissions.outcomes)) {
-    delete state.permissions.outcomes[key];
-  }
-  state.permissions.requested.length = 0;
-  state.pickerState.result = undefined;
-  state.pickerState.failure = undefined;
-  state.pickerState.calls.length = 0;
-}
-
-/** What the system dialog will answer for these permissions. */
-export function grantPermissions(...permissions: string[]): void {
-  for (const permission of permissions) {
-    state.permissions.outcomes[permission] = GRANTED;
-  }
-}
-
-export function denyPermissions(
-  outcomes: Record<string, 'denied' | 'never_ask_again'>,
-): void {
-  Object.assign(state.permissions.outcomes, outcomes);
+  resetReactNativeBoundary();
+  pickerState.result = undefined;
+  pickerState.failure = undefined;
+  pickerState.calls.length = 0;
 }
