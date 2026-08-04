@@ -10,6 +10,10 @@
  */
 import { Buffer } from 'buffer';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
+import { createLicensedMesh } from '../../harness/licensedMesh';
+import { TYPED_PAIRING_CODE } from '../../utils/pairFromPeer';
+
+const mesh = createLicensedMesh();
 import type { RnTcpModule } from '@offgrid/sync/rn';
 
 type Handler = (...a: any[]) => void;
@@ -101,15 +105,24 @@ const dev = (id: string, port: number) => ({
 });
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+afterEach(() => {
+  mesh.restore();
+});
+
 describe('mobile Sync wiring — pair + app message over the RN transport (base64 path)', () => {
   it('two engines built by buildSyncEngine pair and exchange an encrypted app message', async () => {
     const tcp = makeFakeTcp();
     let aPaired: any, bPaired: any, appMsg: any;
 
+    // Pairing is a coded, licensed exchange: a code of the shape the parser accepts, and one side
+    // sponsoring the other onto a licence. Neither is optional - without the code the handshake never
+    // derives a key, and without the licence it fails with entitlement_unavailable.
+    mesh.reset();
     const a = buildSyncEngine({
       localDevice: dev('dev-a', 0),
       tcpModule: tcp,
-      getPassphrase: () => 'shared-secret',
+      getPassphrase: () => TYPED_PAIRING_CODE,
+      pairingEntitlement: mesh.peer(),
       onPaired: d => {
         aPaired = d;
       },
@@ -120,6 +133,7 @@ describe('mobile Sync wiring — pair + app message over the RN transport (base6
     const b = buildSyncEngine({
       localDevice: dev('dev-b', 0),
       tcpModule: tcp,
+      pairingEntitlement: mesh.joiner({ name: 'dev-b', platform: 'ios' }),
       onPaired: d => {
         bPaired = d;
       },
@@ -129,7 +143,7 @@ describe('mobile Sync wiring — pair + app message over the RN transport (base6
     const port = a.transport.boundPort!;
     expect(port).toBeGreaterThan(0);
 
-    await b.engine.pair(dev('dev-a', port), 'shared-secret');
+    await b.engine.pair(dev('dev-a', port), TYPED_PAIRING_CODE);
     await delay(200);
 
     // Real NaCl handshake completed both sides, same derived secret.
