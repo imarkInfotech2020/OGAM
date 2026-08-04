@@ -10,18 +10,25 @@ import { useRemoteChatStreamStore } from '../../../src/stores/remoteChatStreamSt
  * the op-log - so nothing here is durable, and a free build never writes to it at all.
  */
 describe('replies generating on another device', () => {
+  /**
+   * A frame as the Mac actually sends it. Checked against the shared type with `satisfies`, so a field
+   * added or renamed there breaks this suite instead of silently drifting.
+   */
+  const GENERATING = {
+    conversationId: 'chat-7',
+    messageId: 'message-1',
+    content: 'thinking about it',
+    seq: 1,
+    deviceId: 'the-mac',
+    updatedAt: 1_700_000_000_000,
+    // Still generating: the preview stands in for a message the op-log has not delivered yet.
+    complete: false,
+  } satisfies ChatStreamPreview;
+
   const preview = (
     overrides: Partial<ChatStreamPreview> = {},
   ): ChatStreamPreview =>
-    ({
-      conversationId: 'chat-7',
-      messageId: 'message-1',
-      content: 'thinking about it',
-      seq: 1,
-      deviceId: 'the-mac',
-      updatedAt: 1_700_000_000_000,
-      ...overrides,
-    } satisfies ChatStreamPreview);
+    ({ ...GENERATING, ...overrides } as ChatStreamPreview);
 
   beforeEach(() => {
     useRemoteChatStreamStore.setState({ previews: [] });
