@@ -90,6 +90,11 @@ describe('Image Generation Flow Integration', () => {
       downloadedModels: [createDownloadedModel({ id, engine })],
       activeModelId: id,
     });
+    // WHICH text model to enhance with is asked of activeModelService - one owner for that question, so
+    // image generation cannot pick a different model than chat does. This suite mocks that service, so
+    // the store field alone is not enough: without this the on-demand load path finds no text model and
+    // skips enhancement, which is what the "auto-loads the text model" case was failing on.
+    mockActiveModelService.selectedTextModelId.mockReturnValue(id);
     return id;
   };
 
