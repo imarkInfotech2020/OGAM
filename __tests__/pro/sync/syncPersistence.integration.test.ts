@@ -154,6 +154,14 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     await syncService.start();
     const discovery = getDiscoveryBoundaries().at(-1);
     expect(discovery).toBeDefined();
+    // Announce the peer only once this boundary is actually browsing. A resolve that arrives before the
+    // service has registered its listener is dropped on the floor, exactly as a real one would be, and
+    // the reconnect then never happens for a reason that has nothing to do with the code under test.
+    await waitFor(
+      () => discovery!.scanCount > 0,
+      3000,
+      'discovery to start browsing',
+    );
     discovery!.resolve(remoteDevice);
 
     await waitFor(

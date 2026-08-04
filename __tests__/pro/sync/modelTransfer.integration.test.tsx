@@ -164,9 +164,7 @@ describe('Pro mobile model transfer journey', () => {
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
-    await waitFor(() =>
-      expect(ui!.getByText('Discoverable')).toBeTruthy(),
-    );
+    await waitFor(() => expect(ui!.getByText('Discoverable')).toBeTruthy());
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);
@@ -337,7 +335,10 @@ describe('Pro mobile model transfer journey', () => {
       'gemma-4-e2b-it-mmproj-F16.gguf',
       liteRT.fileName,
     ]) {
-      await modelTransferFsBoundary.module.writeFile(`${modelsDir}/${name}`, 'x');
+      await modelTransferFsBoundary.module.writeFile(
+        `${modelsDir}/${name}`,
+        'x',
+      );
     }
     await AsyncStorage.setItem(
       '@local_llm/downloaded_models',
@@ -366,7 +367,9 @@ describe('Pro mobile model transfer journey', () => {
     );
 
     // The vision model is offerable: GGUF runs on any Off Grid AI device, mmproj included.
-    await waitFor(() => expect(ui!.getByTestId(`transfer-model-${vision.id}`)).toBeTruthy());
+    await waitFor(() =>
+      expect(ui!.getByTestId(`transfer-model-${vision.id}`)).toBeTruthy(),
+    );
     // LiteRT exists only on Android, so an iPhone is never offered one.
     expect(ui.queryByTestId(`transfer-model-${liteRT.id}`)).toBeNull();
     // Its size is the whole package, not just the primary file.
