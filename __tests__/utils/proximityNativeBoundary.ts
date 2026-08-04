@@ -12,14 +12,14 @@
  * `NativeModules.SyncProximityModule` before each `new IosProximityAdapter(...)` binds them separately.
  */
 
+import { NativeEventBus } from './nativeEventBus';
+
 interface Device {
   id: string;
   name: string;
   platform: string;
   version?: string;
 }
-
-type Listener = (payload: unknown) => void;
 
 export const PEER_FOUND_EVENT = 'SyncProximityPeerFound';
 export const PEER_LOST_EVENT = 'SyncProximityPeerLost';
@@ -32,23 +32,10 @@ export const platform = { OS: 'ios' };
 
 export const nativeModules: { SyncProximityModule?: ProximityNativeFake } = {};
 
-export class ProximityEventEmitter {
-  constructor(private readonly module: ProximityNativeFake) {}
+/** RN's emitter, bound per device module so two phones' events never cross. */
+export { FakeNativeEventEmitter as ProximityEventEmitter } from './nativeEventBus';
 
-  addListener(eventName: string, listener: Listener): { remove(): void } {
-    const listeners = this.module.listeners.get(eventName) ?? new Set();
-    listeners.add(listener);
-    this.module.listeners.set(eventName, listeners);
-    return {
-      remove: () => {
-        this.module.listeners.get(eventName)?.delete(listener);
-      },
-    };
-  }
-}
-
-export class ProximityNativeFake {
-  readonly listeners = new Map<string, Set<Listener>>();
+export class ProximityNativeFake extends NativeEventBus {
   /** Set by a test to make the native layer refuse, the way a device with Bluetooth off does. */
   startFailure: Error | undefined;
   rescanFailure: Error | undefined;
@@ -58,13 +45,8 @@ export class ProximityNativeFake {
   device: Device;
 
   constructor(private readonly air: ProximityAir, device: Device) {
+    super();
     this.device = device;
-  }
-
-  emit(eventName: string, payload: unknown): void {
-    for (const listener of [...(this.listeners.get(eventName) ?? [])]) {
-      listener(payload);
-    }
   }
 
   async start(device: Device): Promise<void> {
