@@ -853,7 +853,7 @@ describe('sharing a file to another device without being asked', () => {
       expect(harness.service.approvalResultSnapshot()).toHaveLength(100);
     });
 
-    it('refuses to share by hand before Sync has started', () => {
+    it('refuses to share by hand before Sync has started', async () => {
       jest.resetModules();
       const {
         ambientShareService,
@@ -861,7 +861,7 @@ describe('sharing a file to another device without being asked', () => {
 
       // Tapping Share in the first second after launch. Told plainly to wait, rather than silently doing
       // nothing and leaving the user to wonder whether the file went.
-      expect(() =>
+      await expect(
         ambientShareService.shareExplicit(screenshot('shot-1'), [THE_MAC]),
       ).rejects.toThrow('Sync is not ready yet.');
     });
