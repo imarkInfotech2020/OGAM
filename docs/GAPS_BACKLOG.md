@@ -513,5 +513,15 @@ depends on which got there first.
 That ordering also made eviction report `replacement_failed` after succeeding, because the caller then
 finalised a transaction that no longer existed. That half is fixed: finalising an already-finalised
 transaction is a no-op rather than an error (finishing twice is not a failure; finishing something never
-committed still is). The remaining question is whether the announcement should happen before the
-transaction closes at all - and it probably should not.
+committed still is).
+
+**And it is not an occasional race - it is the normal flow.** Coverage over the sync suites shows the
+caller's finalize reaching only the already-finalised branch: the lines that actually retire the local
+trust and complete the transaction
+(`pairingEntitlementReplacementAdapter.ts` 66-75) are never executed at all, while the no-op branch
+above them always is. Every eviction is therefore completed by the recovery path, and the code that
+reads as the main path is dead in practice.
+
+So the answer to "should the announcement happen before the transaction closes" is no. Until it moves,
+the adapter's finalize is a formality and `resumeCommittedEvictions` is the real implementation - which
+is worth knowing before anyone edits either of them.
