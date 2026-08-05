@@ -9,7 +9,7 @@ import {
   contextCompactionService, ragService, retrievalService,
 } from '../../services';
 import { getToolExtensions } from '../../services/tools/extensions';
-import { invalidateActiveConversation, activeLocalTextCapabilities, wantsLeadingThinkToken, localModelAcceptsImages } from '../../services/engines';
+import { invalidateActiveConversation, activeLocalTextCapabilities, wantsLeadingThinkToken, localModelAcceptsImages, stopAllTextEngines } from '../../services/engines';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
@@ -284,7 +284,11 @@ async function generateWithCompactionRetry(
   let turnInterrupted = false; // PER-TURN stop truth from the loop outcome (returned to the caller)
   try { const outcome = await gen(opts.messages); turnInterrupted = !!(outcome as { interrupted?: boolean } | void)?.interrupted; } catch (error: any) {
     if (!contextCompactionService.isContextFullError(error)) throw error;
-    await llmService.stopGeneration().catch(() => { });
+    // Engine-level stop across EVERY engine (registry, OCP) - not llmService, which is llama only, so a
+    // LiteRT turn used to compact while its native generation was still running. Deliberately NOT
+    // generationService.stopGeneration(): this is mid-turn, and the owner's stop persists the partial and
+    // resets state, which would end the turn the retry below is about to continue.
+    await stopAllTextEngines().catch(() => { });
     const conversation = useChatStore.getState().conversations.find(c => c.id === opts.id);
     const previousSummary = conversation?.compactionSummary;
     const compacted = await contextCompactionService.compact({ conversationId: opts.id, systemPrompt: opts.prompt, allMessages: opts.messages, previousSummary }).catch(async () => {
@@ -571,7 +575,9 @@ export async function executeDeleteConversationFn(
 ): Promise<void> {
   if (!deps.activeConversationId) return;
   deps.setAlertState(hideAlert());
-  if (deps.isStreaming) { await llmService.stopGeneration(); deps.clearStreamingMessage(); }
+  // Through the OWNER: llmService is llama only, so deleting a conversation mid-reply left a LiteRT or
+  // remote stream running - writing tokens into a conversation that no longer exists.
+  if (deps.isStreaming) { await generationService.stopGeneration(); deps.clearStreamingMessage(); }
   for (const id of deps.removeImagesByConversationId(deps.activeConversationId)) await onnxImageGeneratorService.deleteGeneratedImage(id);
   contextCompactionService.clearSummary(deps.activeConversationId);
   deps.deleteConversation(deps.activeConversationId);

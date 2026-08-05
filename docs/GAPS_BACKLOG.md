@@ -631,3 +631,35 @@ exactly the failure mode batch9's own header describes from its previous hand-ro
 
 Fix: batch9 requires `doMockRealSqlite` from the harness and deletes its private engine. Low risk (both
 already pass over real sqlite), and it makes the harness the single definition of that boundary.
+
+## Ejecting a model mid-reply unloads the engine WITHOUT stopping the generation
+
+**Verdict: fix-the-guard (live bug, observed in a rendered test).**
+
+In chat, the model chip opens `ModelsManagerSheet`, whose per-row eject (`models-row-text-eject`) calls
+`ejectResident` -> `modelResidencyManager.evictByKey`. That path never touches the generation owner.
+
+Observed with a LiteRT reply still streaming (rendered ChatScreen, native LiteRT faked, real everything else):
+
+| native call | times called |
+|---|---|
+| `unloadModel` | 1 |
+| `stopGeneration` | **0** |
+
+So the engine is torn down while a generation is still running against it. On a device that is a native
+generation pointed at a released context - a crash or a hang rather than a clean stop - and at best tokens
+arriving for a model that no longer exists.
+
+This is the same abstraction failure as the three `llmService.stopGeneration()` bypasses (fixed: two now go
+through `generationService.stopGeneration()`, the mid-turn compaction retry through `stopAllTextEngines()`),
+but in a fourth place and one layer lower. The residency manager evicts on its own authority - which is right
+for an idle sidecar and wrong for the model that is mid-reply.
+
+Likely fix: `evictByKey` (or its callers) must stop generation on the owner first when the key being evicted
+is the model currently generating - not eject-then-hope. Wants a device check too: eject mid-reply on a LiteRT
+model and watch for a native crash.
+
+Related, and why the fix above is not enough on its own: `handleUnloadModelFn` - the `ModelSelectorModal`
+"Unload" button - is no longer reachable from chat's model chip at all. Either that modal is dead surface
+from ChatScreen (it is still mounted, and still reachable from ChatsListScreen) or the sheet should route
+through it. Worth deciding which, because right now two unload affordances exist with different behaviour.
