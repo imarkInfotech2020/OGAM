@@ -62,6 +62,10 @@ class BlobChannelE2ETest {
             val sent = BlobUploader.upload(
                 BlobUploader.Request(
                     requestId = requestId,
+                    // A fresh upload: these four journeys each send a whole payload and assert every byte lands,
+                    // so nothing is already held on the far side. Resume from a non-zero offset is its own
+                    // behaviour and has no Kotlin-side test yet.
+                    offset = 0L,
                     sourcePath = source.absolutePath,
                     url = endpoint.getString("url"),
                     token = endpoint.getString("token"),
@@ -111,6 +115,9 @@ class BlobChannelE2ETest {
                     keyBase64 = material.getString("keyBase64"),
                     nonceBase64 = material.getString("nonceBase64"),
                     frameBytes = frameBytes,
+                    // Nothing on disk yet: each of these journeys receives a whole payload and compares every
+                    // byte, so the arriving stream starts at zero rather than continuing a partial file.
+                    offset = 0L,
                     expiresAt = System.currentTimeMillis() + 300_000,
                 ),
             )
@@ -166,6 +173,9 @@ class BlobChannelE2ETest {
                     keyBase64 = material.getString("keyBase64"),
                     nonceBase64 = material.getString("nonceBase64"),
                     frameBytes = frameBytes,
+                    // Nothing on disk yet: each of these journeys receives a whole payload and compares every
+                    // byte, so the arriving stream starts at zero rather than continuing a partial file.
+                    offset = 0L,
                     expiresAt = System.currentTimeMillis() + 300_000,
                 ),
             )
@@ -226,6 +236,10 @@ class BlobChannelE2ETest {
             val sent = BlobUploader.upload(
                 BlobUploader.Request(
                     requestId = requestId,
+                    // A fresh upload: these four journeys each send a whole payload and assert every byte lands,
+                    // so nothing is already held on the far side. Resume from a non-zero offset is its own
+                    // behaviour and has no Kotlin-side test yet.
+                    offset = 0L,
                     sourcePath = source.absolutePath,
                     url = offered.getString("url"),
                     token = material.getString("token"),
