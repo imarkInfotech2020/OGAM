@@ -8,223 +8,20 @@ on:
     branches:
       - main
 
+# ONE job, not four.
+#
+# lint, typecheck, architecture and test used to be separate jobs, and the only thing that made them
+# separate was the gate at the end - all four repeated the SAME seven setup steps (checkout, pro
+# submodule, node, java, two shared checkouts, install). That duplication was not just slow, it was
+# the bug: the shared-provisioning step was wrong in all four copies at once, and one of the four
+# (lint) had silently lost its `env: PRO_SUBMODULE_PAT`, so it never provisioned shared at all.
+#
+# Setup happens once here and every gate runs as a step against it. Each gate carries
+# `if: ${{ !cancelled() && steps.install.outcome == 'success' }}`, so a red gate does NOT hide the
+# ones after it - the whole list still reports, which is the one thing the four separate checks were
+# genuinely good at. The trade-off is wall-clock: the gates no longer run in parallel.
 jobs:
-  lint:
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      # @offgrid/sync and @offgrid/rag are file: dependencies on the SIBLING shared monorepo
-      # ("file:../shared/packages/sync"). They arrived with the sync work and nothing in CI ever provisioned
-      # them, so every job failed on the same missing module wearing different hats: TS2307 in typecheck, 26
-      # no-phantom-deps errors in the architecture gate, and 260 jest suites unable to resolve
-      # <workspace>/../shared/packages/sync/src/index.ts.
-      #
-      # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one level -
-      # which is exactly where the file: specifier and jest's moduleNameMapper both point.
-      #
-      # Matching branch first, main as the fallback: a PR that changes the app and the shared package together
-      # has to be tested against the package it expects, not against main's copy.
-      - name: Check out the shared monorepo
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
-        id: shared_branch
-        continue-on-error: true
-        uses: actions/checkout@v4
-        with:
-          repository: off-grid-ai/shared
-          token: ${{ env.PRO_SUBMODULE_PAT }}
-          path: _shared
-          ref: ${{ github.head_ref || github.ref_name }}
-          persist-credentials: false
-      - name: Fall back to shared main
-        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.shared_branch.outcome != 'success' }}
-        uses: actions/checkout@v4
-        with:
-          repository: off-grid-ai/shared
-          token: ${{ env.PRO_SUBMODULE_PAT }}
-          path: _shared
-          persist-credentials: false
-      - name: Put shared beside this checkout
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
-        run: |
-          rm -rf ../shared
-          mv _shared ../shared
-          # Its own deps and build, because npm resolves the file: dep to dist/ and jest to src/.
-          npm --prefix ../shared/packages/sync ci || npm --prefix ../shared/packages/sync install
-          npm --prefix ../shared/packages/sync run build
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install SwiftLint
-        run: brew install swiftlint
-
-      - name: Lint
-        run: npm run lint
-
-  typecheck:
-    runs-on: ubuntu-latest
-    env:
-      PRO_SUBMODULE_PAT: ${{ secrets.PRO_SUBMODULE_PAT }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check out pro submodule (private; skipped on open-core forks)
-        # tsc sees __tests__/pro/* which import @offgrid/pro/*; without the submodule those resolve
-        # to nothing (TS2307) and typecheck fails. Pull it when the PAT is present (this org's CI);
-        # forks without the secret skip it and tsconfig excludes the pro paths.
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
-        env:
-          PRO_PAT: ${{ env.PRO_SUBMODULE_PAT }}
-        run: |
-          git config --global url."https://x-access-token:${PRO_PAT}@github.com/".insteadOf "https://github.com/"
-          git submodule update --init --recursive pro
-          git config --global --unset url."https://x-access-token:${PRO_PAT}@github.com/".insteadOf || true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      # @offgrid/sync and @offgrid/rag are file: dependencies on the SIBLING shared monorepo
-      # ("file:../shared/packages/sync"). They arrived with the sync work and nothing in CI ever provisioned
-      # them, so every job failed on the same missing module wearing different hats: TS2307 in typecheck, 26
-      # no-phantom-deps errors in the architecture gate, and 260 jest suites unable to resolve
-      # <workspace>/../shared/packages/sync/src/index.ts.
-      #
-      # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one level -
-      # which is exactly where the file: specifier and jest's moduleNameMapper both point.
-      #
-      # Matching branch first, main as the fallback: a PR that changes the app and the shared package together
-      # has to be tested against the package it expects, not against main's copy.
-      - name: Check out the shared monorepo
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
-        id: shared_branch
-        continue-on-error: true
-        uses: actions/checkout@v4
-        with:
-          repository: off-grid-ai/shared
-          token: ${{ env.PRO_SUBMODULE_PAT }}
-          path: _shared
-          ref: ${{ github.head_ref || github.ref_name }}
-          persist-credentials: false
-      - name: Fall back to shared main
-        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.shared_branch.outcome != 'success' }}
-        uses: actions/checkout@v4
-        with:
-          repository: off-grid-ai/shared
-          token: ${{ env.PRO_SUBMODULE_PAT }}
-          path: _shared
-          persist-credentials: false
-      - name: Put shared beside this checkout
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
-        run: |
-          rm -rf ../shared
-          mv _shared ../shared
-          # Its own deps and build, because npm resolves the file: dep to dist/ and jest to src/.
-          npm --prefix ../shared/packages/sync ci || npm --prefix ../shared/packages/sync install
-          npm --prefix ../shared/packages/sync run build
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type check
-        run: npx tsc --noEmit
-
-  architecture:
-    # Standing gates: dependency-cruiser (layering, engine DIP, import cycles, orphans — 0 violations,
-    # no baseline) + knip (dead files/exports/types/deps — 0 issues). Both fail on anything NEW.
-    runs-on: ubuntu-latest
-    env:
-      PRO_SUBMODULE_PAT: ${{ secrets.PRO_SUBMODULE_PAT }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check out pro submodule (private; skipped on open-core forks)
-        # knip/depcruise scan pro-importing code; without the submodule their reachability graph is
-        # incomplete (false unused/orphan reports). Pull it when the PAT is present; forks skip it.
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
-        env:
-          PRO_PAT: ${{ env.PRO_SUBMODULE_PAT }}
-        run: |
-          git config --global url."https://x-access-token:${PRO_PAT}@github.com/".insteadOf "https://github.com/"
-          git submodule update --init --recursive pro
-          git config --global --unset url."https://x-access-token:${PRO_PAT}@github.com/".insteadOf || true
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      # @offgrid/sync and @offgrid/rag are file: dependencies on the SIBLING shared monorepo
-      # ("file:../shared/packages/sync"). They arrived with the sync work and nothing in CI ever provisioned
-      # them, so every job failed on the same missing module wearing different hats: TS2307 in typecheck, 26
-      # no-phantom-deps errors in the architecture gate, and 260 jest suites unable to resolve
-      # <workspace>/../shared/packages/sync/src/index.ts.
-      #
-      # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one level -
-      # which is exactly where the file: specifier and jest's moduleNameMapper both point.
-      #
-      # Matching branch first, main as the fallback: a PR that changes the app and the shared package together
-      # has to be tested against the package it expects, not against main's copy.
-      - name: Check out the shared monorepo
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
-        id: shared_branch
-        continue-on-error: true
-        uses: actions/checkout@v4
-        with:
-          repository: off-grid-ai/shared
-          token: ${{ env.PRO_SUBMODULE_PAT }}
-          path: _shared
-          ref: ${{ github.head_ref || github.ref_name }}
-          persist-credentials: false
-      - name: Fall back to shared main
-        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.shared_branch.outcome != 'success' }}
-        uses: actions/checkout@v4
-        with:
-          repository: off-grid-ai/shared
-          token: ${{ env.PRO_SUBMODULE_PAT }}
-          path: _shared
-          persist-credentials: false
-      - name: Put shared beside this checkout
-        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
-        run: |
-          rm -rf ../shared
-          mv _shared ../shared
-          # Its own deps and build, because npm resolves the file: dep to dist/ and jest to src/.
-          npm --prefix ../shared/packages/sync ci || npm --prefix ../shared/packages/sync install
-          npm --prefix ../shared/packages/sync run build
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Dependency-cruiser (architecture gate)
-        run: npm run depcruise
-
-      - name: knip (dead-code gate)
-        run: npm run knip
-
-  test:
+  ci:
     runs-on: macos-latest
     env:
       # Exposed at the job level so the step `if:` below can read it: the `secrets` context
@@ -238,9 +35,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check out pro submodule (private; skipped on open-core forks)
-        # When the PRO_SUBMODULE_PAT secret is present (this org's CI), pull the private
-        # pro/ submodule so the pro-dependent suites (TTS/MCP/audio) run against the REAL
-        # package — a green run then actually exercises pro, not a stub. Forks without the
+        # When the PRO_SUBMODULE_PAT secret is present (this org's CI), pull the private pro/
+        # submodule so the pro-dependent suites run against the REAL package — a green run then
+        # actually exercises pro, not a stub. It also matters to the other gates: tsc sees
+        # __tests__/pro/* importing @offgrid/pro/* (TS2307 without it), and knip/depcruise need it
+        # or their reachability graph is incomplete and reports false orphans. Forks without the
         # secret skip this: proExists=false and jest runs the open-core suite instead.
         if: ${{ env.PRO_SUBMODULE_PAT != '' }}
         env:
@@ -253,12 +52,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          # Node 26. The RAG/knowledge-base suites run a REAL in-memory database via node's
-          # built-in `node:sqlite` (__tests__/harness/sqliteFake.ts). That module is absent on
-          # Node 20 and flag-gated on Node 22. On Node 24 it loads but its native teardown
-          # SEGFAULTs the process under jest's --forceExit (exit 139) — reproduced locally: the
-          # full suite exits 139 on Node 24 and exits 0 on Node 26. Node 26's node:sqlite fixes
-          # that teardown crash, so the test runtime is pinned to 26.
+          # Node 26, pinned by the TEST gate and now shared by all of them. The RAG/knowledge-base
+          # suites run a REAL in-memory database via node's built-in `node:sqlite`
+          # (__tests__/harness/sqliteFake.ts). That module is absent on Node 20 and flag-gated on
+          # Node 22. On Node 24 it loads but its native teardown SEGFAULTs the process under jest's
+          # --forceExit (exit 139) — reproduced locally: the full suite exits 139 on Node 24 and
+          # exits 0 on Node 26. Node 26's node:sqlite fixes that teardown crash.
           node-version: '26'
           cache: 'npm'
 
@@ -269,16 +68,16 @@ jobs:
           java-version: '17'
 
       # @offgrid/sync and @offgrid/rag are file: dependencies on the SIBLING shared monorepo
-      # ("file:../shared/packages/sync"). They arrived with the sync work and nothing in CI ever provisioned
-      # them, so every job failed on the same missing module wearing different hats: TS2307 in typecheck, 26
-      # no-phantom-deps errors in the architecture gate, and 260 jest suites unable to resolve
-      # <workspace>/../shared/packages/sync/src/index.ts.
+      # ("file:../shared/packages/sync", "file:../shared/packages/rag"). They arrived with the sync
+      # work and nothing in CI ever provisioned them, so every gate failed on the same missing module
+      # wearing different hats: TS2307 in typecheck, 26 no-phantom-deps errors in the architecture
+      # gate, and 260 jest suites unable to resolve <workspace>/../shared/packages/sync/src/index.ts.
       #
-      # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one level -
-      # which is exactly where the file: specifier and jest's moduleNameMapper both point.
+      # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one
+      # level - which is exactly where the file: specifiers and jest's moduleNameMapper both point.
       #
-      # Matching branch first, main as the fallback: a PR that changes the app and the shared package together
-      # has to be tested against the package it expects, not against main's copy.
+      # Matching branch first, main as the fallback: a PR that changes the app and the shared package
+      # together has to be tested against the package it expects, not against main's copy.
       - name: Check out the shared monorepo
         if: ${{ env.PRO_SUBMODULE_PAT != '' }}
         id: shared_branch
@@ -303,28 +102,66 @@ jobs:
         run: |
           rm -rf ../shared
           mv _shared ../shared
-          # Its own deps and build, because npm resolves the file: dep to dist/ and jest to src/.
-          npm --prefix ../shared/packages/sync ci || npm --prefix ../shared/packages/sync install
+          # Install at the WORKSPACE ROOT, not inside packages/sync. shared is an npm-workspaces
+          # monorepo: the lockfile and the build tool (tsup) live at the root, and packages/sync
+          # declares neither. Installing inside the member therefore failed `npm ci` (no lockfile
+          # there), fell through to `npm install`, pulled the member's five runtime deps, and left
+          # the build to die on `sh: 1: tsup: not found` (exit 127) — which is what took every gate
+          # down with it.
+          npm --prefix ../shared ci
+          # Both packages this app consumes, because npm resolves each file: dep to its dist/ (jest
+          # reads src/, but tsc and metro read dist/). rag was never built at all before.
           npm --prefix ../shared/packages/sync run build
+          npm --prefix ../shared/packages/rag run build
 
-      - name: Install JS dependencies
+      - name: Install dependencies
+        id: install
         run: npm ci
 
+      - name: Install SwiftLint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: brew install swiftlint
+
+      # ── Gates. Every one runs even when an earlier one failed, so a single red gate cannot hide
+      # the rest; the job still fails if any of them do.
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run lint
+
+      - name: Type check
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npx tsc --noEmit
+
+      # Standing gates: dependency-cruiser (layering, engine DIP, import cycles, orphans — 0
+      # violations, no baseline) + knip (dead files/exports/types/deps — 0 issues). Both fail on
+      # anything NEW.
+      - name: Dependency-cruiser (architecture gate)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run depcruise
+
+      - name: knip (dead-code gate)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run knip
+
       - name: Run Jest tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npx jest --coverage --forceExit --runInBand
 
       - name: Install Android NDK
         # Configuring the native modules (op-sqlite etc.) needs the pinned NDK; the macOS
         # runner doesn't ship it, so the android test task failed at configure with
         # "Failed to install ndk;...". Install the version android/build.gradle forces.
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" "ndk;27.1.12297006" >/dev/null
 
       - name: Run Android tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: cd android && ./gradlew :app:testDebugUnitTest --rerun-tasks
 
       - name: Run iOS tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: |
           cd ios && xcodebuild test \
             -workspace OffgridMobile.xcworkspace \
@@ -334,6 +171,7 @@ jobs:
             2>&1 | (xcpretty 2>/dev/null || cat)
 
       - name: Upload coverage to Codecov
+        if: always()
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -363,6 +201,6 @@ jobs:
   # (see rules.md → On-device testing & verification). Docs-only / JS-only PRs don't need it.
 
   # NOTE: SonarCloud runs via Automatic Analysis (SonarCloud-side, on the public core project) —
-  # no CI job. A CI scan would only add coverage import, which Codecov (in the `test` job) already
-  # does, so it'd be redundant complexity. Pro is scanned locally by eslint-plugin-sonarjs (free,
-  # private, no leak). See docs/GAPS_BACKLOG.md.
+  # no CI job. A CI scan would only add coverage import, which Codecov already does, so it'd be
+  # redundant complexity. Pro is scanned locally by eslint-plugin-sonarjs (free, private, no leak).
+  # See docs/GAPS_BACKLOG.md.
