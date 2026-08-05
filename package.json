@@ -22,7 +22,13 @@
     "test:ios": "cd ios && xcodebuild test -workspace OffgridMobile.xcworkspace -scheme OffgridMobile -destination 'platform=iOS Simulator,name=iPhone 16e' -only-testing:OffgridMobileTests | (xcpretty 2>/dev/null || cat)",
     "postinstall": "patch-package",
     "depcruise": "depcruise src --config .dependency-cruiser.js",
-    "knip": "knip"
+    "knip": "knip",
+    "e2e:wda": "node scripts/ios/launch-wda.mjs",
+    "e2e:device": "node --test __tests__/device/*.e2e.mjs",
+    "e2e:coverage": "node scripts/e2e/collect-coverage.mjs",
+    "e2e:build:ios": "E2E_COVERAGE=1 npx react-native run-ios --device",
+    "e2e:build:android": "E2E_COVERAGE=1 npx react-native run-android --mode=debug --appId ai.offgridmobile.dev",
+    "test:device-parser": "node --test scripts/android/__tests__/adbClient.test.mjs"
   },
   "dependencies": {
     "@dr.pogodin/react-native-fs": "^2.38.1",
@@ -97,6 +103,7 @@
     "@types/node": "^25.3.5",
     "@types/react": "^19.2.0",
     "@types/react-test-renderer": "^19.1.0",
+    "babel-plugin-istanbul": "^8.0.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "dependency-cruiser": "^18.0.0",
     "eslint": "^8.19.0",
