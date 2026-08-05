@@ -7,7 +7,7 @@
  * and `disabled` flags + the `completedCount` from FOUR real reactive stores
  * (appStore, chatStore, projectStore, remoteServerStore). This is the single
  * source of truth for "which step is active/complete" that the home checklist
- * (useHomeScreen) renders — Provit cases 6, 18, 20, 26, 36, 38.
+ * (useHomeScreen) renders — device cases 6, 18, 20, 26, 36, 38.
  *
  * These tests drive the REAL stores and the REAL hook (via renderHook). Nothing
  * that is asserted is mocked — deleting the hook body or a store action would

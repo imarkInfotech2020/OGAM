@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
-import { WdaActor } from '../../../provit/src/ios/wdaActor.ts';
+import { WdaClient } from '../ios/wda-client.mjs';
 import {
   IosKnowledgeSyncDeviceAdapter,
   PhysicalSyncError,
@@ -78,7 +78,7 @@ function configFromEnvironment() {
 function createAdapter() {
   const config = configFromEnvironment();
   return new IosKnowledgeSyncDeviceAdapter({
-    actor: new WdaActor(config.wdaUrl),
+    actor: new WdaClient(config.wdaUrl),
     device: new DevicectlBoundary(config),
     config,
   });

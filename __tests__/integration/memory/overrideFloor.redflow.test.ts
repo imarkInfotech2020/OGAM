@@ -4,7 +4,7 @@
  * evicts everything else and LOADS — no survival floor, no refusal ("if the user wants to load
  * anyway, you let him"). Each case contrasts a NORMAL load (which refuses) against the SAME load
  * under override (which loads) so the bypass is falsifiable, not a trivially-true assertion. The
- * actual on-device jetsam outcome is device-only (Provit); this asserts the gate verdict.
+ * actual on-device jetsam outcome is device-only (device-only); this asserts the gate verdict.
  */
 import { modelResidencyManager } from '../../../src/services/modelResidency';
 import { setDeviceMemory, resetDeviceMemory, gbOf } from '../../harness/deviceMemory';

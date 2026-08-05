@@ -1,7 +1,7 @@
 /**
  * BATCH 9 — Knowledge Base add → indexed → searchable round-trip (REAL sqlite semantics).
  *
- * Provit plan lines 1409-1549 (Knowledge Base cases 11-30). The existing RAG suites
+ * on-device test-plan lines 1409-1549 (Knowledge Base cases 11-30). The existing RAG suites
  * (__tests__/unit/services/rag/*, __tests__/integration/rag/ragFlow.test.ts) mock
  * `db.executeSync` by feeding canned rows back per SQL string — the DB never actually
  * stores anything, so retrieval "finds" whatever the mock was told to return. That is a
@@ -209,7 +209,7 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
   // is the behaviour a KB search depends on. The op-sqlite BLOB→Float32Array decode
   // (RagDatabase.blobToEmbedding) relies on `instanceof ArrayBuffer`, which the RN jest
   // environment breaks across module realms (a jest-only artifact — on device there is
-  // one JS realm, so it decodes fine; the real device path is proven by the Provit
+  // one JS realm, so it decodes fine; the real device path is proven by the on-device
   // journey). So we substitute ONLY that decode boundary with the already-decoded
   // number[] embeddings a real device returns, and let the REAL retrieval rank them.
   it('retrieval ranks the closer doc first by real cosine similarity (case 14)', async () => {

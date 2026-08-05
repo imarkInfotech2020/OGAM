@@ -12,7 +12,7 @@
  * download the user never used, whisper is NOT resident. RED on HEAD: it is. Falsify: comment out the
  * auto-load line and whisper stays absent → green.
  *
- * Native residue the HUMAN confirms manually (no Provit): that the resident 1.5GB actually causes memory
+ * Native residue the HUMAN confirms manually (no device run): that the resident 1.5GB actually causes memory
  * pressure on device. The fake test proves the JS auto-load leak — the necessary condition.
  */
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';

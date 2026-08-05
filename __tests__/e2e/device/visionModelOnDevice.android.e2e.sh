@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # On-device e2e (Android, adb): download a vision GGUF, load it, and PROVE multimodal initialised.
 #
-# This is a REAL device test — no Provit journey engine, just adb driving + the app's own debug log.
+# This is a REAL device test — no journey engine, just adb driving + the app's own debug log.
 # It codifies the flow we hand-drove during the A1 (mmproj) verification so it is repeatable.
 #
 # Assertion (the mmproj-fix proof): after the model loads, offgrid-debug.log must contain

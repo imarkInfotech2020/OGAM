@@ -11,9 +11,9 @@
  *    (the stop-only-while-preparing seam, at the speak layer).
  *  - "stop the other message before starting a new one" — the engine runs one stream
  *    at a time; a new speak while a DIFFERENT message plays must stop the old first
- *    (Provit case 17: a new message supersedes the current stream, no dual playback).
+ *    (device case 17: a new message supersedes the current stream, no dual playback).
  *  - engine-not-ready graceful bail → dispatches `ended` (no throw, no stuck spinner):
- *    this is the deleted/unavailable-engine case (Provit case 33: tapping speak with
+ *    this is the deleted/unavailable-engine case (device case 33: tapping speak with
  *    the TTS engine removed must not crash — it settles back to idle).
  *  - a synthesis failure dispatches `failed` (error surfaced, status back to idle).
  *
@@ -120,7 +120,7 @@ describe('speakMessage — supersede: stop the other message before starting', (
 
 describe('speakMessage — engine not ready (deleted / unavailable engine)', () => {
   it('bails to idle without throwing when the engine is not ready and not downloaded (deleted-engine case)', async () => {
-    // Provit case 33: the TTS engine was removed. Tapping speak must NOT crash; the
+    // device case 33: the TTS engine was removed. Tapping speak must NOT crash; the
     // machine dispatches `ended` and settles back to idle.
     mockEngine.getPhase.mockReturnValue('idle');
     mockEngine.isFullyDownloaded.mockReturnValue(false);

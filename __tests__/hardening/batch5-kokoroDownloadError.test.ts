@@ -5,7 +5,7 @@
  * kokoroLiveState suites prove the download HAPPY path, mid-download honesty, the
  * benign "already downloading" collision, and delete — but never the case where the
  * executorch fetch REJECTS with a real (non-collision) error, e.g. an offline
- * download (Provit cases 34/35: "download enters error / network-waiting state").
+ * download (device cases 34/35: "download enters error / network-waiting state").
  *
  * This drives the REAL KokoroEngine (from @offgrid/pro) — only the native
  * BareResourceFetcher boundary is mocked (via jest.setup). Deleting the error-cascade

@@ -13,8 +13,8 @@
  *    emits NO <__media__> marker, so the image is effectively dropped from the prompt.
  *
  * This file locks the llama.cpp send-gate behavior (the image-dropped-when-no-vision
- * path, Provit #27 service side) and the image-attachment build for a vision model
- * (Provit #22/#24/#25 — the built prompt/OAI message actually carries the image),
+ * path, device case #27 service side) and the image-attachment build for a vision model
+ * (device case #22/#24/#25 — the built prompt/OAI message actually carries the image),
  * including the MULTI-image build which the existing suite does not cover.
  */
 

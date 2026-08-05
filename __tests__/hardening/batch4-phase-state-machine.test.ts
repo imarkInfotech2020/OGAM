@@ -1,7 +1,7 @@
 /**
  * BATCH 4 (Image Generation) — hardening.
  *
- * Provit cases 17, 18, 20, 22, 26 assert the OBSERVABLE image-generation
+ * device cases 17, 18, 20, 22, 26 assert the OBSERVABLE image-generation
  * lifecycle: the in-progress card appears, its status transitions from an
  * enhancing phase to a generating phase, a second in-flight request is silently
  * ignored, cancel mid-flight tears the card down, and generation with

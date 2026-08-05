@@ -126,8 +126,8 @@ export class IosKnowledgeSyncDeviceAdapter {
       throw new PhysicalSyncError(
         'WDA_UNAVAILABLE',
         `WebDriverAgent is not reachable at ${this.config.wdaUrl}. Run ` +
-          `PROVIT_UDID=${this.config.deviceId} node ../provit/src/ios/launchWda.ts, ` +
-          'then set IOS_SYNC_WDA_URL to the newly printed PROVIT_WDA_URL',
+          `WDA_UDID=${this.config.deviceId} node scripts/ios/launch-wda.mjs, ` +
+          'then set IOS_SYNC_WDA_URL to the newly printed WDA_URL',
       );
     }
     if (!device.appInstalled) {

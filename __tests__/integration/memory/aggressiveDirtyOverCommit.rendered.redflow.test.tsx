@@ -124,7 +124,7 @@ describe('T103 / M6 (rendered) — aggressive policy over-commits a 9GB dirty im
     // floor). So the old "we evicted everything and there's STILL no memory" NON-overridable card is
     // unreachable. That override-always-loads invariant is proven at the service altitude in
     // overrideFloor.redflow (M3/M4/M6); whether the forced 9GB dirty load then survives is the native OOM
-    // outcome (Provit, per the SPLIT note above) — not something the in-Node fake can honestly assert.
+    // outcome (device-only, per the SPLIT note above) — not something the in-Node fake can honestly assert.
 
     stopSync();
   });

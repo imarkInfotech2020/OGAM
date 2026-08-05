@@ -83,7 +83,7 @@ correct-behavior assertion is red on HEAD.
 | Q14 | image model → assert `checkMemoryForModel` verdict == `makeRoomFor` verdict | ramSensor | two different size multipliers |
 | Q15 | drive `ensureResident` with `fits=false` → assert native load NOT called | stubEngines | ignores `fits`, loads anyway |
 > Note: M2/M3/M4/M6 jest proves the gate ADMITS/REFUSES (necessary). The actual jetsam is DEVICE-ONLY
-> (Provit) — jest cannot prove the SIGKILL. Both are listed; the jest red test is the gate verdict.
+> (device-only) — jest cannot prove the SIGKILL. Both are listed; the jest red test is the gate verdict.
 
 ### Engine parity (real generationService/toolLoop/litert dispatch + `modelMedia`)
 | Bug | Flow → assertion | Boundary | Fails today because |
@@ -151,7 +151,7 @@ correct-behavior assertion is red on HEAD.
 | M10 | a test placed in `__tests__/**/{android,ios}/**` actually RUNS | unanchored `/android//ios/` ignore pattern |
 
 ## The device-only ceiling (be honest — jest can't prove these)
-For these, the jest red test proves the **necessary** condition (gate verdict / store state); a **Provit
+For these, the jest red test proves the **necessary** condition (gate verdict / store state); an **on-device
 on-device journey** proves the **sufficient** condition. Both are required; don't claim the jest test
 alone verifies them:
 - M2/M3/M4/M6 — actual jetsam SIGKILL at the admitted size (jest: "gate admits it").
@@ -194,4 +194,4 @@ freshly required. Then Q1/Q7/Q8/Q17/memory/screen-mount verticals all reuse it.
    → projects → thinking), each RED on HEAD, each named `*.redflow.test.ts` until its fix lands.
 3. Only after the red suite exists and is reviewed: the fix plan (grouped by root seam), each fix
    flipping its red test(s) green. That is a SEPARATE plan, made later.
-4. Device ceiling: a matching Provit journey list for the on-device-only conditions.
+4. Device ceiling: a matching on-device journey list for the on-device-only conditions.

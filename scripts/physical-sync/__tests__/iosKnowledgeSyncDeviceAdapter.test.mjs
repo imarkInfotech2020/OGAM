@@ -275,10 +275,10 @@ test('rejects a stale WDA URL with the exact relaunch requirement', async () => 
       error instanceof PhysicalSyncError &&
       error.code === 'WDA_UNAVAILABLE' &&
       error.message.includes(
-        'PROVIT_UDID=physical-iphone node ../provit/src/ios/launchWda.ts',
+        'WDA_UDID=physical-iphone node scripts/ios/launch-wda.mjs',
       ) &&
       error.message.includes(
-        'set IOS_SYNC_WDA_URL to the newly printed PROVIT_WDA_URL',
+        'set IOS_SYNC_WDA_URL to the newly printed WDA_URL',
       ),
   );
 });

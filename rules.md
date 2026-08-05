@@ -218,7 +218,7 @@ The repo has three automated reviewers on every PR. After pushing, loop until al
 ## PR hygiene (lean)
 
 - One concern per PR, small diff. Ship the one rendered test that would fail without the change.
-- No Provit journey, no self-audit comment, no mandatory ceremony. Multi-agent fan-out is opt-in, only when asked.
+- No on-device journey, no self-audit comment, no mandatory ceremony. Multi-agent fan-out is opt-in, only when asked.
 
 ---
 
@@ -235,12 +235,11 @@ here: the vision fix worked on iOS yet needed separate Android verification. Ful
 3. `/hygiene` audit — pass.
 4. CI all green: lint, typecheck, test, architecture, android-build, SonarCloud, CodeRabbit.
 
-## Driving the devices yourself (no Provit journey engine)
+## Driving the devices yourself (no journey engine)
 - **iOS (physical):** drive **WebDriverAgent (WDA) directly over HTTP**. Bring the WDA server up with
-  `provit/src/ios/launchWda.ts` (`PROVIT_UDID=<hardware-udid>`) — that script is ONLY the WDA-server
+  `scripts/ios/launch-wda.mjs` (`WDA_UDID=<hardware-udid>`) — that script is ONLY the WDA-server
   recipe (build-for-testing `generic/platform=iOS`, install via `devicectl`, launch via
-  `xcodebuild test-without-building`; serves at `http://<device-LAN-IP>:8100`). Do NOT use the Provit
-  vision/journey engine. Then curl WDA: `POST /session` `{capabilities:{alwaysMatch:{bundleId}}}`,
+  `xcodebuild test-without-building`; serves at `http://<device-LAN-IP>:8100`). Then curl WDA: `POST /session` `{capabilities:{alwaysMatch:{bundleId}}}`,
   `GET /session/:id/screenshot` (base64 PNG), find by `POST /session/:id/element {using:"accessibility id"}`
   → `/click`, type via `/wda/keys` or element `/value`, `POST /session/:id/actions` for a W3C tap.
 - **Android (physical):** drive with **`adb` directly** — `adb shell input tap X Y | text | swipe`,

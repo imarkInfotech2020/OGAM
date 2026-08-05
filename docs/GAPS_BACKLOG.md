@@ -8,7 +8,7 @@ This file only ever contains work that is still open.
 Verdict legend:
 - **delete-safe** - unreferenced / unreachable and provably unused; remove it.
 - **fix-the-guard** - the branch is SUPPOSED to fire but a condition prevents it; fix the condition (a latent bug, not litter).
-- **instrument-and-revisit** - uncertain trigger; add a `[*-SM]` trace + a Provit journey to observe it live before deciding.
+- **instrument-and-revisit** - uncertain trigger; add a `[*-SM]` trace + an on-device journey to observe it live before deciding.
 
 ---
 

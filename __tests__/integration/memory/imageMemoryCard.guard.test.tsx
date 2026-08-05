@@ -60,7 +60,7 @@ describe('memory OOM-avoidance — image gen + ModelFailureCard (guards)', () =>
     // budget stops refusing — the user is NEVER dead-ended at "we evicted everything and there's STILL
     // no memory". After the override attempt the memory-refusal card is gone (the gate admitted the load).
     // Whether the forced 8GB dirty load then survives on the physical device is the native OOM outcome —
-    // Provit, not something the in-Node fake can honestly assert.
+    // an on-device run, not something the in-Node fake can honestly assert.
     const view = t.render(t.React.createElement(t.ModelFailureCard, {}));
     expect(view.queryByText('Image model: Not Enough Memory')).toBeNull();
   });

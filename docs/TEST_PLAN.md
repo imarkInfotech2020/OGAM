@@ -176,5 +176,5 @@ seams + add the new device-proven journeys:
 ## Honesty bar
 - Red tests fail for the RIGHT reason (the real symptom the user saw), verified by falsification.
 - Where a bug has no honest UI manifestation in jest (pure device/thermal/native-crash), say so and mark it
-  Provit, don't fake a green.
+  an on-device run, don't fake a green.
 - Report each test as code / wired / verified — never inflate.
