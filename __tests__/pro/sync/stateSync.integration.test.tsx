@@ -252,6 +252,9 @@ describe('Pro mobile state sync journey', () => {
       ).toBeTruthy(),
     );
     expect(ui.queryByTestId('sync-no-devices')).toBeNull();
+    // The heading is there while there IS a device under it - the other half of the pair, so a fix that simply
+    // deleted the heading would fail here.
+    expect(ui.getByText('Available')).toBeTruthy();
     expect(ui.queryByTestId('sync-scanning')).toBeNull();
     expect(ui.queryByTestId('sync-rescan-error')).toBeNull();
     expect(discovery.publishedPort).toBeGreaterThan(0);
@@ -271,6 +274,9 @@ describe('Pro mobile state sync journey', () => {
     // come back, or the screen tells the user to go and do the thing they have just finished doing, directly above
     // the device they did it to. It reads as the app failing to see the peer it is holding a pairing with.
     expect(ui.queryByTestId('sync-no-devices')).toBeNull();
+    // And the "Available" heading goes with it. A heading over blank space is worse than the notice it replaced -
+    // it reads as a list that failed to load, so the user rescans a mesh that is working.
+    expect(ui.queryByText('Available')).toBeNull();
 
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
     fireEvent(ui.getByTestId('sync-projects-toggle'), 'valueChange', false);
