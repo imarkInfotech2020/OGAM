@@ -171,6 +171,17 @@ pre-commit hook by design.
 - Mount the real screen, arrive via real gestures, assert what the user SEES. Fakes ONLY at the device boundary (`__tests__/harness/`); never mock our own code.
 - **While iterating, run ONLY that test's file.** Do NOT run `--findRelatedTests` or the whole suite per fix — the full suite runs once at pre-push (the gate is the safety net).
 - **No unit tests required. No coverage thresholds.** If a mockist test (mocks our own code, or asserts `toHaveBeenCalled`) fails, DELETE it — never repair it.
+- **NO MOCKS OF OUR OWN CODE. EVER.** Not a service, not a store, not a hook. The two ways this rule
+  gets broken by people who have read it:
+  - **The boundary drawn too high.** "Loading a model needs the native engine, so I'll fake
+    `activeModelService`" — wrong at the second step. `llama.rn` and `react-native-executorch` are the
+    native modules and `jest.setup.ts` already fakes both. Everything between the tap and them is ours
+    and runs real. If you are faking one of our services because "the native part can't run", find the
+    actual native import and fake THAT instead.
+  - **Reaching the precondition by writing state.** `store.setState({ field })` proves only that
+    something can read a field you set. `store.getState().action(value)` is better and is sometimes the
+    honest ceiling for a hook whose contract IS a derivation. The target is the real gesture: render the
+    screen, press the thing, let the code that sets the state set it.
 - "Show the red" (stash the fix, watch it fail) is optional: do it only for genuinely new behavior, skip it for a clear bug fix.
 - Confirm a device fix against the log FIRST — pull only the live-session tail (from the last `===== session start =====`), never the whole file.
 
