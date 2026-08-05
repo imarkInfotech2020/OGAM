@@ -555,38 +555,6 @@ faked) rather than a re-mocked one:
 Policy this follows: a mockist suite is deleted, not repaired, and the coverage it was claiming is logged
 here as a gap instead of being carried as a green number. Lower and true beats higher and fake.
 
-## Cross-suite timer leak makes the rendered generation suites non-deterministic
-
-**Verdict: fix-the-guard (test hygiene, not product code).**
-
-Running `__tests__/integration/generation` + `__tests__/rntl/screens` together fails ONE suite per run, and
-a different one each time - observed across four runs as `stopDuringThinkingKeepsReasoning`,
-`RemoteServersScreen`, `enhancementReasoningPrompt`, and once all 922 passing. Every suite passes in
-isolation, so nothing is wrong with the tests that report the failure; they are just whichever suite landed
-in the unlucky slot.
-
-The mechanism is visible in the stack:
-
-```
-TypeError: Cannot read properties of undefined (reading 'getState')
-  at speakableStreamingAnswer (src/stores/chatStore.ts:23:47)
-  at Object.appendToStreamingMessage (src/stores/chatStore.ts:182:78)
-  at GenerationService.flushTokenBuffer (src/services/generationService.ts:78:15)
-  at Timeout._onTimeout (src/services/generationServiceHelpers.ts:149:22)
-```
-
-`generationServiceHelpers` schedules a 50ms token-buffer flush. When a suite ends mid-generation the timer
-is still pending; it fires during the NEXT suite, which has called `jest.resetModules()` (chatHarness does,
-by design), so the module `chatStore` closed over is gone and its import reads as undefined. The token
-buffer is a real product optimisation - the fault is that tests leave a generation in flight.
-
-Fix: the harness should cancel in-flight generation on teardown (an `afterEach` that stops the service and
-drains the buffered flush), so no timer outlives its module registry. Worth doing before chasing red CI on
-mobile - an intermittent single-suite failure with a moving name is exactly what this produces.
-
-This is PRE-EXISTING and unrelated to the mockist deletions: it reproduces with those files restored, and
-the failing suite moves regardless.
-
 ## Image-generation journeys left uncovered by deleting imageGenerationFlow.test.ts
 
 `__tests__/integration/generation/imageGenerationFlow.test.ts` was deleted: 60 tests that stood in for

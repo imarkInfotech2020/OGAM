@@ -650,8 +650,15 @@ beforeEach(() => {
 afterEach(() => {
   // Only unmount when a test actually rendered via requireRTL (which stashed its own cleanup here). Do NOT
   // require RTL fresh — after a test's resetModules that pulls a new module graph and breaks the next test.
-  const g = globalThis as unknown as { __RTL_CLEANUP__?: () => void };
+  const g = globalThis as unknown as { __RTL_CLEANUP__?: () => void; __GEN_CLEANUP__?: () => void };
   if (g.__RTL_CLEANUP__) { try { g.__RTL_CLEANUP__(); } catch { /* already torn down */ } g.__RTL_CLEANUP__ = undefined; }
+  // A generation left IN FLIGHT outlives its test. generationServiceHelpers schedules a 50ms token-buffer
+  // flush; when a suite ends mid-reply that timer fires during the NEXT suite, which has since called
+  // jest.resetModules(), so the chatStore the callback closed over is gone and it throws
+  // "Cannot read properties of undefined (reading 'getState')" — failing whichever suite happened to be
+  // running. That is why exactly one rendered suite failed per run, with a different name each time, and why
+  // it always passed in isolation. Whoever started a generation registers the stop here.
+  if (g.__GEN_CLEANUP__) { try { g.__GEN_CLEANUP__(); } catch { /* already torn down */ } g.__GEN_CLEANUP__ = undefined; }
 });
 
 // Global timeout for async operations

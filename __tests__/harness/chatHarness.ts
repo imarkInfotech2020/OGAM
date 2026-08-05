@@ -132,6 +132,20 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // can assert nothing is eager-warmed; the first send then triggers the real lazy load.
   if (!opts.deferInitialLoad) await activeModelService.loadTextModel('m');
 
+  // Stop any generation this suite leaves in flight, on THIS module graph, before the next suite resets
+  // modules. Registered the same way requireRTL registers its unmount (a global jest.setup's afterEach
+  // calls), because jest.setup must not require these modules itself - doing so would instantiate them in
+  // the hundred suites that never touch generation. Without it, a suite that ends mid-reply leaves a 50ms
+  // token-flush timer that fires inside the NEXT suite and fails it, which is why exactly one rendered
+  // suite failed per run with a different name every time.
+  {
+
+    const { generationService } = require('../../src/services');
+    (globalThis as unknown as { __GEN_CLEANUP__?: () => void }).__GEN_CLEANUP__ = () => {
+      generationService.stopGeneration().catch(() => { });
+    };
+  }
+
   routeHolder.params = {}; // new chat — the first send() creates the conversation
 
   return {
