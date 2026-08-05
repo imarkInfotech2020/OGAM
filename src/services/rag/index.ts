@@ -11,7 +11,6 @@ import {
 import logger from '../../utils/logger';
 
 export type { RagDocument, RagSearchResult } from './database';
-export { chunkDocument } from './chunking';
 export { retrievalService } from './retrieval';
 interface IndexProgress {
   stage: 'extracting' | 'chunking' | 'indexing' | 'embedding' | 'done';
