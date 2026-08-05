@@ -618,3 +618,16 @@ STILL UNCOVERED, each a real user-visible journey wanting a rendered test:
 
 Policy: the mockist file is gone rather than repaired, and what it was claiming is written down here instead
 of carried as a green number.
+
+## Two real-sqlite adapters for one boundary (harness DRY)
+
+`__tests__/harness/sqliteFake.ts` exposes `installRealSqlite` / `doMockRealSqlite`, backing the op-sqlite
+boundary with a real `node:sqlite` in-memory database. `__tests__/hardening/batch9-kb-roundtrip.test.ts`
+hand-rolls the SAME adapter inline (`makeInMemoryDb`, its own `toParam` blob conversion, its own
+transaction/DDL special-casing). Both are real sqlite and both are correct today, which is the problem: the
+next schema change (or the next blob column) has to be understood twice, and a divergence between them would
+show up as a knowledge-base test failing for reasons that have nothing to do with the knowledge base -
+exactly the failure mode batch9's own header describes from its previous hand-rolled matcher.
+
+Fix: batch9 requires `doMockRealSqlite` from the harness and deletes its private engine. Low risk (both
+already pass over real sqlite), and it makes the harness the single definition of that boundary.
