@@ -103,12 +103,15 @@ jobs:
           rm -rf ../shared
           mv _shared ../shared
           # Install at the WORKSPACE ROOT, not inside packages/sync. shared is an npm-workspaces
-          # monorepo: the lockfile and the build tool (tsup) live at the root, and packages/sync
-          # declares neither. Installing inside the member therefore failed `npm ci` (no lockfile
-          # there), fell through to `npm install`, pulled the member's five runtime deps, and left
-          # the build to die on `sh: 1: tsup: not found` (exit 127) — which is what took every gate
-          # down with it.
-          npm --prefix ../shared ci
+          # monorepo: the lock file and the build tool (tsup) live at the root, and packages/sync
+          # declares neither. Installing inside the member failed `npm ci` (no lock file there), fell
+          # through to `npm install`, pulled the member's five runtime deps, and left the build to die
+          # on `sh: 1: tsup: not found` (exit 127) — which took every gate down with it.
+          #
+          # The `|| install` fallback stays, but at the ROOT where it can still provide tsup: a
+          # drifted lock file should degrade, not break. That drift was real too - five packages were
+          # committed to shared without regenerating its lock, so `npm ci` refused outright.
+          npm --prefix ../shared ci || npm --prefix ../shared install
           # Both packages this app consumes, because npm resolves each file: dep to its dist/ (jest
           # reads src/, but tsc and metro read dist/). rag was never built at all before.
           npm --prefix ../shared/packages/sync run build
