@@ -28,6 +28,45 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # @offgrid/sync and @offgrid/rag are file: dependencies on the SIBLING shared monorepo
+      # ("file:../shared/packages/sync"). They arrived with the sync work and nothing in CI ever provisioned
+      # them, so every job failed on the same missing module wearing different hats: TS2307 in typecheck, 26
+      # no-phantom-deps errors in the architecture gate, and 260 jest suites unable to resolve
+      # <workspace>/../shared/packages/sync/src/index.ts.
+      #
+      # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one level -
+      # which is exactly where the file: specifier and jest's moduleNameMapper both point.
+      #
+      # Matching branch first, main as the fallback: a PR that changes the app and the shared package together
+      # has to be tested against the package it expects, not against main's copy.
+      - name: Check out the shared monorepo
+        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        id: shared_branch
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: off-grid-ai/shared
+          token: ${{ env.PRO_SUBMODULE_PAT }}
+          path: _shared
+          ref: ${{ github.head_ref || github.ref_name }}
+          persist-credentials: false
+      - name: Fall back to shared main
+        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.shared_branch.outcome != 'success' }}
+        uses: actions/checkout@v4
+        with:
+          repository: off-grid-ai/shared
+          token: ${{ env.PRO_SUBMODULE_PAT }}
+          path: _shared
+          persist-credentials: false
+      - name: Put shared beside this checkout
+        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        run: |
+          rm -rf ../shared
+          mv _shared ../shared
+          # Its own deps and build, because npm resolves the file: dep to dist/ and jest to src/.
+          npm --prefix ../shared/packages/sync ci || npm --prefix ../shared/packages/sync install
+          npm --prefix ../shared/packages/sync run build
+
       - name: Install dependencies
         run: npm ci
 
@@ -64,6 +103,45 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # @offgrid/sync and @offgrid/rag are file: dependencies on the SIBLING shared monorepo
+      # ("file:../shared/packages/sync"). They arrived with the sync work and nothing in CI ever provisioned
+      # them, so every job failed on the same missing module wearing different hats: TS2307 in typecheck, 26
+      # no-phantom-deps errors in the architecture gate, and 260 jest suites unable to resolve
+      # <workspace>/../shared/packages/sync/src/index.ts.
+      #
+      # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one level -
+      # which is exactly where the file: specifier and jest's moduleNameMapper both point.
+      #
+      # Matching branch first, main as the fallback: a PR that changes the app and the shared package together
+      # has to be tested against the package it expects, not against main's copy.
+      - name: Check out the shared monorepo
+        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        id: shared_branch
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: off-grid-ai/shared
+          token: ${{ env.PRO_SUBMODULE_PAT }}
+          path: _shared
+          ref: ${{ github.head_ref || github.ref_name }}
+          persist-credentials: false
+      - name: Fall back to shared main
+        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.shared_branch.outcome != 'success' }}
+        uses: actions/checkout@v4
+        with:
+          repository: off-grid-ai/shared
+          token: ${{ env.PRO_SUBMODULE_PAT }}
+          path: _shared
+          persist-credentials: false
+      - name: Put shared beside this checkout
+        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        run: |
+          rm -rf ../shared
+          mv _shared ../shared
+          # Its own deps and build, because npm resolves the file: dep to dist/ and jest to src/.
+          npm --prefix ../shared/packages/sync ci || npm --prefix ../shared/packages/sync install
+          npm --prefix ../shared/packages/sync run build
+
       - name: Install dependencies
         run: npm ci
 
@@ -97,6 +175,45 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+
+      # @offgrid/sync and @offgrid/rag are file: dependencies on the SIBLING shared monorepo
+      # ("file:../shared/packages/sync"). They arrived with the sync work and nothing in CI ever provisioned
+      # them, so every job failed on the same missing module wearing different hats: TS2307 in typecheck, 26
+      # no-phantom-deps errors in the architecture gate, and 260 jest suites unable to resolve
+      # <workspace>/../shared/packages/sync/src/index.ts.
+      #
+      # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one level -
+      # which is exactly where the file: specifier and jest's moduleNameMapper both point.
+      #
+      # Matching branch first, main as the fallback: a PR that changes the app and the shared package together
+      # has to be tested against the package it expects, not against main's copy.
+      - name: Check out the shared monorepo
+        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        id: shared_branch
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: off-grid-ai/shared
+          token: ${{ env.PRO_SUBMODULE_PAT }}
+          path: _shared
+          ref: ${{ github.head_ref || github.ref_name }}
+          persist-credentials: false
+      - name: Fall back to shared main
+        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.shared_branch.outcome != 'success' }}
+        uses: actions/checkout@v4
+        with:
+          repository: off-grid-ai/shared
+          token: ${{ env.PRO_SUBMODULE_PAT }}
+          path: _shared
+          persist-credentials: false
+      - name: Put shared beside this checkout
+        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        run: |
+          rm -rf ../shared
+          mv _shared ../shared
+          # Its own deps and build, because npm resolves the file: dep to dist/ and jest to src/.
+          npm --prefix ../shared/packages/sync ci || npm --prefix ../shared/packages/sync install
+          npm --prefix ../shared/packages/sync run build
 
       - name: Install dependencies
         run: npm ci
@@ -150,6 +267,45 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      # @offgrid/sync and @offgrid/rag are file: dependencies on the SIBLING shared monorepo
+      # ("file:../shared/packages/sync"). They arrived with the sync work and nothing in CI ever provisioned
+      # them, so every job failed on the same missing module wearing different hats: TS2307 in typecheck, 26
+      # no-phantom-deps errors in the architecture gate, and 260 jest suites unable to resolve
+      # <workspace>/../shared/packages/sync/src/index.ts.
+      #
+      # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one level -
+      # which is exactly where the file: specifier and jest's moduleNameMapper both point.
+      #
+      # Matching branch first, main as the fallback: a PR that changes the app and the shared package together
+      # has to be tested against the package it expects, not against main's copy.
+      - name: Check out the shared monorepo
+        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        id: shared_branch
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: off-grid-ai/shared
+          token: ${{ env.PRO_SUBMODULE_PAT }}
+          path: _shared
+          ref: ${{ github.head_ref || github.ref_name }}
+          persist-credentials: false
+      - name: Fall back to shared main
+        if: ${{ env.PRO_SUBMODULE_PAT != '' && steps.shared_branch.outcome != 'success' }}
+        uses: actions/checkout@v4
+        with:
+          repository: off-grid-ai/shared
+          token: ${{ env.PRO_SUBMODULE_PAT }}
+          path: _shared
+          persist-credentials: false
+      - name: Put shared beside this checkout
+        if: ${{ env.PRO_SUBMODULE_PAT != '' }}
+        run: |
+          rm -rf ../shared
+          mv _shared ../shared
+          # Its own deps and build, because npm resolves the file: dep to dist/ and jest to src/.
+          npm --prefix ../shared/packages/sync ci || npm --prefix ../shared/packages/sync install
+          npm --prefix ../shared/packages/sync run build
 
       - name: Install JS dependencies
         run: npm ci
