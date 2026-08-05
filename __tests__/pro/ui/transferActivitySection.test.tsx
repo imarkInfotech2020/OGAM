@@ -16,6 +16,7 @@
 
 import React from 'react';
 import { render, fireEvent, within } from '@testing-library/react-native';
+import { requirePro } from '../helpers/requirePro';
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
@@ -30,16 +31,16 @@ let TransferActivitySection: SectionModule['TransferActivitySection'];
 let available = true;
 
 beforeAll(() => {
-  try {
-    const data = require('@offgrid/pro/sync/syncControlCenterData') as DataModule;
-    const section =
-      require('@offgrid/pro/ui/SyncScreen/TransferActivitySection') as SectionModule;
-    projectMobileSyncActivity = data.projectMobileSyncActivity;
-    TransferActivitySection = section.TransferActivitySection;
-  } catch {
-    // The private pro/ submodule is absent (open-core checkout); nothing to test here.
+  const data = requirePro<DataModule>('@offgrid/pro/sync/syncControlCenterData');
+  const section = requirePro<SectionModule>(
+    '@offgrid/pro/ui/SyncScreen/TransferActivitySection',
+  );
+  if (!data || !section) {
     available = false;
+    return;
   }
+  projectMobileSyncActivity = data.projectMobileSyncActivity;
+  TransferActivitySection = section.TransferActivitySection;
 });
 
 const THE_MAC = 'the-mac';
@@ -125,12 +126,7 @@ const completedReceive = {
   totalBytes: 64,
 } as never;
 
-const guard = (): boolean => {
-  if (!available) {
-    console.warn('pro/ is absent - skipping the Activity list tests');
-  }
-  return available;
-};
+const guard = (): boolean => available;
 
 describe('the Activity list', () => {
   it('says what happened to a transfer, in words and numbers the user reads', () => {

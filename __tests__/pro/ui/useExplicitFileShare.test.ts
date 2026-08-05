@@ -16,6 +16,7 @@
 
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
+import { requirePro } from '../helpers/requirePro';
 
 const mockPicker = { pick: jest.fn() };
 jest.mock('@react-native-documents/picker', () => ({
@@ -42,15 +43,12 @@ let useExplicitFileShare: HookModule['useExplicitFileShare'];
 let available = true;
 
 beforeAll(() => {
-  try {
-    /* eslint-disable @typescript-eslint/no-var-requires */
-    useExplicitFileShare = (
-      require('@offgrid/pro/ui/SyncScreen/useExplicitFileShare') as HookModule
-    ).useExplicitFileShare;
-    /* eslint-enable @typescript-eslint/no-var-requires */
-  } catch {
-    available = false; // private pro/ submodule absent
+  const mod = requirePro<HookModule>('@offgrid/pro/ui/SyncScreen/useExplicitFileShare');
+  if (!mod) {
+    available = false;
+    return;
   }
+  useExplicitFileShare = mod.useExplicitFileShare;
 });
 
 const CONNECTED_MAC = {

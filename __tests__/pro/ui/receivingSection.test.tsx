@@ -16,6 +16,7 @@
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
+import { requirePro } from '../helpers/requirePro';
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
@@ -29,16 +30,13 @@ let RECEIVE_ANY_SOURCE: SectionModule['RECEIVE_ANY_SOURCE'];
 let available = true;
 
 beforeAll(() => {
-  try {
-    /* eslint-disable @typescript-eslint/no-var-requires */
-    const mod = require('@offgrid/pro/ui/SyncScreen/ReceivingSection') as SectionModule;
-    /* eslint-enable @typescript-eslint/no-var-requires */
-    ReceivingSection = mod.ReceivingSection;
-    RECEIVE_ANY_SOURCE = mod.RECEIVE_ANY_SOURCE;
-  } catch {
-    // The private pro/ submodule is absent (open-core checkout); nothing to test here.
+  const mod = requirePro<SectionModule>('@offgrid/pro/ui/SyncScreen/ReceivingSection');
+  if (!mod) {
     available = false;
+    return;
   }
+  ReceivingSection = mod.ReceivingSection;
+  RECEIVE_ANY_SOURCE = mod.RECEIVE_ANY_SOURCE;
 });
 
 const handlers = () => ({
