@@ -1,8 +1,6 @@
 import {
-  parseSyncedMessageContext,
   projectSyncedMessageTurn,
   serializeSyncedMessageContext,
-  type SyncedMessageContext,
   type SyncedMessageTurnInput,
   type SyncedMessageTurnProjection,
 } from '@offgrid/sync';
