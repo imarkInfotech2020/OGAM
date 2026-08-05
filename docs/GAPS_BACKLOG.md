@@ -525,3 +525,29 @@ reads as the main path is dead in practice.
 So the answer to "should the announcement happen before the transaction closes" is no. Until it moves,
 the adapter's finalize is a formality and `resumeCommittedEvictions` is the real implementation - which
 is worth knowing before anyone edits either of them.
+
+## Explicit file share: the hook's three user-visible paths are uncovered
+
+`pro/ui/SyncScreen/useExplicitFileShare` has no test. There WAS one - 14 cases - and it was deleted
+rather than kept, because it stood in for two of our own modules (`@offgrid/core/utils/resolvePickedFileUri`
+and `@offgrid/pro/sync/sharedFileSyncService`) and so proved only that the hook calls functions the test
+itself wrote. Its own header called the sync service "the boundary this hook hands work to"; it is not a
+boundary, it is our code, and a test built on that rots green while the real path breaks.
+
+What still needs covering, all of it user-visible:
+- cancelling the system picker says NOTHING. A red "Could not share this file" after someone deliberately
+  backed out is the app blaming them for their own decision.
+- a real failure is NOT silent, or a file the user believes is on its way never arrives and nothing says so.
+- the re-entrancy guard: the share button stays on screen while the picker is open, so a second tap must
+  not start a second pick. Two picks racing to write one transfer is a corrupt transfer.
+
+Why it cannot be written honestly yet: importing the real `sharedFileSyncService` in jest fails before any
+test runs. It reaches `fileTransferService` -> `react-native-tcp-socket`, whose Globals.js constructs a
+`NativeEventEmitter` at module scope, and the jest environment provides no native module for it
+("`new NativeEventEmitter()` requires a non-null argument"). The same blocker deleted a
+`mobileSharedFileDelivery` suite the same day.
+
+The fix is environmental, and it unblocks both: give jest a registered native module for `TcpSockets`
+sufficient for that emitter to construct, WITHOUT displacing the real library - `ambientShare.integration`
+drives real sockets over loopback and must keep doing so. Only the document picker should be faked in the
+resulting test; the picker is genuinely native, everything else is ours and should run.
