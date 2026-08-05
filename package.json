@@ -28,7 +28,8 @@
     "e2e:coverage": "node scripts/e2e/collect-coverage.mjs",
     "e2e:build:ios": "E2E_COVERAGE=1 npx react-native run-ios --device",
     "e2e:build:android": "E2E_COVERAGE=1 npx react-native run-android --mode=debug --appId ai.offgridmobile.dev",
-    "test:device-parser": "node --test scripts/android/__tests__/adbClient.test.mjs"
+    "test:device-parser": "node --test scripts/android/__tests__/adbClient.test.mjs",
+    "e2e:mesh": "node --test __tests__/device/meshPairing.e2e.mjs"
   },
   "dependencies": {
     "@dr.pogodin/react-native-fs": "^2.38.1",
