@@ -266,6 +266,12 @@ describe('Pro mobile state sync journey', () => {
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
 
+    // Pairing moves the device out of AVAILABLE and into SAVED, because AVAILABLE lists only what is NOT saved.
+    // So AVAILABLE is empty again here - and the "no devices found, open Sync on a nearby device" notice must NOT
+    // come back, or the screen tells the user to go and do the thing they have just finished doing, directly above
+    // the device they did it to. It reads as the app failing to see the peer it is holding a pairing with.
+    expect(ui.queryByTestId('sync-no-devices')).toBeNull();
+
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
     fireEvent(ui.getByTestId('sync-projects-toggle'), 'valueChange', false);
     await waitFor(() =>
