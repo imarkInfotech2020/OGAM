@@ -215,6 +215,66 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     },
 
     /**
+     * The whole image-generation journey, through real gestures: place a downloaded image model, force image
+     * mode ON via the real toggle, and send a prompt.
+     *
+     * ONE definition of this journey. Two suites had grown near-identical private copies (imageLightbox's
+     * `generateImage` and an in-flight variant), differing only in whether they wait for the finished image -
+     * which is exactly how a third copy gets written with a subtly different idea of what "generated" means.
+     *
+     * `hold: true` parks the generation INSIDE native generateImage and returns while it is still in flight, so
+     * a test can exercise what the user can do during the many seconds diffusion really takes (press STOP,
+     * watch progress move, tap send again). Release it with `boundary.diffusion.releaseGeneration()` - or by
+     * cancelling, which is what native does.
+     */
+    async generateImageViaUI(
+      imgOpts: { prompt?: string; backend?: 'mnn' | 'qnn' | 'coreml'; hold?: boolean } = {},
+    ) {
+      const { prompt = 'a fox in the snow', backend = 'coreml', hold = false } = imgOpts;
+      if (!this.view) this.render();
+      await this.placeImageModel({ backend });
+      await this.cycleImageMode(); // auto -> ON(force); also activates the downloaded image model
+      await rtl.waitFor(() => {
+        expect(this.view!.queryByTestId('image-mode-force-badge')).not.toBeNull();
+      });
+
+      if (hold) boundary.diffusion.holdNextGeneration();
+      await this.tapSend(prompt);
+      // Native has been entered either way; only the waiting differs.
+      await rtl.waitFor(() => { expect(boundary.diffusion.calls.generateImage.length).toBe(1); });
+      if (hold) {
+        await rtl.waitFor(() => { expect(boundary.diffusion.generationHeld()).toBe(true); });
+        return;
+      }
+      await rtl.waitFor(() => { expect(this.view!.queryByTestId('generated-image')).not.toBeNull(); });
+    },
+
+    /**
+     * Press the stop control on the image progress card.
+     *
+     * That control has NO testID (ChatScreenComponents: a bare TouchableOpacity around an "x" icon), so it is
+     * reached structurally - the pressable ancestor of the card's "x". The count is asserted first, so if a
+     * second "x" control ever shares the screen this fails loudly instead of quietly pressing the wrong thing.
+     * A testID on that control would delete this helper.
+     */
+    async pressImageCardStop() {
+      type PressNode = { type?: unknown; props?: Record<string, unknown>; parent?: PressNode | null };
+      await rtl.act(async () => {
+        const xIcons = this.view!.root.findAll(
+          (n: PressNode) => n.type === 'Icon' && (n.props as { name?: string })?.name === 'x',
+        );
+        expect(xIcons).toHaveLength(1);
+        let node: PressNode | null = xIcons[0] as unknown as PressNode;
+        for (let depth = 0; node && depth < 12; depth++) {
+          const onPress = node.props?.onPress;
+          if (typeof onPress === 'function') { (onPress as () => void)(); return; }
+          node = node.parent ?? null;
+        }
+        throw new Error('the image progress card\'s "x" has no pressable ancestor - the stop control is dead');
+      });
+    },
+
+    /**
      * Gesture-only send: type into the real input + press the real send button, WITHOUT scripting a turn.
      * Use when the test scripts multi-turn native output itself (e.g. boundary.litert.scriptTurns([...]) for
      * a two-pass router). The gesture is identical to send() — only the scripting differs.
