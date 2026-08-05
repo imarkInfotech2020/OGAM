@@ -159,10 +159,17 @@ export class AdbClient {
     let found = null;
     const walk = (node) => {
       if (!node || found) return;
-      const text = `${node.label || node.name || node.value || ''}`;
-      if (text.toLowerCase().includes(wanted) && node.rect && node.rect.width > 0) {
+      // EVERY identifying field, not the first non-empty one. `label || name || value` short-circuits, and that
+      // hid every testID on Android: React Native puts testID in resource-id (node.name), but an accessible
+      // container also gets a synthesised content-desc (node.label) built from its children - so label was always
+      // truthy and name was never examined. The symptom was believing the platform did not expose testIDs at all.
+      const fields = [node.label, node.name, node.value].map((f) => `${f ?? ''}`);
+      const hit = fields.find((f) => f.toLowerCase().includes(wanted));
+      if (hit !== undefined && node.rect && node.rect.width > 0) {
         found = {
-          label: text,
+          // The matched field, so a caller that searched by testID gets the testID back rather than the
+          // description that happens to sit beside it.
+          label: hit,
           type: node.type || '',
           rect: node.rect,
           center: {
@@ -308,7 +315,18 @@ export class AdbClient {
   async scrollAndTap(needle, options = {}) {
     await this.scrollToLabel(needle, options);
     // Re-read after the fling has stopped: the centre found while scrolling is already out of date.
-    const element = await this.waitForStable(needle);
+    let element = await this.waitForStable(needle);
+
+    // An element sitting in the very bottom band of the screen cannot reliably be tapped: that strip belongs to
+    // the system's gesture navigation, which swallows the touch. The row is found, the tap is issued, and nothing
+    // happens - which is exactly how the LAST row of a list fails while the one above it works. Nudge the list up
+    // and re-read before tapping.
+    const { height } = await this.windowSize();
+    if (element.center.y > height * 0.88) {
+      await this.swipe(element.center.x, Math.round(height * 0.7), element.center.x, Math.round(height * 0.5));
+      element = await this.waitForStable(needle);
+    }
+
     await this.tap(element.center.x, element.center.y);
     return element;
   }
@@ -317,8 +335,12 @@ export class AdbClient {
     const found = [];
     const walk = (node) => {
       if (!node) return;
-      const text = `${node.label || node.name || node.value || ''}`.trim();
-      if (text && node.rect?.width > 0) found.push(text);
+      // All three fields, for the same reason findByLabel reads all three: a node can carry both a testID and a
+      // description, and a locator that does not match wants to see both when this list is printed.
+      for (const field of [node.label, node.name, node.value]) {
+        const text = `${field ?? ''}`.trim();
+        if (text && node.rect?.width > 0 && !found.includes(text)) found.push(text);
+      }
       (node.children || []).forEach(walk);
     };
     walk(await this.source());

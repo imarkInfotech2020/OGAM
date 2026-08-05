@@ -34,19 +34,14 @@ before(async () => {
 const capture = (name) => device.screenshot(path.join(SHOTS_DIR, `${platform}-${name}.png`));
 
 /**
- * Prefer a testID, fall back to visible copy.
+ * Targets are testIDs, everywhere.
  *
- * testIDs are the right target - they do not change when copy is rewritten or translated - and iOS exposes every
- * one of them through WDA. Android does not: React Native surfaces testID into the accessibility tree for some
- * component types and not others. `testID` on a <Text> arrives (sync-this-device does); `testID` on a
- * <TouchableOpacity> does not, which is why the Manage rows here are unreachable by id on Android even though
- * sync-open-activity is right there in the source.
- *
- * So the rows whose testID Android does surface are targeted by id, and the Manage rows fall back to their own
- * visible description - which matches identically on both platforms. `locate` records the pairing so that when
- * SyncNavigationRow starts exposing its testID on Android, one line here switches them over.
+ * Both platforms expose them: iOS through WDA's accessibility tree, Android as a node's `resource-id`. An earlier
+ * version of this file matched visible copy instead, on the mistaken belief that Android dropped testIDs on
+ * touchables - the truth was that the driver's own search read only the first non-empty field per node, so a
+ * synthesised description always shadowed the id sitting beside it. Fixed in the clients; nothing here needs to
+ * know about copy any more, which is the point: copy gets rewritten and translated, testIDs do not.
  */
-const locate = (testId, fallbackText) => fallbackText;
 
 describe('the sync surfaces on a real device', () => {
   it('opens the app on its home screen', async () => {
@@ -57,7 +52,7 @@ describe('the sync surfaces on a real device', () => {
   });
 
   it('reaches the Devices screen and says how many devices are saved', async () => {
-    await device.tapWhenReady(locate('sync-home-card', 'Open Sync devices'));
+    await device.tapWhenReady('open-sync-from-home');
 
     // The count is the honest summary the user reads first. It has to be there even with nothing connected -
     // "3 of 5 devices saved" and "0 connected" are both real states and the screen must distinguish them.
@@ -94,7 +89,7 @@ describe('the sync surfaces on a real device', () => {
   it('opens Activity, and every control it shows leads somewhere', async () => {
     // scrollAndTap, not tapWhenReady: the MANAGE rows sit below the fold, and Android's dump only contains what
     // is actually rendered - so on that platform they do not exist until they are scrolled to.
-    await device.scrollAndTap(locate('sync-open-activity', 'Activity, See queued'));
+    await device.scrollAndTap('sync-open-activity');
     await device.waitFor((d) => d.labels().then((l) => l.length > 3), { label: 'the Activity screen' });
     await capture('03-activity');
 
@@ -114,14 +109,20 @@ describe('the sync surfaces on a real device', () => {
     await device.back();
   });
 
-  // OPEN on Android: the tap on this row does not navigate, while Activity - the same component, the same
-  // pattern, one row above - does. Both are SyncNavigationRow, so this is not a locator problem; the row is found
-  // and tapped at a settled position and the screen stays put. The likely fix is exposing the row's testID on
-  // Android (see `locate` above), which makes the touch target addressable directly instead of going through the
-  // synthesised composite label. That is a src change, so it is proposed rather than made, and this stays skipped
-  // rather than red - a failing test nobody can act on is noise.
+  /**
+   * SKIPPED, and it may be a product bug rather than a test one - for Mac to reproduce by hand.
+   *
+   * On Android, tapping the Files row does not navigate. Tapping Sharing (first row) and Activity (middle row)
+   * both do. All three are the same SyncNavigationRow with the same testID wiring; Files is the only one carrying
+   * `last`. The driver finds sync-open-files by testID, waits for its position to settle, nudges it clear of the
+   * gesture-navigation strip, and taps its centre - and the screen stays on Sync. Verified twice, alternating with
+   * sync-open-sharing in the same run, which navigated every time.
+   *
+   * So the harness does the same thing to all three rows and only this one does nothing. Worth a manual tap on an
+   * Android build before deciding whether this is the app or the driver.
+   */
   it.skip('opens Files without claiming to hold files it cannot open', async () => {
-    await device.scrollAndTap(locate('sync-open-files', 'Files, Open screenshots'));
+    await device.scrollAndTap('sync-open-files');
     await device.waitFor((d) => d.labels().then((l) => l.length > 3), { label: 'the Files screen' });
     await capture('04-files');
 
