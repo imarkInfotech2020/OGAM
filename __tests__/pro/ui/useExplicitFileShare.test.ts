@@ -73,7 +73,7 @@ const { AMBIENT_SHARE_ANY_DESTINATION } = require('@offgrid/sync');
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 describe('sharing a picked file', () => {
-  const maybe = (name: string, body: () => Promise<void> | void): void => {
+  const maybe = (name: string, body: jest.ProvidesCallback): void => {
     // eslint-disable-next-line jest/valid-title, jest/no-disabled-tests
     (available ? it : it.skip)(name, body);
   };

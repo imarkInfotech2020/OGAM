@@ -69,7 +69,7 @@ const policyWith = (overrides: Record<string, unknown> = {}): never => {
 };
 
 describe('the Receiving section', () => {
-  const maybe = (name: string, body: () => void): void => {
+  const maybe = (name: string, body: jest.ProvidesCallback): void => {
     // eslint-disable-next-line jest/valid-title, jest/no-disabled-tests
     (available ? it : it.skip)(name, body);
   };
