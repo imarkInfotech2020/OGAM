@@ -1,4 +1,3 @@
-import * as Keychain from 'react-native-keychain';
 import { useAppStore } from '../../../src/stores/appStore';
 import { createKeygenFake } from '../../harness/keygenFake';
 
