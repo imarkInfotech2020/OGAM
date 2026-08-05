@@ -80,6 +80,15 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "ai.offgridmobile"
+    // java.time on API 24. minSdk is 24, but Instant/Duration and friends only exist from API 26, so the
+    // Kotlin sync modules (screenshot watcher, directory source, downloads) would throw NoSuchMethodError on
+    // Android 7 - a crash, not a lint nag. Desugaring backports them instead of us hand-rolling date
+    // formatting in three places and risking a different ISO-8601 shape on the wire, which sync compares
+    // across devices.
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+    }
+
     defaultConfig {
         applicationId "ai.offgridmobile"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -150,6 +159,9 @@ configurations.all {
 }
 
 dependencies {
+    // Backports java.time (and more) to API 24 - see the compileOptions note above.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
