@@ -47,12 +47,6 @@ describe('opening the app as a Pro user, and as a free one', () => {
   let activate: jest.Mock;
   let originalDev: unknown;
 
-  const keychain = Keychain as unknown as {
-    getGenericPassword: jest.Mock;
-    setGenericPassword: jest.Mock;
-    resetGenericPassword: jest.Mock;
-  };
-
   /** The app store the launch actually wrote to, which is the reloaded copy rather than this one. */
   const storeState = (): Record<string, unknown> =>
     require('../../../src/stores/appStore').useAppStore.getState();

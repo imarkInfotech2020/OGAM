@@ -7,7 +7,6 @@ import {
   within,
   type RenderAPI,
 } from '@testing-library/react-native';
-import type { ReactTestInstance } from 'react-test-renderer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TcpSocket from 'react-native-tcp-socket';
 import type { DeviceInfo } from '@offgrid/sync';
