@@ -586,3 +586,35 @@ mobile - an intermittent single-suite failure with a moving name is exactly what
 
 This is PRE-EXISTING and unrelated to the mockist deletions: it reproduces with those files restored, and
 the failing suite moves regardless.
+
+## Image-generation journeys left uncovered by deleting imageGenerationFlow.test.ts
+
+`__tests__/integration/generation/imageGenerationFlow.test.ts` was deleted: 60 tests that stood in for
+`localDreamGenerator` (the image generator itself), `activeModelService`, `llm` and `litert`. Six of its case
+names end in a line number - "should call stopGeneration after successful enhancement (line 247)",
+"(lines 253-255)", "(lines 290-292)" - which is what a test written to move a coverage number looks like
+rather than one written to protect a user.
+
+Already covered properly by rendered suites, so not re-created: draw-prompt routing (`imageIntentRouting`),
+force/off image mode (`imageModeToggle`), the OOM card and Load Anyway (`imageOomCard`, `imageMemoryCard`),
+lightbox + save-to-gallery (`imageLightbox`), voice-mode image journeys, and the enhancement rules
+(`enhancementNoThinking`, `enhancementReasoningPrompt`, `enhancementStreamingProgress`).
+
+Rewritten for real in `imageGenerationInFlight.rendered.guard.test.tsx`: STOP reaching the native generator,
+progress moving on the card, and a second send not starting a second diffusion.
+
+STILL UNCOVERED, each a real user-visible journey wanting a rendered test:
+
+- **image backend metadata on the finished message.** The per-message details should name the backend that
+  actually rendered it (QNN / MNN / Core ML). Wrong or missing backend attribution is how a user concludes
+  the NPU is being used when it is not. (`gpuBackendMeta` covers the TEXT side only.)
+- **enhancement conversation context rules.** The enhancement request carries recent chat context, capped at
+  the last 10 messages, with system messages skipped and long messages truncated. Uncapped context is a
+  silent context-window overflow on a small model; including system prompts leaks instructions into the
+  rewritten image prompt.
+- **image model auto-load on demand**, and reload when the thread count changed. A user who generates,
+  changes threads in settings, then generates again must not silently keep the old context.
+- **generating with no conversation open** saves to the gallery without trying to add a chat message.
+
+Policy: the mockist file is gone rather than repaired, and what it was claiming is written down here instead
+of carried as a green number.
