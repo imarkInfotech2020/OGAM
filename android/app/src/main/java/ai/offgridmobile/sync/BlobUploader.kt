@@ -60,9 +60,21 @@ object BlobUploader {
         try {
             var sent = request.offset
             connection.outputStream.use { sink ->
-                file.inputStream().use { source ->
+                java.io.RandomAccessFile(file, "r").use { source ->
                     // Skip what the receiver already has rather than re-reading it from disk.
-                    if (request.offset > 0) source.skip(request.offset)
+                    //
+                    // An ABSOLUTE seek, not InputStream.skip. skip() returns how many bytes it actually
+                    // skipped and is free to skip fewer than asked; discarding that value put the read
+                    // cursor somewhere earlier in the file while the frame loop below carried on filling
+                    // every frame, so the short-read guard never fired. The uploader then sealed bytes
+                    // from one position under a frame index claiming another, and the receiver either
+                    // failed GCM authentication or wrote a file of the right SIZE with the wrong
+                    // contents - on resumed uploads only, which is the hardest place to notice it.
+                    //
+                    // iOS has always used an absolute call (BlobChannelUploader.swift: seek(toFileOffset:));
+                    // this makes Android match. RandomAccessFile.read(ByteArray, Int, Int) has the same
+                    // contract as the stream read, so the frame loop is unchanged.
+                    if (request.offset > 0) source.seek(request.offset)
                     for (index in cipher.frameAt(request.offset) until cipher.frameCount) {
                         val length = cipher.frameLength(index)
                         val plain = ByteArray(length)

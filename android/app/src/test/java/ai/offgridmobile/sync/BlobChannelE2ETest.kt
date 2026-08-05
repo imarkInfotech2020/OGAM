@@ -63,8 +63,17 @@ class BlobChannelE2ETest {
                 BlobUploader.Request(
                     requestId = requestId,
                     // A fresh upload: these four journeys each send a whole payload and assert every byte lands,
-                    // so nothing is already held on the far side. Resume from a non-zero offset is its own
-                    // behaviour and has no Kotlin-side test yet.
+                    // so nothing is already held on the far side.
+                    //
+                    // RESUME IS STILL UNTESTED HERE, and that is where a real corruption bug lived: the uploader
+                    // positioned itself with InputStream.skip, which may advance fewer bytes than asked, so a
+                    // resumed upload sealed bytes from the wrong position (fixed - BlobUploader now seeks
+                    // absolutely, as iOS always has). Writing the missing test needs host-side plumbing: this
+                    // harness's desktop side always starts from an empty destination, so there is no partial file
+                    // to resume onto and no offered offset to resume from. Worth doing - and worth knowing that
+                    // it would probably NOT have caught that particular bug, since skip() on a local file
+                    // normally does advance the full amount. Static reading found it; a test would pin the
+                    // contract.
                     offset = 0L,
                     sourcePath = source.absolutePath,
                     url = endpoint.getString("url"),
