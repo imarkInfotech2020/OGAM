@@ -14,7 +14,7 @@ import type { AmbientDirectoryAccessCopy } from '@offgrid/sync';
  * media permission instead. The shared directory source only ever treats a grant as an opaque string,
  * so this sentinel travels through it unchanged and no rule in the engine has to know the difference.
  */
-export const MEDIA_STORE_DOWNLOADS_GRANT = 'mediastore:downloads';
+const MEDIA_STORE_DOWNLOADS_GRANT = 'mediastore:downloads';
 
 export interface NativeDirectoryCandidate {
   sourceId: string;

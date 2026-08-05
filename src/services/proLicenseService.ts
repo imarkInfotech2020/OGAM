@@ -1,15 +1,9 @@
 import type {
   PersonalMeshActivationResult,
-  PersonalMeshActivationFailureCode,
   PersonalMeshReconciliationReason,
 } from '@offgrid/sync';
-import { PERSONAL_MESH_DEVICE_CAP } from '@offgrid/sync';
 
 export const PRO_PAY_PAGE_URL = 'https://offgridmobileai.co/pay';
-export const PRO_DEVICE_LIMIT = PERSONAL_MESH_DEVICE_CAP;
-
-export type ActivateResult = PersonalMeshActivationResult;
-export type ActivateFailureCode = PersonalMeshActivationFailureCode;
 
 export type ProTier = 'lifetime' | 'yearly';
 
@@ -59,10 +53,6 @@ export function registerProEntitlementProvider(
   provider = nextProvider;
 }
 
-export function readProFromKeychain(): Promise<boolean> {
-  return provider.readActive();
-}
-
 export function getProLicenseInfo(): Promise<ProLicenseInfo> {
   return provider.getInfo();
 }
@@ -71,11 +61,6 @@ export function revalidateProEntitlement(
   reason: PersonalMeshReconciliationReason,
 ): Promise<void> {
   return provider.revalidate(reason);
-}
-
-export async function checkProStatus(): Promise<boolean> {
-  await revalidateProEntitlement('manual');
-  return readProFromKeychain();
 }
 
 export function activateProByKey(

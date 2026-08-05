@@ -1,7 +1,7 @@
 import type { DownloadedModel } from '../../types';
 
 /** How a selected id was matched to a downloaded model, so a fallback match can be reported. */
-export type ModelMatch = 'id' | 'file' | 'none';
+type ModelMatch = 'id' | 'file' | 'none';
 
 export interface ResolvedModel {
   model: DownloadedModel | null;

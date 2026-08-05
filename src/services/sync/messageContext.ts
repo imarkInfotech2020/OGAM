@@ -45,12 +45,6 @@ export function serializeMessageContext(
 }
 
 /** Admit peer-controlled context through the shared cross-host contract. */
-export function parseMessageContext(
-  value: unknown,
-): SyncedMessageContext | null {
-  return parseSyncedMessageContext(value);
-}
-
 /** Project a peer-controlled row into the one cross-host message-turn model. */
 export function projectMessageTurn(
   input: SyncedMessageTurnInput,

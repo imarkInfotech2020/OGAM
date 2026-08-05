@@ -1,5 +1,1 @@
-export {
-  chunkText as chunkDocument,
-  type Chunk,
-  type ChunkOptions,
-} from '@offgrid/rag';
+export { chunkText as chunkDocument, type Chunk } from '@offgrid/rag';

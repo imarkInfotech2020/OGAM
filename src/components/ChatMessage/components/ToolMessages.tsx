@@ -17,7 +17,7 @@ import { ToolsSentCollapsible } from './ToolsSentCollapsible';
 import type { createStyles } from '../styles';
 import type { Message } from '../../../types';
 
-export function getToolIcon(toolName?: string): string {
+function getToolIcon(toolName?: string): string {
   switch (toolName) {
     case 'web_search':
       return 'globe';
@@ -32,7 +32,7 @@ export function getToolIcon(toolName?: string): string {
   }
 }
 
-export function getToolLabel(toolName?: string, content?: string): string {
+function getToolLabel(toolName?: string, content?: string): string {
   switch (toolName) {
     case 'web_search': {
       const queryMatch = content
@@ -66,7 +66,7 @@ type ToolResultBubbleProps = {
   colors: any;
 };
 
-export const ToolResultBubbleInner: React.FC<ToolResultBubbleProps> = ({
+const ToolResultBubbleInner: React.FC<ToolResultBubbleProps> = ({
   stableKey,
   toolIcon,
   toolLabel,

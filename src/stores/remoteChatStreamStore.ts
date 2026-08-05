@@ -7,7 +7,7 @@ import type { ChatStreamPreview } from '@offgrid/sync';
  * The shape is shared sync's own preview, not a copy of it: the projection that turns previews into
  * message rows is shared too, and it needs the same fields (ordering, completion) the Mac has.
  */
-export type RemoteChatStreamPreview = ChatStreamPreview;
+type RemoteChatStreamPreview = ChatStreamPreview;
 
 interface RemoteChatStreamState {
   previews: readonly RemoteChatStreamPreview[];
