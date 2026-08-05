@@ -250,13 +250,18 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * returns an image, which the real useAttachments hook adds as a pending attachment. Requires a
      * vision-capable model (setupChatScreen({vision:true})), else the app alerts instead of attaching.
      */
-    async attachImageViaUI() {
+    async attachImageViaUI(source: 'library' | 'camera' = 'library') {
       const view = this.view!;
       rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('attach-button')));
       rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('attach-photo')));
-      // Android: attach-photo opens a "Choose image source" alert — tap "Photo Library" (a real gesture),
-      // which (after a short delay) launches the faked picker and adds the attachment.
-      rtl.fireEvent.press(await rtl.waitFor(() => view.getByText('Photo Library')));
+      // Android: attach-photo opens a "Choose image source" alert — tap "Photo Library" or "Camera" (both
+      // real gestures), which (after a short delay) launches the faked picker and adds the attachment.
+      // The two sources matter for a MULTI-image turn: the faked library returns one fixed uri every time,
+      // so two library picks are indistinguishable from one image arriving twice. The camera returns a
+      // different uri, which is what makes "both images reached the engine" an assertion rather than a hope.
+      rtl.fireEvent.press(
+        await rtl.waitFor(() => view.getByText(source === 'camera' ? 'Camera' : 'Photo Library')),
+      );
       await this.settle(400); // the handler defers pickFromLibrary via setTimeout(300)
       await rtl.waitFor(() => { expect(view.queryByTestId('attachments-container')).not.toBeNull(); });
     },

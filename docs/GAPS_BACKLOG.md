@@ -526,28 +526,63 @@ So the answer to "should the announcement happen before the transaction closes" 
 the adapter's finalize is a formality and `resumeCommittedEvictions` is the real implementation - which
 is worth knowing before anyone edits either of them.
 
-## Explicit file share: the hook's three user-visible paths are uncovered
+## Deleting the mockist ChatScreen suite leaves real ChatScreen journeys uncovered
 
-`pro/ui/SyncScreen/useExplicitFileShare` has no test. There WAS one - 14 cases - and it was deleted
-rather than kept, because it stood in for two of our own modules (`@offgrid/core/utils/resolvePickedFileUri`
-and `@offgrid/pro/sync/sharedFileSyncService`) and so proved only that the hook calls functions the test
-itself wrote. Its own header called the sync service "the boundary this hook hands work to"; it is not a
-boundary, it is our code, and a test built on that rots green while the real path breaks.
+`__tests__/rntl/screens/ChatScreen.test.tsx` was deleted: 155 tests that rendered ChatScreen with FOURTEEN
+of our own modules stood in for. Coverage it reported was not coverage of our behaviour - the stubs answered
+most of the questions the assertions asked - so the number was inflated rather than earned. Measured before
+deleting, over `src/screens/ChatScreen/**`:
 
-What still needs covering, all of it user-visible:
-- cancelling the system picker says NOTHING. A red "Could not share this file" after someone deliberately
-  backed out is the app blaming them for their own decision.
-- a real failure is NOT silent, or a file the user believes is on its way never arrives and nothing says so.
-- the re-entrancy guard: the share button stays on screen while the picker is open, so a second tap must
-  not start a second pick. Two picks racing to write one transfer is a corrupt transfer.
+|                | mockist suite (155 tests) | rendered suites (227 tests) |
+|----------------|---------------------------|-----------------------------|
+| statements     | 70.72%                    | 62.93%                      |
+| branches       | 63.45%                    | 57.47%                      |
+| functions      | 69.17%                    | 58.56%                      |
+| lines          | 73.88%                    | 64.74%                      |
 
-Why it cannot be written honestly yet: importing the real `sharedFileSyncService` in jest fails before any
-test runs. It reaches `fileTransferService` -> `react-native-tcp-socket`, whose Globals.js constructs a
-`NativeEventEmitter` at module scope, and the jest environment provides no native module for it
-("`new NativeEventEmitter()` requires a non-null argument"). The same blocker deleted a
-`mobileSharedFileDelivery` suite the same day.
+The 8-point statement drop is the honest number, and it is concentrated. These are the journeys that now
+have NO real coverage, and each wants a rendered test through `harness/chatHarness` (real screen, native
+faked) rather than a re-mocked one:
 
-The fix is environmental, and it unblocks both: give jest a registered native module for `TcpSockets`
-sufficient for that emitter to construct, WITHOUT displacing the real library - `ambientShare.integration`
-drives real sockets over loopback and must keep doing so. Only the document picker should be faked in the
-resulting test; the picker is genuinely native, everything else is ours and should run.
+- `ChatModalSection.tsx` (70% -> 30%) - the modals reachable from a chat: which one opens from which
+  affordance, and that dismissing returns the user to the conversation rather than a blank screen.
+- `useChatMessageHandlers.ts` (80% -> 53%) - per-message actions: edit, retry, copy, delete, speak. A dead
+  action here is invisible until a user long-presses a message and nothing happens.
+- `useChatModelActions.ts` (66% -> 42%) - switching model mid-conversation, and what happens to a reply in
+  flight when the user does.
+- `ChatScreenComponents.tsx` (89% -> 58%), `modelReadiness.ts` (56% -> 48%), `index.tsx` (63% -> 54%).
+
+Policy this follows: a mockist suite is deleted, not repaired, and the coverage it was claiming is logged
+here as a gap instead of being carried as a green number. Lower and true beats higher and fake.
+
+## Cross-suite timer leak makes the rendered generation suites non-deterministic
+
+**Verdict: fix-the-guard (test hygiene, not product code).**
+
+Running `__tests__/integration/generation` + `__tests__/rntl/screens` together fails ONE suite per run, and
+a different one each time - observed across four runs as `stopDuringThinkingKeepsReasoning`,
+`RemoteServersScreen`, `enhancementReasoningPrompt`, and once all 922 passing. Every suite passes in
+isolation, so nothing is wrong with the tests that report the failure; they are just whichever suite landed
+in the unlucky slot.
+
+The mechanism is visible in the stack:
+
+```
+TypeError: Cannot read properties of undefined (reading 'getState')
+  at speakableStreamingAnswer (src/stores/chatStore.ts:23:47)
+  at Object.appendToStreamingMessage (src/stores/chatStore.ts:182:78)
+  at GenerationService.flushTokenBuffer (src/services/generationService.ts:78:15)
+  at Timeout._onTimeout (src/services/generationServiceHelpers.ts:149:22)
+```
+
+`generationServiceHelpers` schedules a 50ms token-buffer flush. When a suite ends mid-generation the timer
+is still pending; it fires during the NEXT suite, which has called `jest.resetModules()` (chatHarness does,
+by design), so the module `chatStore` closed over is gone and its import reads as undefined. The token
+buffer is a real product optimisation - the fault is that tests leave a generation in flight.
+
+Fix: the harness should cancel in-flight generation on teardown (an `afterEach` that stops the service and
+drains the buffered flush), so no timer outlives its module registry. Worth doing before chasing red CI on
+mobile - an intermittent single-suite failure with a moving name is exactly what this produces.
+
+This is PRE-EXISTING and unrelated to the mockist deletions: it reproduces with those files restored, and
+the failing suite moves regardless.
