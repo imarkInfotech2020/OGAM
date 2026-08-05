@@ -16,7 +16,10 @@
 
 import React from 'react';
 import { render, fireEvent, within } from '@testing-library/react-native';
-import { requirePro } from '../helpers/requirePro';
+import { proIsPresent, requirePro } from '../helpers/requirePro';
+
+// Skipped rather than silently passed when the private submodule is absent - see proIsPresent.
+const describePro = proIsPresent() ? describe : describe.skip;
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
@@ -128,7 +131,7 @@ const completedReceive = {
 
 const guard = (): boolean => available;
 
-describe('the Activity list', () => {
+describePro('the Activity list', () => {
   it('says what happened to a transfer, in words and numbers the user reads', () => {
     if (!guard()) return;
     const acts = handlers();
@@ -207,6 +210,7 @@ describe('the Activity list', () => {
     // Scoped to each row, because the point is that THIS file says THIS word. An unscoped search would pass on
     // any row anywhere carrying the word, which is most of what could go wrong here.
     const expected: Record<string, RegExp> = {
+      'Queued.png': /^Pending/,
       'Sending.png': /^Sending/,
       'Receiving.png': /^Receiving/,
       'FailedSend.png': /^Could not send/,
@@ -301,6 +305,24 @@ describe('the Activity list', () => {
       <TransferActivitySection projection={projection} onOpen={onOpen} />,
     );
 
+    // Handlers grouped by the verb they implement. Pressing Retry has to reach a RETRY handler and no other -
+    // summing every handler's calls, as this did, would pass a Retry button wired to a dismiss handler, which is
+    // precisely the dead-button class this test exists to rule out. Grouped by verb rather than mapped per row so
+    // the test does not re-encode the projection's routing table.
+    const byVerb: Record<'retry' | 'cancel' | 'dismiss', Array<keyof Handlers>> = {
+      retry: ['retryKnowledge', 'retryAmbient', 'retryModel'],
+      cancel: ['cancelTransfer', 'cancelAmbient', 'cancelModel'],
+      dismiss: [
+        'dismissLiveTransfer',
+        'dismissCompletedTransfer',
+        'dismissKnowledge',
+        'dismissAmbient',
+        'dismissModel',
+      ],
+    };
+    const callsIn = (verb: 'retry' | 'cancel' | 'dismiss') =>
+      byVerb[verb].reduce((total, name) => total + acts[name].mock.calls.length, 0);
+
     const pressed: string[] = [];
     // Open is the fourth button and it is the caller's job rather than the projection's, so it is checked the
     // same way: if the row offers it, pressing it has to reach the handler that knows how to open a file.
@@ -315,21 +337,29 @@ describe('the Activity list', () => {
         const state = item.actions[action];
         if (!state.visible || !state.enabled) continue;
         const button = ui.getByTestId(`sync-activity-${action}-${item.id}`);
-        const before = Object.values(acts).reduce(
-          (total, handler) => total + handler.mock.calls.length,
-          0,
-        );
+        const before = { retry: callsIn('retry'), cancel: callsIn('cancel'), dismiss: callsIn('dismiss') };
 
         fireEvent.press(button);
         await Promise.resolve();
 
-        const after = Object.values(acts).reduce(
-          (total, handler) => total + handler.mock.calls.length,
-          0,
-        );
-        // The whole point: a button the row chose to show, and to enable, reached a handler. If this fails, the
-        // user is looking at a control that does nothing when pressed.
-        expect(after).toBeGreaterThan(before);
+        // Reached a handler for THIS verb, and none belonging to a different one. A Retry wired to a dismiss
+        // handler satisfies the first and fails the second, which is why they are separate checks.
+        //
+        // Wrapped so a failure names the row and the verb: jest's expect takes no message, and "expected 1 to be
+        // greater than 1" on its own does not say which of five rows was mis-wired.
+        try {
+          expect(callsIn(action)).toBeGreaterThan(before[action]);
+          for (const other of ['retry', 'cancel', 'dismiss'] as const) {
+            if (other === action) continue;
+            expect(callsIn(other)).toBe(before[other]);
+          }
+        } catch {
+          throw new Error(
+            `${action} on "${item.id}" did not reach exactly a ${action} handler. ` +
+              `retry:${callsIn('retry')} cancel:${callsIn('cancel')} dismiss:${callsIn('dismiss')} ` +
+              `(before retry:${before.retry} cancel:${before.cancel} dismiss:${before.dismiss})`,
+          );
+        }
         pressed.push(`${item.id}:${action}`);
       }
     }

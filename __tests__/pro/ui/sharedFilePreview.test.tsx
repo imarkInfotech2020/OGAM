@@ -17,7 +17,10 @@ import { render, waitFor } from '@testing-library/react-native';
 import RNFS from 'react-native-fs';
 import { projectSharedFilePreview } from '@offgrid/sync';
 import { getTheme } from '../../../src/theme';
-import { requirePro } from '../helpers/requirePro';
+import { proIsPresent, requirePro } from '../helpers/requirePro';
+
+// Skipped rather than silently passed when the private submodule is absent - see proIsPresent.
+const describePro = proIsPresent() ? describe : describe.skip;
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
@@ -78,7 +81,7 @@ const preview = (input: {
   height?: number;
 }) => projectSharedFilePreview(input);
 
-describe('the preview under a shared file', () => {
+describePro('the preview under a shared file', () => {
   it('says the file is not on this phone when the bytes are missing', () => {
     if (!available) return;
 

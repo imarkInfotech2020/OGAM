@@ -12,6 +12,18 @@ import path from 'path';
  *
  * So: absent submodule, skip. Present submodule that will not load, throw with the real cause attached.
  */
+/**
+ * Is the private submodule here at all?
+ *
+ * Synchronous and file-system based on purpose: a suite has to choose between `describe` and `describe.skip` at
+ * MODULE level, before jest registers its cases. Deciding in beforeAll is too late - the cases are already
+ * registered, each returns early, and jest reports them as PASSED. An open-core checkout then looks like it
+ * verified the pro surface having run nothing, which is the same silent-green trap requirePro closes, one level up.
+ */
+export function proIsPresent(): boolean {
+  return fs.existsSync(path.join(path.resolve(__dirname, '../../../pro'), 'package.json'));
+}
+
 export function requirePro<T>(specifier: string): T | undefined {
   try {
     return require(specifier) as T;
