@@ -64,6 +64,12 @@ module.exports = {
           '(^|/)index\\.(ts|tsx)$', // barrel/entry files
           '^src/types/', // type barrels are legitimately import-only
           '^src/(bootstrap|shims|config)/', // wiring/shim/config shells reached outside the graph
+          // Core utilities whose only importers are in the private pro/ submodule. The cruiser scans src
+          // alone, so a module used exclusively by pro reads as an orphan even though deleting it would
+          // break the build - coalesce is imported by pro/sync/fileTransferService and
+          // pro/sync/ambientShareService. Same reasoning as the @offgrid/pro exception below: not real
+          // debt, so excluded rather than baselined. Confirm with grep in pro/ before adding to this list.
+          '^src/utils/coalesce\\.ts$',
         ],
       },
       to: {},
