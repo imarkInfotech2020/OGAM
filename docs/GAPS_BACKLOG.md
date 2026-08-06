@@ -631,3 +631,25 @@ Related, and why the fix above is not enough on its own: `handleUnloadModelFn` -
 "Unload" button - is no longer reachable from chat's model chip at all. Either that modal is dead surface
 from ChatScreen (it is still mounted, and still reachable from ChatsListScreen) or the sheet should route
 through it. Worth deciding which, because right now two unload affordances exist with different behaviour.
+
+## Revoking ambient sharing does not cancel a transfer already streaming
+
+**Verdict: fix-the-guard (needs a cancellation seam that does not exist).**
+
+Turning ambient sharing off now revokes the grant atomically with the policy write (mobile-pro f36bf909) and
+reconnect no longer resurrects it (ebdc8cd8). What is still true: a transfer whose bytes are already moving
+runs to completion, so that one file arrives after consent was withdrawn.
+
+There is no handle to cancel it with. `fileTransferService.cancel(deviceId, requestId)` exists, but the ambient
+delivery lifecycle exposes only `completed()` and `failed(error)` to the scheduler, and the send happens under
+an `activityId` (`sharedFileActivityId(deviceId, syncId)`) with no mapping back to the transfer's requestId.
+
+The fix is a dependency-surface change, not a patch: add `cancelDelivery(deviceId, syncId)` to
+`AmbientShareDependencies`, have `sharedFileSyncService` implement it by resolving the syncId to its in-flight
+requestId and calling `fileTransferService.cancel`, and call it from the revocation path. Three call sites
+supply those dependencies today (`sharedFileSyncService` plus two test harnesses), so the change is contained -
+it was deferred because it widens the sync core's contract and deserves review rather than an end-of-branch
+edit.
+
+Bounded until then: the exposure is one already-streaming file, not every reconnection from then on. Raised by
+Greptile on mobile-pro#47, where the thread is deliberately left open so the seam stays tracked.
