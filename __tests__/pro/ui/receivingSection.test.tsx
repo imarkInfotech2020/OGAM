@@ -16,7 +16,14 @@
 
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { requirePro } from '../helpers/requirePro';
+import { proIsPresent, requirePro } from '../helpers/requirePro';
+
+// Skipped rather than silently PASSED when the private submodule is absent. requirePro returns undefined
+// and the suite decides availability in beforeAll - after jest has already registered the cases - so
+// without this the no-op cases are reported as passing, which is the worst of the three outcomes: an
+// open-core run would claim the Receiving section is covered when nothing ran. Matches its siblings
+// (sharedFilePreview, transferActivitySection).
+const describePro = proIsPresent() ? describe : describe.skip;
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
@@ -66,7 +73,7 @@ const policyWith = (overrides: Record<string, unknown> = {}): never => {
   return { ...DEFAULT_RECEIVE_POLICY, ...overrides } as never;
 };
 
-describe('the Receiving section', () => {
+describePro('the Receiving section', () => {
   const maybe = (name: string, body: jest.ProvidesCallback): void => {
     // eslint-disable-next-line jest/valid-title, jest/no-disabled-tests
     (available ? it : it.skip)(name, body);
