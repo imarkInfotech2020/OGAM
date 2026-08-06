@@ -111,13 +111,11 @@ module.exports = {
     // branches 79.35% and functions 81.93% - all three within half a point of their line, on a run
     // where every one of 8557 tests passed. A gate decided by a 0.4% drift reports drift, not defects.
     // Still a floor against regression rather than a target, and it only moves back up.
-    // Branches sits at 79 rather than 80 because that is where pro MEASURES: 79.44%, against a denominator of
-    // roughly 14,000 branches. Reaching 80 needs ~78 more covered branches - real work in ttsService, mcp/oauth
-    // metadata and knowledgeDocumentSyncService, not a rounding nudge - so the floor is set just under the true
-    // number (what a ratchet is for) instead of at a figure nothing satisfies. 12 real tests landed with this
-    // change (meshResidency policy, availableSyncIds, forgetDeviceRules - all three previously had NO test and
-    // 0-50% branches) and moved it 79.37 -> 79.44.
-    './pro': { statements: 80, branches: 79, functions: 80, lines: 80 },
+    // Uniform 80 on every metric, no exception. Branches were briefly pinned at 79 because pro measured 79.37%
+    // and 80 was unsatisfiable; that pin is gone because the number was EARNED rather than argued down. 29 real
+    // tests closed the gap (meshResidency policy, availableSyncIds, forgetDeviceRules, knowledge-document retry
+    // refusals, what this phone offers a peer, and the model-transfer card) and took branches 79.37 -> 80.29.
+    './pro': { statements: 80, branches: 80, functions: 80, lines: 80 },
     // New standalone modules in this change set are held to 100% on every axis. Changed
     // legacy files have their NEW branches covered by the suites but aren't whole-file-100%.
     './src/utils/imageModelIntegrity.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
