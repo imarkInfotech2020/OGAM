@@ -159,6 +159,31 @@ describe('sharing a file to another device without being asked', () => {
       expect(harness.service.allowsState(THE_MAC, idOf('shot-1'))).toBe(false);
     });
 
+    it('does not bring the grant back after a restart', async () => {
+      const harness = await launch();
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+      await harness.service.handleCapture(screenshot('shot-1'));
+
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'off',
+      });
+
+      // A fresh launch reading what was actually written. The policy and the deliveries are saved by the same
+      // call, and the grant is dropped BEFORE that write - so there is no persisted state in which sharing is
+      // off and the grant survives. Persisting the policy first and removing the grant in a second write left
+      // exactly that window: a process death in between restored the grant, and reconnect sent the bytes.
+      const relaunched = await launch();
+
+      expect(relaunched.service.allowsState(THE_MAC, idOf('shot-1'))).toBe(false);
+    });
+
     it('sends nothing new when the device comes back', async () => {
       const harness = await launch();
       await harness.service.setRule({
