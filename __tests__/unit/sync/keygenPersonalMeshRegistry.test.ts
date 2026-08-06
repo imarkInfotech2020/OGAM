@@ -181,14 +181,23 @@ describe('the licence s record of the mesh, from the phone', () => {
       });
     });
 
-    it('refuses to guess about another device whose record is thin', async () => {
+    it('keeps a thin record as a seat nobody holds, so it can be released first', async () => {
       keygen.activate({ key: LICENCE_KEY, fingerprint: 'fp-a-mystery' });
 
-      // Loud: guessing would put a device on the Devices screen that cannot be addressed, and silently dropping
-      // it would hide a seat the user is paying for.
-      await expect(registry().listInstallations()).rejects.toThrow(
-        PersonalMeshEntitlementError,
-      );
+      const [seat] = await registry().listInstallations();
+
+      // This used to THROW, and that throw is what bricked a real licence: it happens inside
+      // listInstallations, so one thin record failed activation on every device the user owned - reported
+      // as a replacement that had never been attempted. Adding a device must always work.
+      //
+      // Dropping the row silently would hide a seat the user is paying for, so it is kept and marked as
+      // belonging to no device (no syncDeviceId, activity 0). The shared eviction order releases those
+      // FIRST, ahead of any device still in use - which is the safe direction: there is no membership to
+      // revoke and no peer to notify.
+      expect(seat?.syncDeviceId).toBe('');
+      expect(seat?.lastActiveAt).toBe(0);
+      expect(seat?.installationId).toBeTruthy();
+      expect(seat?.deviceName).toBeTruthy();
     });
 
     it('ignores a provider time that is missing rather than merely unparseable', async () => {
