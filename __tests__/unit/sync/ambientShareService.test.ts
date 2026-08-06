@@ -134,6 +134,76 @@ describe('sharing a file to another device without being asked', () => {
     await AsyncStorage.clear();
   });
 
+  describe('turning sharing off after a file was already granted', () => {
+    it('revokes the grant, so a reconnect sends nothing', async () => {
+      const harness = await launch();
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+      await harness.service.handleCapture(screenshot('shot-1'));
+      expect(harness.service.allowsState(THE_MAC, idOf('shot-1'))).toBe(true);
+
+      // The user changes their mind while that transfer is still going.
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'off',
+      });
+
+      // The grant is gone. It used to survive, because reconciliation skipped anything already granted - and the
+      // reconnect path re-announces whatever is still granted WITHOUT consulting the policy again, so bytes left
+      // the device after the user withdrew consent. That is the one thing an Off switch has to prevent.
+      expect(harness.service.allowsState(THE_MAC, idOf('shot-1'))).toBe(false);
+    });
+
+    it('sends nothing new when the device comes back', async () => {
+      const harness = await launch();
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+      await harness.service.handleCapture(screenshot('shot-1'));
+      const sentBeforeRevoking = harness.scheduled.length;
+
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'off',
+      });
+      await harness.service.connected(THE_MAC);
+
+      // Reconnection is exactly when the old behaviour resurrected a revoked delivery.
+      expect(harness.scheduled).toHaveLength(sentBeforeRevoking);
+    });
+
+    it('leaves a grant alone when the rule still allows it', async () => {
+      const harness = await launch();
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+      harness.files.set(idOf('shot-1'), screenshot('shot-1'));
+      await harness.service.handleCapture(screenshot('shot-1'));
+
+      // Re-asserting the same permissive rule must not disturb an in-flight transfer: re-granting would send the
+      // same file twice, which is the failure on the other side of this fix.
+      await harness.service.setRule({
+        source: 'screenshot',
+        destinationId: THE_MAC,
+        mode: 'auto',
+      });
+
+      expect(harness.service.allowsState(THE_MAC, idOf('shot-1'))).toBe(true);
+      expect(harness.scheduled).toHaveLength(1);
+    });
+  });
+
   describe('a standing rule to send', () => {
     it('sends a screenshot with nothing to tap', async () => {
       const harness = await launch();
