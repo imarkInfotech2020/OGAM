@@ -128,9 +128,22 @@ jobs:
 
       # ── Gates. Every one runs even when an earlier one failed, so a single red gate cannot hide
       # the rest; the job still fails if any of them do.
-      - name: Lint
+      # ESLint ONLY - deliberately not `npm run lint`, which chains ./gradlew :app:lintDebug.
+      #
+      # Measured on run 31020019489: eslint finished in 36 SECONDS (15:24:59 -> 15:25:35); Android Lint then ran
+      # for 68 MINUTES, cold-configuring every React Native native module on a macOS runner
+      # (react-native-fs, background-downloader, documents/picker, audio-api, ...). It was 68 of the job's 90
+      # minutes - the whole reason a mobile PR took an hour and a half to report.
+      #
+      # Same call, and same reason, as the Android BUILD already documented below: the hosted runner is the wrong
+      # place for gradle work on this project. Android Lint stays a LOCAL pre-merge gate, run alongside the build
+      # it shares all that configuration cost with:
+      #     npm run lint:android      (cd android && ./gradlew :app:lintDebug)
+      # Android unit tests still run here (:app:testDebugUnitTest, ~2 min) - it is lint's full-graph configure
+      # that is pathological, not gradle itself.
+      - name: Lint (eslint)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
-        run: npm run lint
+        run: npx eslint .
 
       - name: Type check
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
