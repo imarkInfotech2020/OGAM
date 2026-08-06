@@ -34,6 +34,8 @@ export interface NativeSyncCallbacks {
   getSharedSecret?: (deviceId: string) => string | undefined;
   getMembershipId?: (deviceId: string) => string | undefined;
   pairingEntitlement?: SyncEngineOptions['pairingEntitlement'];
+  /** The persisted discoverability choice. Absent means advertise, as it always did. */
+  discoverable?: boolean;
   pairingPersistence?: PairingPersistence;
   membershipPersistence?: MembershipRevocationPersistence;
   onMembershipRevocationChanged?: (
@@ -62,6 +64,9 @@ export interface NativeSync {
   stop(): Promise<void>;
   rescan(): Promise<void>;
   renameLocalDevice(name: string): Promise<void>;
+  /** Advertise this device, or stop. Returns the value actually in effect. */
+  setDiscoverable(next: boolean): Promise<boolean>;
+  isDiscoverable(): boolean;
   pair(device: DeviceInfo, passphrase: string): Promise<PairedDevice>;
   cancelPairing(deviceId: string): Promise<boolean>;
   listPairingAttempts(): PairingAttemptSnapshot[];
@@ -136,6 +141,9 @@ export function createNativeSync(
     zeroconf,
     engine,
     localDevice,
+    ...(cbs.discoverable === undefined
+      ? {}
+      : { discoverable: cbs.discoverable }),
     getSharedSecret: cbs.getSharedSecret ?? (() => undefined),
     getMembershipId: cbs.getMembershipId,
     onDiscovered: device => {
@@ -225,6 +233,13 @@ export function createNativeSync(
       await proximity?.updateLocalDevice();
       await orchestrator.refreshAdvertisement();
     },
+    /** Advertising on/off while sync keeps running. Idempotence is the orchestrator's. */
+    async setDiscoverable(next: boolean) {
+      await orchestrator.setDiscoverable(next);
+      publishHealth();
+      return orchestrator.isDiscoverable();
+    },
+    isDiscoverable: () => orchestrator.isDiscoverable(),
     pair: (device, passphrase) => engine.pair(device, passphrase),
     cancelPairing: deviceId => engine.cancelPairing(deviceId),
     listPairingAttempts: () => engine.listPairingAttempts(),
