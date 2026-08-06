@@ -95,10 +95,27 @@ class BlobServer(
             }
             val landed = runCatching { receive(input, request, transfer) }
             respond(output, if (landed.isSuccess) "200 OK" else "500 Internal Server Error")
-            if (landed.isFailure) File(transfer.destinationPath).delete()
+            if (landed.isFailure) discardPartialPayload(File(transfer.destinationPath))
             onOutcome(request.requestId, landed.isSuccess)
             if (pending.isEmpty()) stop()
         }
+    }
+
+    /**
+     * Put the destination back to nothing after a failed receive.
+     *
+     * A failed transfer starts over rather than resuming. Keeping the bytes would be safe on its own terms -
+     * every frame verified as it arrived, which is why a deliberate resume is allowed to append to them - but
+     * the choice this line makes is a clean restart.
+     *
+     * delete() is advisory: on a phone another process can still hold the file. Whatever it leaves behind is
+     * exactly what the sending side reads as resume progress, because the resume offset IS the destination's
+     * size on disk (pro/sync/sharedFileTransfer.ts). So an unremovable file is truncated instead of ignored,
+     * and the restart happens either way rather than quietly turning into a resume.
+     */
+    private fun discardPartialPayload(destination: File) {
+        if (destination.delete() || !destination.exists()) return
+        runCatching { java.io.FileOutputStream(destination).close() }
     }
 
     private fun receive(input: InputStream, request: Head, transfer: Pending) {
