@@ -19,6 +19,8 @@ export interface BuildSyncEngineArgs {
   getPassphrase?: SyncEngineOptions['getPassphrase'];
   getSharedSecret?: SyncEngineOptions['getSharedSecret'];
   pairingEntitlement?: SyncEngineOptions['pairingEntitlement'];
+  /** Admit a device already on this licence with no code. Absent leaves pairing code-only. */
+  resolveMeshAdmission?: SyncEngineOptions['resolveMeshAdmission'];
   onPaired?: SyncEngineOptions['onPaired'];
   pairingPersistence?: SyncEngineOptions['pairingPersistence'];
   onPairingFailed?: SyncEngineOptions['onPairingFailed'];
@@ -60,6 +62,7 @@ export function buildSyncEngine(args: BuildSyncEngineArgs): {
     transport,
     getPassphrase: args.getPassphrase,
     getSharedSecret: args.getSharedSecret,
+    resolveMeshAdmission: args.resolveMeshAdmission,
     pairingEntitlement: args.pairingEntitlement,
     onPaired: args.onPaired,
     pairingPersistence: args.pairingPersistence,

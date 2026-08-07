@@ -53,6 +53,13 @@ export interface NativeSyncCallbacks {
   onHealthChanged?: (health: SyncDiscoverabilityHealthInput) => void;
   onAppMessage?: (deviceId: string, channel: string, data: unknown) => void;
   onMessage?: (deviceId: string, message: Message) => void;
+  /**
+   * Silent mesh admission: a device already on this licence pairs with no code and no prompt.
+   *
+   * ONE resolver drives both halves - the engine answering an inbound request and the orchestrator
+   * starting an outbound one - so this device cannot offer a codeless join it would itself refuse.
+   */
+  resolveMeshAdmission?: SyncEngineOptions['resolveMeshAdmission'];
   deviceCap?: DeviceCap;
 }
 
@@ -154,6 +161,16 @@ export function createNativeSync(
       : { discoverable: cbs.discoverable }),
     getSharedSecret: cbs.getSharedSecret ?? (() => undefined),
     getMembershipId: cbs.getMembershipId,
+    // The initiator half. Same resolver the engine answers with.
+    ...(cbs.resolveMeshAdmission
+      ? {
+          admitSilently: async (device: DiscoveredDevice) => {
+            const authenticator = await cbs.resolveMeshAdmission?.(device);
+            if (!authenticator) return;
+            await engine.pairWith(device, authenticator);
+          },
+        }
+      : {}),
     onDiscovered: device => {
       discoveredDeviceIds.add(device.id);
       cbs.onDiscovered?.(device);

@@ -36,6 +36,8 @@ export interface BuildDiscoveryArgs {
   onSourceError?: (sourceId: string, error: Error) => void;
   /** A saved device was found but the reconnect could not start. Silence here hides a dead mesh. */
   onReconnectFailed?: (device: DeviceInfo, error: Error) => void;
+  /** Pair an UNSAVED discovered device silently when it belongs to this licence. */
+  admitSilently?: (device: DiscoveredDevice) => Promise<void>;
   /** Advertise on start. Absent means yes, so an existing install does not go hidden on upgrade. */
   discoverable?: boolean;
 }
@@ -70,6 +72,7 @@ export function buildDiscovery(
       : { discoverable: args.discoverable }),
     getSharedSecret: args.getSharedSecret,
     getMembershipId: args.getMembershipId,
+    ...(args.admitSilently ? { admitSilently: args.admitSilently } : {}),
     onDiscovered: args.onDiscovered,
     onLost: args.onLost,
     onDiscoveryStateChanged: args.onDiscoveryStateChanged,
