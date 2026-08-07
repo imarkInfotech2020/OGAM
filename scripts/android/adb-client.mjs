@@ -33,6 +33,18 @@ export class AdbClient {
     return stdout;
   }
 
+  /**
+   * Run an adb shell command on this device.
+   *
+   * The escape hatch for DEVICE state that no UI exposes - the radio, the clock, a process signal.
+   * Deliberately public and deliberately thin: the driver owns talking to adb, so a caller that
+   * needs the network turned off asks for that rather than shelling out to `adb` behind its back
+   * and losing the serial that says WHICH phone.
+   */
+  async shell(command) {
+    return this.#adb(['shell', ...(Array.isArray(command) ? command : command.split(' '))]);
+  }
+
   /** Is a device attached and responding? */
   async isReady() {
     try {

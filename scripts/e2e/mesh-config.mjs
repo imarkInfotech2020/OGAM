@@ -51,11 +51,39 @@ export const MESH = {
   macos: () => ({
     kind: 'macos',
     ...endpoint(flag('mac', process.env.E2E_MAC ?? '192.168.1.64:9222'), 9222),
+    offline: OFFLINE.macos,
   }),
   windows: () => ({
     kind: 'windows',
     ...endpoint(flag('win', process.env.E2E_WIN ?? '192.168.1.94:9224'), 9224),
+    offline: OFFLINE.windows,
   }),
+};
+
+/**
+ * A SHELL on each desktop, and the network interface to take down.
+ *
+ * Separate from the CDP endpoint above because it is a different channel for a different job: the
+ * debugging port drives the app, this drives the machine. It is also the channel that gets cut when a
+ * flow takes the box off the network, which is exactly why `goOffline` schedules the recovery on the
+ * machine before it goes - see the surface layer.
+ *
+ * `service` is the interface name as that OS spells it: macOS wants the hardware port for
+ * `networksetup` (`en0`), Windows wants the connection name from `netsh interface show interface`.
+ */
+export const OFFLINE = {
+  macos: {
+    host: process.env.E2E_MAC_SSH_HOST ?? '192.168.1.64',
+    user: process.env.E2E_MAC_SSH_USER ?? 'admin',
+    service: process.env.E2E_MAC_IFACE ?? 'en0',
+  },
+  windows: {
+    host: process.env.E2E_WIN_SSH_HOST ?? '192.168.1.94',
+    user: process.env.E2E_WIN_SSH_USER ?? 'oga',
+    service: process.env.E2E_WIN_IFACE ?? 'Wi-Fi',
+    /** The guest has no key installed, so it authenticates by password from SSHPASS. */
+    password: true,
+  },
 };
 
 export const KINDS = Object.keys(MESH);

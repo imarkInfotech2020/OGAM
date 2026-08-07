@@ -280,6 +280,33 @@ const rnSurface = (client, platform) => {
         .some((label) => /^\w+ - Connected\b/.test(label.trim()));
     },
 
+    /**
+     * Leave the network for `ms`, then come back - scheduled on the DEVICE, before it goes.
+     *
+     * See goOffline in the shared notes below for why this is one self-restoring verb rather than an
+     * off switch and an on switch. On a phone the reason is weaker (adb survives a Wi-Fi drop over
+     * USB) but the shape is kept identical, because a flow that reads `goOffline(40_000)` should
+     * mean the same thing whichever device it is handed.
+     */
+    async goOffline(ms) {
+      if (platform !== 'android') {
+        throw new Error(
+          'an iPhone cannot be taken off the network from here: iOS exposes no radio control to WDA, ' +
+            'and the Settings toggle is not reachable from the app under test. Use an Android, a Mac ' +
+            'or the Windows box as the peer that goes away, or toggle it by hand.',
+        );
+      }
+      const seconds = Math.ceil(ms / 1000);
+      // Scheduled in one detached shell on the phone, for the same reason as the desktops: whatever
+      // takes the network away must also be what brings it back, or a harness that dies mid-flow
+      // leaves the device stranded.
+      await client.shell([
+        'sh',
+        '-c',
+        `'svc wifi disable; sleep ${seconds}; svc wifi enable' >/dev/null 2>&1 &`,
+      ]);
+    },
+
     screenshot: (path) => client.screenshot(path),
     close: async () => {},
   };
@@ -554,6 +581,59 @@ const electronSurface = async (spec) => {
         // chip says "N connected" - a loose match makes every device look connected at once.
         return card.innerText.includes('Connected');
       `);
+    },
+
+    /**
+     * Leave the network for `ms`, then come back - scheduled ON the machine before it goes.
+     *
+     * The desktops are driven THROUGH the network: CDP reaches them over an ssh tunnel. A plain
+     * "network off" would cut the channel that would later be used to turn it back on, and the box
+     * would sit there stranded until someone walked over to it. So the outage and the recovery are
+     * issued as ONE detached command that the machine runs by itself - it is already committed to
+     * coming back before it goes anywhere.
+     */
+    async goOffline(ms) {
+      const seconds = Math.ceil(ms / 1000);
+      const { host: sshHost, user, service } = spec.offline ?? {};
+      if (!sshHost) {
+        throw new Error(
+          `${platform} has no offline access configured - see OFFLINE in mesh-config.mjs. Taking a ` +
+            'desktop off the network needs a shell on it, not the debugging port.',
+        );
+      }
+      const script =
+        platform === 'macos'
+          ? // Belt and braces: whichever of Wi-Fi and Ethernet is carrying this box, both come back.
+            `networksetup -setairportpower ${service} off; sleep ${seconds}; ` +
+            `networksetup -setairportpower ${service} on`
+          : `netsh interface set interface "${service}" admin=disable & timeout /t ${seconds} & ` +
+            `netsh interface set interface "${service}" admin=enable`;
+      // nohup + & so the command survives the ssh session dying WITH the network it is about to cut.
+      const remote =
+        platform === 'macos'
+          ? `nohup sudo sh -c '${script}' >/dev/null 2>&1 &`
+          : `start /b cmd /c "${script}"`;
+      const sshArgs = ['-o', 'ConnectTimeout=8', `${user}@${sshHost}`, remote];
+      // The Windows guest authenticates by password, so it needs sshpass with SSHPASS in the
+      // environment. Said plainly rather than failing with a bare "Permission denied".
+      if (spec.offline.password) {
+        if (!process.env.SSHPASS) {
+          throw new Error(
+            `${platform} needs SSHPASS set to take it off the network (it authenticates by password)`,
+          );
+        }
+        await run('sshpass', [
+          '-e',
+          'ssh',
+          '-o',
+          'PreferredAuthentications=password',
+          '-o',
+          'PubkeyAuthentication=no',
+          ...sshArgs,
+        ]);
+        return;
+      }
+      await run('ssh', sshArgs);
     },
 
     async screenshot(path) {
