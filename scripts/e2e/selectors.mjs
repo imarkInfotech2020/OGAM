@@ -47,6 +47,15 @@ export const CANCEL = ['Cancel', 'Not now', 'Keep device'];
  */
 export const SHEET_TITLE = /^(Evict|Forget|Remove|Disconnect)\b.*\?$/;
 
+/**
+ * The device card naming itself as not advertising.
+ *
+ * Anchored to the whole line so it cannot match the SWITCH, whose label is "Discoverable to new
+ * devices" and is on screen either way. The card prints a status line only when it says something
+ * the switch does not, so a discoverable device shows none of these at all.
+ */
+export const HIDDEN_STATUS = /^(Hidden|Not discoverable|Undiscoverable)$/i;
+
 /** The desktop equivalents, matched against the text a person reads. */
 export const DESKTOP = {
   forget: ['Forget', 'Evict'],

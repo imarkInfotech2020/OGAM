@@ -23,7 +23,14 @@ import { promisify } from 'node:util';
 import { AdbClient } from '../android/adb-client.mjs';
 import { WdaClient } from '../ios/wda-client.mjs';
 import { ANDROID_PACKAGE, IOS_BUNDLE_ID } from './device.mjs';
-import { CANCEL, CONFIRM_DESTRUCTIVE, DESKTOP, ROW_CONTROL, SHEET_TITLE } from './selectors.mjs';
+import {
+  CANCEL,
+  CONFIRM_DESTRUCTIVE,
+  DESKTOP,
+  HIDDEN_STATUS,
+  ROW_CONTROL,
+  SHEET_TITLE,
+} from './selectors.mjs';
 
 const run = promisify(execFile);
 
@@ -256,6 +263,43 @@ const rnSurface = (client, platform) => {
         intervalMs: 500,
       });
       return true;
+    },
+
+    /**
+     * Turn this device's advertisement on or off, and report what it was before.
+     *
+     * Returns the PREVIOUS value so a flow can put it back exactly as it found it. Discoverability is
+     * a privacy choice the user made and it persists across restarts, so a flow that leaves it off
+     * has quietly changed a setting rather than tested one.
+     */
+    async setDiscoverable(on) {
+      await client.waitForLabel('sync-toggle-discoverable', {
+        label: 'the discoverability switch',
+        timeoutMs: 20_000,
+      });
+      const was = await this.isDiscoverable();
+      if (was !== on) await client.tapLabel('sync-toggle-discoverable');
+      return was;
+    },
+
+    /**
+     * Is this device advertising?
+     *
+     * Read from the card's STATUS LINE, not from the switch. The switch's on/off value is not in the
+     * label tree on both phones - iOS emits a "1"/"0" beside the testID and Android emits nothing at
+     * all - so a reader built on it works on one phone and throws on the other.
+     *
+     * The status line is a contract instead of an accident: the card prints it only when it says
+     * something the switch does not, so a device that is simply discoverable shows NO status, and a
+     * hidden one names itself. Anything else on that line (a health problem) is a device that is
+     * still advertising, which is why this looks for the hidden words rather than for any status.
+     */
+    async isDiscoverable() {
+      const labels = (await client.labels()).map((label) => label.trim());
+      if (!labels.includes('sync-toggle-discoverable')) {
+        throw new Error(`${platform} shows no discoverability switch`);
+      }
+      return !labels.some((label) => HIDDEN_STATUS.test(label));
     },
 
     /** Back out of an open sheet, leaving the mesh as it was. Used when a flow aborts mid-journey. */
@@ -566,6 +610,33 @@ const electronSurface = async (spec) => {
         intervalMs: 500,
       });
       return true;
+    },
+
+    /** Turn this device's advertisement on or off. Answers what it was, so a flow can restore it. */
+    async setDiscoverable(on) {
+      const was = await this.isDiscoverable();
+      if (was === on) return was;
+      if (!(await click('Discoverable'))) {
+        throw new Error(`${platform} offers no discoverability control`);
+      }
+      return was;
+    },
+
+    /** Is this device advertising? Read from the Discoverable chip's own pressed/checked state. */
+    async isDiscoverable() {
+      const state = await evaluate(`
+        const chip = [...document.querySelectorAll('button, [role="switch"], [role="checkbox"]')]
+          .filter((el) => /discoverable/i.test(el.innerText ?? '') && el.offsetParent !== null)
+          .sort((a, b) => (a.innerText ?? '').length - (b.innerText ?? '').length)[0];
+        if (!chip) return null;
+        // Whichever the control actually publishes. A chip that says only "Discoverable" when on and
+        // "Not discoverable"/"Hidden" when off is read by its text; a real switch by its state.
+        const flag = chip.getAttribute('aria-checked') ?? chip.getAttribute('aria-pressed');
+        if (flag !== null) return flag === 'true';
+        return !/not discoverable|hidden/i.test(chip.innerText ?? '');
+      `);
+      if (state === null) throw new Error(`${platform} shows no discoverability control`);
+      return state;
     },
 
     /** Back out of an open dialog, leaving the mesh as it was. */

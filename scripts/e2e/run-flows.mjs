@@ -21,9 +21,10 @@ import { EVIDENCE_DIR, flag, specFor } from './mesh-config.mjs';
 import { connectSurface } from './sync-surface.mjs';
 import { flow as pairByCode } from './flows/pair-by-code.mjs';
 import { flow as reconnectInRange } from './flows/reconnect-in-range.mjs';
+import { flow as discoverabilityOff } from './flows/discoverability-off.mjs';
 
 /** Every flow, in the order they are meant to run. */
-const FLOWS = [pairByCode, reconnectInRange];
+const FLOWS = [pairByCode, reconnectInRange, discoverabilityOff];
 
 const only = flag('only');
 const onlyRoute = flag('route');
