@@ -4,7 +4,12 @@ import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile
 import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../constants';
 import { getCuratedLiteRTEntry } from '../curatedLiteRTRegistry';
 import logger from '../../utils/logger';
-import { collapseDuplicateFileRows } from './collapseDuplicateFileRows';
+import { collapseDuplicateFileRows, collapseDuplicateImageRows } from './collapseDuplicateFileRows';
+import { reconcilePrimaryPaths, resolveStoredPath } from './reconcileStoredPaths';
+
+// Re-exported because this module was the published home of these helpers before they were extracted
+// into the one place both registries share.
+export { resolveStoredPath };
 
 const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 const IMAGE_MODELS_STORAGE_KEY = '@local_llm/downloaded_image_models';
@@ -44,57 +49,12 @@ export function determineCredibility(author: string): ModelCredibility {
   };
 }
 
-export function resolveStoredPath(storedPath: string, currentBaseDir: string): string | null {
-  const baseDirName = currentBaseDir.substring(currentBaseDir.lastIndexOf('/') + 1);
-  const marker = `/${baseDirName}/`;
-  const markerIndex = storedPath.indexOf(marker);
-
-  if (markerIndex === -1) return null;
-
-  const relativePart = storedPath.substring(markerIndex + marker.length);
-  if (!relativePart) return null;
-
-  return `${currentBaseDir}/${relativePart}`;
-}
-
 export async function saveModelsList(models: DownloadedModel[]): Promise<void> {
   await AsyncStorage.setItem(MODELS_STORAGE_KEY, JSON.stringify(models));
 }
 
 export async function saveImageModelsList(models: ONNXImageModel[]): Promise<void> {
   await AsyncStorage.setItem(IMAGE_MODELS_STORAGE_KEY, JSON.stringify(models));
-}
-
-/**
- * Existence probe that NEVER conflates a transient filesystem error with "file absent".
- *
- * `RNFS.exists` can reject on a transient FS hiccup (I/O error, container not yet mounted,
- * momentary permission blip). If we read that rejection as "the file is gone", the caller
- * prunes the model from the registry and persists the pruned list — silently unlinking a
- * valid, fully-downloaded multi-GB model (G1 data loss). `verifiable: false` marks "we
- * could not tell", which callers MUST treat as keep-the-model, not drop-it.
- */
-async function probeExists(path: string): Promise<{ exists: boolean; verifiable: boolean }> {
-  try {
-    return { exists: await RNFS.exists(path), verifiable: true };
-  } catch (e) {
-    logger.warn(`[ModelManagerStorage] existence check could not be verified for ${path} — keeping model (transient)`, e);
-    return { exists: false, verifiable: false };
-  }
-}
-
-async function tryResolveTextModelPath(
-  model: DownloadedModel,
-  modelsDir: string,
-): Promise<{ exists: boolean; updated: boolean; verifiable: boolean }> {
-  const resolved = resolveStoredPath(model.filePath, modelsDir);
-  if (!resolved || resolved === model.filePath) return { exists: false, updated: false, verifiable: true };
-  const { exists, verifiable } = await probeExists(resolved);
-  if (exists) {
-    model.filePath = resolved;
-    return { exists: true, updated: true, verifiable };
-  }
-  return { exists: false, updated: false, verifiable };
 }
 
 async function tryResolveMmProjPath(
@@ -118,72 +78,22 @@ async function validateAndResolveModels(
   models: DownloadedModel[],
   modelsDir: string,
 ): Promise<{ validModels: DownloadedModel[]; pathsUpdated: boolean }> {
-  const validModels: DownloadedModel[] = [];
-  let pathsUpdated = false;
+  const { verdicts, pathsUpdated: primaryUpdated } = await reconcilePrimaryPaths(models, modelsDir, {
+    getPath: model => model.filePath,
+    setPath: (model, path) => {
+      model.filePath = path;
+    },
+  });
 
-  const existenceChecks = await Promise.all(
-    models.map(m => probeExists(m.filePath))
-  );
-
-  const modelsToResolve: Array<{ model: DownloadedModel; idx: number }> = [];
-  for (let i = 0; i < models.length; i++) {
-    if (!existenceChecks[i].exists) {
-      modelsToResolve.push({ model: models[i], idx: i });
-    }
-  }
-
-  const resolutionResults = await Promise.all(
-    modelsToResolve.map(({ model }) => tryResolveTextModelPath(model, modelsDir))
-  );
-
-  for (let i = 0; i < modelsToResolve.length; i++) {
-    const result = resolutionResults[i];
-    if (result.updated) pathsUpdated = true;
-  }
-
-  const modelsToCheckMmProj: Array<{ model: DownloadedModel; idx: number }> = [];
-  for (let i = 0; i < models.length; i++) {
-    const mainExists = existenceChecks[i].exists;
-    if (!mainExists) {
-      const idx = modelsToResolve.findIndex(m => m.idx === i);
-      if (idx >= 0 && resolutionResults[idx].exists) {
-        modelsToCheckMmProj.push({ model: models[i], idx: i });
-      }
-    } else {
-      modelsToCheckMmProj.push({ model: models[i], idx: i });
-    }
-  }
-
+  // Only a model whose primary file is actually present can have its projector resolved - a missing
+  // model has nothing to see with either.
+  const withProjector = models.filter((_, i) => verdicts[i].exists);
   const mmProjResults = await Promise.all(
-    modelsToCheckMmProj.map(({ model }) => tryResolveMmProjPath(model, modelsDir))
+    withProjector.map(model => tryResolveMmProjPath(model, modelsDir)),
   );
 
-  for (const result of mmProjResults) {
-    if (result) pathsUpdated = true;
-  }
-
-  for (let i = 0; i < models.length; i++) {
-    const { exists: mainExists, verifiable: mainVerifiable } = existenceChecks[i];
-    let exists = mainExists;
-    // The model is confirmably gone only when EVERY probe cleanly resolved "absent".
-    // If any probe couldn't be verified (RNFS threw), we don't know — and must not drop it.
-    let verifiable = mainVerifiable;
-    if (!mainExists) {
-      const idx = modelsToResolve.findIndex(m => m.idx === i);
-      if (idx >= 0) {
-        exists = resolutionResults[idx].exists;
-        verifiable = verifiable && resolutionResults[idx].verifiable;
-      }
-    }
-    // Keep the model if it exists OR if we couldn't verify its absence. Pruning (and the
-    // saveModelsList persist that follows) is reserved for files PROVABLY gone — a transient
-    // filesystem error must never silently unlink a valid, fully-downloaded model (G1).
-    if (exists || !verifiable) {
-      validModels.push(models[i]);
-    }
-  }
-
-  return { validModels, pathsUpdated };
+  const pathsUpdated = primaryUpdated || mmProjResults.some(Boolean);
+  return { validModels: models.filter((_, i) => verdicts[i].keep), pathsUpdated };
 }
 
 export async function loadDownloadedModels(modelsDir: string): Promise<DownloadedModel[]> {
@@ -228,20 +138,6 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
   return deduped;
 }
 
-async function tryResolveImageModelPath(
-  model: ONNXImageModel,
-  imageModelsDir: string,
-): Promise<{ exists: boolean; updated: boolean }> {
-  const resolved = resolveStoredPath(model.modelPath, imageModelsDir);
-  if (!resolved || resolved === model.modelPath) return { exists: false, updated: false };
-  const exists = await RNFS.exists(resolved);
-  if (exists) {
-    model.modelPath = resolved;
-    return { exists: true, updated: true };
-  }
-  return { exists: false, updated: false };
-}
-
 export async function loadDownloadedImageModels(imageModelsDir: string): Promise<ONNXImageModel[]> {
   const stored = await AsyncStorage.getItem(IMAGE_MODELS_STORAGE_KEY);
   if (!stored) return [];
@@ -260,46 +156,23 @@ export async function loadDownloadedImageModels(imageModelsDir: string): Promise
     return [];
   }
 
-  const existenceChecks = await Promise.all(
-    models.map(m => RNFS.exists(m.modelPath))
-  );
+  const { verdicts, pathsUpdated } = await reconcilePrimaryPaths(models, imageModelsDir, {
+    getPath: model => model.modelPath,
+    setPath: (model, path) => {
+      model.modelPath = path;
+    },
+  });
 
-  const modelsToResolve: Array<{ model: ONNXImageModel; idx: number }> = [];
-  for (let i = 0; i < models.length; i++) {
-    if (!existenceChecks[i]) {
-      modelsToResolve.push({ model: models[i], idx: i });
-    }
+  const validModels = models.filter((_, i) => verdicts[i].keep);
+  // Repairs a registry that already grew duplicates under the old `Date.now()` ids, exactly as the
+  // text registry does one function above.
+  const { models: deduped, collapsed } = collapseDuplicateImageRows(validModels);
+
+  if (validModels.length !== models.length || pathsUpdated || collapsed > 0) {
+    await saveImageModelsList(deduped);
   }
 
-  const resolutionResults = await Promise.all(
-    modelsToResolve.map(({ model }) => tryResolveImageModelPath(model, imageModelsDir))
-  );
-
-  let pathsUpdated = false;
-  for (const result of resolutionResults) {
-    if (result.updated) pathsUpdated = true;
-  }
-
-  const validModels: ONNXImageModel[] = [];
-  for (let i = 0; i < models.length; i++) {
-    const mainExists = existenceChecks[i];
-    let exists = mainExists;
-    if (!mainExists) {
-      const idx = modelsToResolve.findIndex(m => m.idx === i);
-      if (idx >= 0) {
-        exists = resolutionResults[idx].exists;
-      }
-    }
-    if (exists) {
-      validModels.push(models[i]);
-    }
-  }
-
-  if (validModels.length !== models.length || pathsUpdated) {
-    await saveImageModelsList(validModels);
-  }
-
-  return validModels;
+  return deduped;
 }
 
 export interface BuildModelOpts {

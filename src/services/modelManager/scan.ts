@@ -2,6 +2,7 @@ import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
 import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../types';
 import { loadDownloadedModels, saveModelsList } from './storage';
+import { basenameOf } from './reconcileStoredPaths';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 // Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
@@ -270,7 +271,16 @@ export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Pr
   const { imageModelsDir, getImageModels, addImageModel } = opts;
   const discoveredModels: ONNXImageModel[] = [];
   const registeredModels = await getImageModels();
-  const registeredPaths = new Set(registeredModels.map(m => m.modelPath));
+  /**
+   * Index by DIRECTORY NAME, not by absolute path — the same conclusion the text scan below reached.
+   *
+   * `loadDownloadedImageModels` rebases a stale container path onto the current dir, so the common
+   * reinstall case never reaches here. It cannot rebase a path that doesn't contain the current base
+   * dir name, and it returns nothing at all if the load threw. In both cases a path comparison calls a
+   * directory we already own "untracked" and adopts a second row for it. A directory name is unique
+   * within the models dir, so it is the identity that survives a container move.
+   */
+  const registeredDirNames = new Set(registeredModels.map(m => basenameOf(m.modelPath)));
 
   const dirExists = await RNFS.exists(imageModelsDir);
   if (!dirExists) return discoveredModels;
@@ -278,13 +288,17 @@ export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Pr
   const items = await RNFS.readDir(imageModelsDir);
 
   for (const item of items) {
-    if (!item.isDirectory() || registeredPaths.has(item.path)) continue;
+    if (!item.isDirectory() || registeredDirNames.has(item.name)) continue;
 
     const totalSize = await getDirSize(item.path);
     if (totalSize === 0) continue;
 
     const newModel: ONNXImageModel = {
-      id: `recovered_${item.name}_${Date.now()}`,
+      // Derived from the directory name and NOTHING else. `Date.now()` meant the same directory
+      // adopted twice produced two ids nothing downstream could reconcile, and anything holding the
+      // previous id (the selected image model) dangled. A name is unique here, so this id is stable
+      // across every scan, reinstall and container move.
+      id: `recovered_${item.name}`,
       name: item.name.replaceAll('_', ' ').replaceAll(/\.(zip|tar|gz)$/gi, ''),
       description: `Recovered ${item.name} model`,
       modelPath: item.path,
