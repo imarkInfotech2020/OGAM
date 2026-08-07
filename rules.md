@@ -103,6 +103,15 @@ The emotional arc for all content: **Recognition -> Return -> Freedom**. Name wh
 - If an existing component is close but not exact, extend it with a prop rather than forking a copy.
 - Only build new when nothing fits - and say so in the PR description.
 
+## Debugging — start with the source of truth
+
+**Canonical: `../shared/CLAUDE.md` ("Debugging — start with the source of truth").**
+
+The short version, because it decides where you look first: most bugs here are two sources of truth
+disagreeing, so ask what owns the fact, whether anything else answers the same question, and whether
+collapsing them to one source is the fix - before reading a trace. A hardcoded literal beside a computed
+value (`status: 'completed'` next to a record that has a status) is the usual tell.
+
 ## Architecture & Abstractions (SOLID)
 
 **Design to abstractions, not concrete implementations.** When there are multiple interchangeable implementations of a thing (TTS engines, model backends, providers, storage), the rest of the app must depend on a single interface/service layer - never branch on a concrete type.

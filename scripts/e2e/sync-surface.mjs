@@ -761,12 +761,17 @@ const electronSurface = async (spec) => {
  *   connectSurface({ kind: 'windows', host: '192.168.1.26', port: 9222 })
  */
 export async function connectSurface(spec) {
-  const { kind, restart = false } = spec;
+  // `passive` means LOOK, do not touch: attach to whatever is on screen and launch nothing. Anything
+  // that observes a journey a person is driving must use it, or the observer changes the thing it is
+  // observing - activating the app under test is how a live model transfer got killed.
+  const { kind, restart = false, passive = false } = spec;
   if (kind === 'android') {
     const client = new AdbClient(spec.serial ?? process.env.E2E_ANDROID_SERIAL);
     if (!(await client.isReady())) throw new Error('nothing is answering adb');
     if (restart) await client.restart(ANDROID_PACKAGE);
-    else await client.session(ANDROID_PACKAGE);
+    // Android's session() relaunches the app to the foreground, which is fine for driving and wrong
+    // for watching. Passive skips it and reads whatever is already there.
+    else if (!passive) await client.session(ANDROID_PACKAGE);
     return rnSurface(client, 'android');
   }
   if (kind === 'ios') {
@@ -775,6 +780,12 @@ export async function connectSurface(spec) {
     const client = new WdaClient(url);
     if (!(await client.isReady())) throw new Error(`WDA at ${url} is not answering`);
     if (restart) await client.restart(IOS_BUNDLE_ID);
+    // A session created WITH a bundle id makes WDA launch and activate that app, which terminates
+    // whatever it was doing. That is right when a flow is about to drive the phone, and completely
+    // wrong when something only wants to LOOK: it killed a model transfer that was mid-flight,
+    // because the observer relaunched the app it was observing. Passive attaches to whatever is
+    // already on screen and touches nothing.
+    else if (passive) await client.session();
     else await client.session(IOS_BUNDLE_ID);
     return rnSurface(client, 'ios');
   }
