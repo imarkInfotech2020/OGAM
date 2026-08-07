@@ -3,7 +3,13 @@
     "allow": [
       "Bash(adb -s 192.168.43.7:46187 shell \"run-as ai.offgridmobile.dev cat databases/RKStorage\")",
       "Bash(adb -s 192.168.43.7:46187 shell \"run-as ai.offgridmobile.dev ls -la files/image_models/\")",
-      "Bash(node -e \"const RNFS = { DocumentDirectoryPath: '[RNFS.DocumentDirectoryPath]' }; console.log\\('Android DocumentDirectoryPath maps to?'\\)\")"
+      "Bash(node -e \"const RNFS = { DocumentDirectoryPath: '[RNFS.DocumentDirectoryPath]' }; console.log\\('Android DocumentDirectoryPath maps to?'\\)\")",
+      "Bash(xcrun devicectl device copy from *)",
+      "Bash(adb devices)",
+      "Bash(xcrun devicectl device info *)",
+      "Bash(xcrun devicectl list devices)",
+      "Bash(npm run depcruise)",
+      "Bash(npm run knip)"
     ]
   }
 }
