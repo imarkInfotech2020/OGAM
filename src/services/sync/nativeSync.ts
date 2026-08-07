@@ -116,7 +116,15 @@ export function createNativeSync(
     membershipPersistence: cbs.membershipPersistence,
     onMembershipRevocationChanged: cbs.onMembershipRevocationChanged,
     onMembershipRevoked: cbs.onMembershipRevoked,
-    onDisconnected: cbs.onDisconnected,
+    onDisconnected: (deviceId, reason) => {
+      // Hand the drop to the orchestrator FIRST so a saved peer heals itself. Auto-reconnect used to
+      // run only when discovery ANNOUNCED a device, so a peer already in the list was never retried
+      // and stayed disconnected until someone tapped Reconnect. The reason rides along so a
+      // disconnect the user asked for is left alone. Declared below and captured by this closure -
+      // it is only ever called once a session has existed, long after both are built.
+      orchestrator.handleDisconnected(deviceId, reason);
+      cbs.onDisconnected?.(deviceId);
+    },
     onRouteChanged: cbs.onRouteChanged,
     onMessage: cbs.onMessage,
     onAppMessage: cbs.onAppMessage,
