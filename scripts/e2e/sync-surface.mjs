@@ -23,6 +23,7 @@ import { promisify } from 'node:util';
 import { AdbClient } from '../android/adb-client.mjs';
 import { WdaClient } from '../ios/wda-client.mjs';
 import { ANDROID_PACKAGE, IOS_BUNDLE_ID } from './device.mjs';
+import { CANCEL, CONFIRM_DESTRUCTIVE, DESKTOP, ROW_CONTROL, SHEET_TITLE } from './selectors.mjs';
 
 const run = promisify(execFile);
 
@@ -190,6 +191,81 @@ const rnSurface = (client, platform) => {
       await client.type(code.replace('-', ''));
       await sleep(800);
       await client.tapLabel('sync-pairing-code-confirm');
+    },
+
+    /**
+     * The confirmation sheet currently covering the list, or undefined.
+     *
+     * Exposed because an open sheet makes every other read on this surface lie: the accessibility
+     * label list is REPLACED by the sheet, so a device that is still connected reads as disconnected.
+     * A flow that checks its own teardown has to be able to tell "gone" from "hidden behind a sheet".
+     */
+    async openSheet() {
+      const labels = (await client.labels()).map((label) => label.trim());
+      return labels.find((label) => SHEET_TITLE.test(label));
+    },
+
+    /**
+     * Drop a saved device: its credential goes, so pairing with it needs the code again.
+     *
+     * Addressed through the row's own `sync-forget-<id>` control rather than a "Forget" label, because
+     * every saved row carries one and only this row's is right.
+     *
+     * The confirmation is REQUIRED, not best-effort. It used to tap a guessed testID and swallow the
+     * failure, which left the real sheet ("Evict 17 pro max?" / "Evict device") untouched - and since
+     * that sheet hides the device list, the check that followed read the device as already gone. The
+     * flow then paired against a credential that had never been dropped and called it a pass.
+     */
+    async forget(name) {
+      const control = await controlFor(name, ROW_CONTROL.forget);
+      if (!control) throw new Error(`${platform} lists no forget control for "${name}"`);
+      await client.tapLabel(control);
+      await this.confirmDestructive(`forget ${name}`);
+    },
+
+    /**
+     * Go through with whatever destructive sheet just opened, and wait until it is gone.
+     *
+     * Returns false when the platform asked nothing - that is a real answer, not a failure, because
+     * the same journey is confirmed on one platform and immediate on another. But a sheet that IS
+     * open and offers nothing this knows how to press is a failure: pressing on would act on a screen
+     * nobody can read.
+     */
+    async confirmDestructive(what) {
+      const sheet = await waitUntil(() => this.openSheet(), {
+        label: `a confirmation sheet for ${what} on ${platform}`,
+        timeoutMs: 6_000,
+        intervalMs: 500,
+      }).catch(() => undefined);
+      if (!sheet) return false;
+
+      const labels = (await client.labels()).map((label) => label.trim());
+      const confirm = CONFIRM_DESTRUCTIVE.find((candidate) => labels.includes(candidate));
+      if (!confirm) {
+        throw new Error(
+          `${platform} opened "${sheet}" but offers none of ${CONFIRM_DESTRUCTIVE.join(', ')} - ` +
+            `the sheet reads: ${labels.slice(0, 12).join(' / ')}`,
+        );
+      }
+      await client.tapLabel(confirm);
+      // Wait for it to CLOSE. Until it does, every read on this surface is the sheet's text rather
+      // than the device list, and the caller's next assertion would be answered by the wrong screen.
+      await waitUntil(async () => !(await this.openSheet()), {
+        label: `the ${what} sheet on ${platform} to close`,
+        timeoutMs: 20_000,
+        intervalMs: 500,
+      });
+      return true;
+    },
+
+    /** Back out of an open sheet, leaving the mesh as it was. Used when a flow aborts mid-journey. */
+    async dismissSheet() {
+      if (!(await this.openSheet())) return false;
+      const labels = (await client.labels()).map((label) => label.trim());
+      const cancel = CANCEL.find((candidate) => labels.includes(candidate));
+      if (cancel) await client.tapLabel(cancel);
+      else await client.back().catch(() => {});
+      return true;
     },
 
     async isConnectedTo(name) {
@@ -396,6 +472,74 @@ const electronSurface = async (spec) => {
       if (!confirmed) throw new Error(`${platform}: the dialog offered no enabled confirm button`);
     },
 
+    /** The confirmation dialog currently open, or undefined. Same contract as the RN surface. */
+    async openSheet() {
+      const title = await evaluate(`
+        const dialog = document.querySelector('[role="dialog"]');
+        if (!dialog || dialog.offsetParent === null) return null;
+        return (dialog.innerText ?? '').split('\\n')[0] ?? 'dialog';
+      `);
+      return title ?? undefined;
+    },
+
+    /** Drop a saved device, so pairing with it needs the code again. Scoped to that device's card. */
+    async forget(name) {
+      for (const label of DESKTOP.forget) {
+        if (await click(label, name)) {
+          await this.confirmDestructive(`forget ${name}`);
+          return;
+        }
+      }
+      throw new Error(`${platform} offers no forget control for "${name}"`);
+    },
+
+    /** Go through with an open destructive dialog, and wait until it is gone. */
+    async confirmDestructive(what) {
+      const dialog = await waitUntil(() => this.openSheet(), {
+        label: `a confirmation dialog for ${what} on ${platform}`,
+        timeoutMs: 6_000,
+        intervalMs: 500,
+      }).catch(() => undefined);
+      if (!dialog) return false;
+
+      // Scoped to the dialog: the Devices screen renders a Forget button on every saved card, so an
+      // unscoped smallest-match would press a card behind the dialog instead of the dialog itself.
+      const confirmed = await evaluate(`
+        const dialog = document.querySelector('[role="dialog"]');
+        if (!dialog) return false;
+        const confirm = [...dialog.querySelectorAll('button')]
+          .filter((b) => b.offsetParent !== null && !b.disabled)
+          .find((b) => ${DESKTOP.confirmDestructive}.test((b.innerText ?? '').trim()));
+        if (!confirm) return false;
+        confirm.click();
+        return true;
+      `);
+      if (!confirmed) {
+        throw new Error(`${platform} opened "${dialog}" but offered no enabled confirm button`);
+      }
+      await waitUntil(async () => !(await this.openSheet()), {
+        label: `the ${what} dialog on ${platform} to close`,
+        timeoutMs: 20_000,
+        intervalMs: 500,
+      });
+      return true;
+    },
+
+    /** Back out of an open dialog, leaving the mesh as it was. */
+    async dismissSheet() {
+      if (!(await this.openSheet())) return false;
+      await evaluate(`
+        const dialog = document.querySelector('[role="dialog"]');
+        if (!dialog) return false;
+        const cancel = [...dialog.querySelectorAll('button')]
+          .filter((b) => b.offsetParent !== null && !b.disabled)
+          .find((b) => /cancel|not now|keep/i.test((b.innerText ?? '').trim()));
+        if (cancel) { cancel.click(); return true; }
+        return false;
+      `);
+      return true;
+    },
+
     async isConnectedTo(name) {
       return evaluate(`
         const wanted = ${JSON.stringify(name)};
@@ -493,6 +637,31 @@ export async function pair({ host, joiner, hostName, joinerName, timeoutMs = 120
     intervalMs: 2000,
   });
   return { code, action, usedCode: prompted };
+}
+
+/**
+ * Make `surface` forget `name`, and WAIT until the screen agrees.
+ *
+ * The wait is the whole value: forgetting is asynchronous, and a flow that pairs immediately after
+ * tapping Forget races the teardown it just asked for - the credential is often still there, the
+ * pairing succeeds without a code, and the route passes for the wrong reason.
+ */
+export async function forget(surface, name, { timeoutMs = 30_000 } = {}) {
+  await surface.forget(name);
+  await waitUntil(
+    async () => {
+      // A sheet still open means the screen being read is the SHEET, not the device list, and every
+      // answer from it is about the wrong screen. This is the exact false pass this helper exists to
+      // prevent: "not connected" read off a covering sheet, while the credential was never dropped.
+      if (await surface.openSheet()) return false;
+      return !(await surface.isConnectedTo(name));
+    },
+    {
+      label: `${surface.platform} to let go of "${name}" with no sheet left open`,
+      timeoutMs,
+      intervalMs: 1000,
+    },
+  );
 }
 
 /** Poll any condition on a surface, with a diagnosis rather than a bare timeout. */
