@@ -1,8 +1,7 @@
 import RNFS from 'react-native-fs';
 import { unzip } from 'react-native-zip-archive';
-import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile, ONNXImageModel, ModelEngine } from '../../types';
-import { buildDownloadedModel, persistDownloadedModel, loadDownloadedModels, saveModelsList } from './storage';
-import { copyFileWithProgress } from './copyFile';
+import { DownloadedModel, LlamaDownloadedModel, ONNXImageModel } from '../../types';
+import { loadDownloadedModels, saveModelsList } from './storage';
 import { resolveCoreMLModelDir } from '../../utils/coreMLModelUtils';
 import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 // Single source of truth for projector detection + model↔projector matching (see src/services/mmproj.ts).
@@ -10,7 +9,7 @@ import { isMMProjFile, pickMmProjForModel } from '../mmproj';
 
 export { isMMProjFile };
 
-function parseSizeInt(size: string | number): number {
+export function parseSizeInt(size: string | number): number {
   return typeof size === 'string' ? Number.parseInt(size, 10) : size;
 }
 
@@ -419,95 +418,3 @@ async function doScanForUntrackedTextModels(
   return discoveredModels;
 }
 
-export interface ImportLocalModelOpts {
-  sourceUri: string;
-  fileName: string;
-  modelsDir: string;
-  sourceSize?: number | null;
-  engine?: ModelEngine;
-  liteRTVision?: boolean;
-  onProgress?: (progress: { fraction: number; fileName: string }) => void;
-  mmProjSourceUri?: string;
-  mmProjFileName?: string;
-  mmProjSourceSize?: number | null;
-}
-
-function resolveUri(uri: string): string {
-  // Android content:// URIs are passed directly to RNFS.copyFile — no cache copy needed.
-  // iOS file:// URIs need decoding (%20 → space) so RNFS can find the file on disk.
-  if (uri.startsWith('content://')) {
-    return uri;
-  }
-  return decodeURIComponent(uri);
-}
-
-
-export async function importLocalModel(opts: ImportLocalModelOpts): Promise<DownloadedModel> { // NOSONAR
-  const { sourceUri, fileName, modelsDir, sourceSize, engine: _engine, liteRTVision, onProgress, mmProjSourceUri, mmProjFileName, mmProjSourceSize } = opts;
-
-  const isLitert = fileName.toLowerCase().endsWith('.litertlm');
-  if (!fileName.toLowerCase().endsWith('.gguf') && !isLitert) {
-    throw new Error('Only .gguf and .litertlm files can be imported');
-  }
-
-  const resolvedSource = resolveUri(sourceUri);
-  const resolvedMmProjSource = mmProjSourceUri ? resolveUri(mmProjSourceUri) : undefined;
-
-  const destPath = `${modelsDir}/${fileName}`;
-  const destExists = await RNFS.exists(destPath);
-  if (destExists) throw new Error(`A model file named "${fileName}" already exists`);
-  if (mmProjFileName && await RNFS.exists(`${modelsDir}/${mmProjFileName}`)) {
-    throw new Error(`A file named "${mmProjFileName}" already exists`);
-  }
-
-  // Copy main model: progress 0→0.5 when mmproj present, 0→1 otherwise
-  const mainProgressScale = mmProjFileName ? 0.5 : 1;
-  await copyFileWithProgress(resolvedSource, destPath, {
-    knownTotalBytes: sourceSize ?? null,
-    onProgress: onProgress ? (fraction: number) => onProgress({ fraction: fraction * mainProgressScale, fileName }) : undefined,
-  });
-
-  const quantMatch = fileName.match(/[_-](Q\d+[_\w]*|f16|f32)/i);
-  const quantization = quantMatch ? quantMatch[1].toUpperCase() : 'Unknown';
-  const modelName = fileName.replace(/\.gguf$/i, '').replace(/\.litertlm$/i, '').replace(/[_-]Q\d+.*/i, '');
-  const destStat = await RNFS.stat(destPath);
-  const fileSize = parseSizeInt(destStat.size);
-
-  const pseudoFile: ModelFile = { name: fileName, size: fileSize, quantization, downloadUrl: '' };
-  const baseModel = await buildDownloadedModel({ modelId: 'local_import', file: pseudoFile, resolvedLocalPath: destPath });
-  const baseFields = {
-    id: `local_import/${fileName}`,
-    name: modelName,
-    author: 'Local Import',
-    credibility: { source: 'community' as const, isOfficial: false, isVerifiedQuantizer: false },
-  };
-
-  if (isLitert) {
-    const liteRTModel: LiteRTDownloadedModel = {
-      ...baseModel, ...baseFields, engine: 'litert', liteRTVision: liteRTVision ?? false,
-    };
-    await persistDownloadedModel(liteRTModel, modelsDir);
-    return liteRTModel;
-  }
-
-  const llamaModel: LlamaDownloadedModel = { ...baseModel, ...baseFields, engine: 'llama' };
-
-  // Copy mmproj and link it to the model: progress 0.5→1
-  if (mmProjFileName && resolvedMmProjSource) {
-    const mmProjDestPath = `${modelsDir}/${mmProjFileName}`;
-    await copyFileWithProgress(resolvedMmProjSource, mmProjDestPath, {
-      knownTotalBytes: mmProjSourceSize ?? null,
-      onProgress: onProgress
-        ? (fraction: number) => onProgress({ fraction: 0.5 + fraction * 0.5, fileName: mmProjFileName })
-        : undefined,
-    });
-    const mmProjStat = await RNFS.stat(mmProjDestPath);
-    llamaModel.mmProjPath = mmProjDestPath;
-    llamaModel.mmProjFileName = mmProjFileName;
-    llamaModel.mmProjFileSize = parseSizeInt(mmProjStat.size);
-    llamaModel.isVisionModel = true;
-  }
-
-  await persistDownloadedModel(llamaModel, modelsDir);
-  return llamaModel;
-}

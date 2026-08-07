@@ -36,11 +36,13 @@ import {
   cleanupMMProjEntries as scanCleanupMMProjEntries,
   scanForUntrackedImageModels as scanUntrackedImage,
   scanForUntrackedTextModels as scanUntrackedText,
-  importLocalModel as scanImportLocalModel,
   reconcileFinishedImageDownloads as reconcileImageDownloads,
   isMMProjFile,
-  ImportLocalModelOpts,
 } from './scan';
+import {
+  importLocalModel as scanImportLocalModel,
+  type ImportLocalModelOpts,
+} from './importLocalModel';
 import { mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
 import { resolveStoredPath, determineCredibility } from './storage';
 
