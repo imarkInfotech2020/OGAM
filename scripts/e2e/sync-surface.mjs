@@ -213,6 +213,21 @@ const rnSurface = (client, platform) => {
     },
 
     /**
+     * End the session with a device, KEEPING its credential.
+     *
+     * The gentle teardown, and the one flows should reach for. Forget frees a licence seat and ends
+     * trust everywhere; this only closes the link, so the pairing survives and the device comes back
+     * with a tap rather than a code. Nothing about the licence moves.
+     */
+    async disconnect(name) {
+      const control = await controlFor(name, ROW_CONTROL.disconnect);
+      if (!control) throw new Error(`${platform} lists no disconnect control for "${name}"`);
+      await client.tapLabel(control);
+      // Confirmed on the platforms that ask, and a no-op on the ones that do not.
+      await this.confirmDestructive(`disconnect ${name}`);
+    },
+
+    /**
      * Drop a saved device: its credential goes, so pairing with it needs the code again.
      *
      * Addressed through the row's own `sync-forget-<id>` control rather than a "Forget" label, because
