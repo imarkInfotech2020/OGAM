@@ -166,6 +166,11 @@ pre-commit hook by design.
 
 ## Testing (lean — this is the whole doctrine)
 
+**Tests come LAST, and only when Mac asks.** Finish every source change first — typecheck clean, lint
+clean, running on the device. Mac verifies it by hand. THEN, when he explicitly says so, write the test.
+Writing one earlier is a defect even if the test is good: it spends the turn on the wrong thing and
+encodes behaviour nobody has confirmed yet.
+
 **One rendered integration test per fix. Nothing more.**
 
 - Mount the real screen, arrive via real gestures, assert what the user SEES. Fakes ONLY at the device boundary (`__tests__/harness/`); never mock our own code.
