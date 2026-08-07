@@ -29,6 +29,12 @@ class BlobChannelModule(
     private val work = Executors.newCachedThreadPool()
     private val server by lazy { BlobServer(::emitProgress, ::emitOutcome) }
 
+    /** The address every native sync listener on this phone can accept connections on. */
+    @ReactMethod
+    fun lanAddress(promise: Promise) {
+        work.execute { promise.resolve(BlobCrypto.lanAddress()) }
+    }
+
     /**
      * Offer an endpoint for one transfer, and answer the url a peer should stream to.
      *

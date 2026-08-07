@@ -25,6 +25,7 @@ import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
 import { buildSyncEngine } from './engine';
 import { buildDiscovery } from './discovery';
 import { IosProximityAdapter } from './nativeProximity';
+import { nativeSyncLanAddress } from './nativeBlobChannel';
 import logger from '../../utils/logger';
 
 export interface NativeSyncCallbacks {
@@ -196,6 +197,24 @@ export function createNativeSync(
   let active = false;
   let rescanTask: Promise<void> | null = null;
 
+  async function refreshLocalNetworkAddress(): Promise<boolean> {
+    let nextHost = '';
+    try {
+      nextHost = await nativeSyncLanAddress();
+    } catch (error) {
+      logger.warn(
+        `[SYNC] could not read this device's LAN address: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    if (nextHost === localDevice.host) return false;
+    localDevice.host = nextHost;
+    logger.log(`[SYNC] local LAN address=${nextHost || 'unavailable'}`);
+    return true;
+  }
+
   function healthSnapshot(): SyncDiscoverabilityHealthInput {
     return {
       transport: transport.getTransportHealthSnapshot?.(),
@@ -218,6 +237,7 @@ export function createNativeSync(
       try {
         await engine.start(0); // ephemeral port
         localDevice.port = transport.boundPort ?? 0; // advertise the real bound port
+        await refreshLocalNetworkAddress();
         await orchestrator.start();
         active = true;
         publishHealth();
@@ -242,6 +262,9 @@ export function createNativeSync(
       if (!active) throw new Error('Sync is not running.');
       if (rescanTask) return rescanTask;
       rescanTask = (async () => {
+        if (await refreshLocalNetworkAddress()) {
+          await orchestrator.refreshAdvertisement();
+        }
         await orchestrator.rescan();
         logger.log('[SYNC] discovery rescanned');
       })();
@@ -255,11 +278,13 @@ export function createNativeSync(
     async renameLocalDevice(name: string) {
       localDevice.name = name;
       if (!active) return;
+      await refreshLocalNetworkAddress();
       await proximity?.updateLocalDevice();
       await orchestrator.refreshAdvertisement();
     },
     /** Advertising on/off while sync keeps running. Idempotence is the orchestrator's. */
     async setDiscoverable(next: boolean) {
+      if (next) await refreshLocalNetworkAddress();
       await orchestrator.setDiscoverable(next);
       publishHealth();
       return orchestrator.isDiscoverable();

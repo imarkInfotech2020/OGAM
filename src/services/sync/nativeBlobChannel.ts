@@ -26,6 +26,8 @@ import logger from '../../utils/logger';
  */
 
 interface BlobNativeModule {
+  /** The IPv4 address this device's native sync endpoints can actually listen on. */
+  lanAddress?(): Promise<string | null>;
   serve(options: {
     requestId: string;
     destinationPath: string;
@@ -60,6 +62,11 @@ function nativeChannel(): BlobNativeModule | undefined {
   // Android registers under the module's own name; iOS under its class. Same contract either way.
   return (NativeModules.SyncBlobChannelModule ??
     NativeModules.BlobChannelModule) as BlobNativeModule | undefined;
+}
+
+/** The address shared by the control socket and native blob endpoint, from one native owner. */
+export async function nativeSyncLanAddress(): Promise<string> {
+  return (await nativeChannel()?.lanAddress?.()) ?? '';
 }
 
 /**

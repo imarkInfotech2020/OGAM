@@ -3,6 +3,9 @@
 
 @interface RCT_EXTERN_MODULE(BlobChannelModule, RCTEventEmitter)
 
+RCT_EXTERN_METHOD(lanAddress:(RCTPromiseResolveBlock)resolve
+                  withRejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(serve:(NSDictionary *)options
                   resolve:(RCTPromiseResolveBlock)resolve
                   withRejecter:(RCTPromiseRejectBlock)reject)

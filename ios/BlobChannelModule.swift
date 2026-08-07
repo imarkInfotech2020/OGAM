@@ -29,6 +29,15 @@ final class BlobChannelModule: RCTEventEmitter {
 
   override func supportedEvents() -> [String] { [Self.progressEvent, Self.outcomeEvent] }
 
+  /// The address every native sync listener on this phone can accept connections on.
+  @objc(lanAddress:withRejecter:)
+  func lanAddress(
+    resolve: @escaping RCTPromiseResolveBlock,
+    reject _: @escaping RCTPromiseRejectBlock
+  ) {
+    work.async { resolve(BlobChannelSupport.lanAddress()) }
+  }
+
   /// Offer an endpoint for one transfer, and answer the url a peer should stream to.
   ///
   /// Resolves with nothing when this device has no address on a shared network: there is no endpoint
