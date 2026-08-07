@@ -269,15 +269,31 @@ const rnSurface = (client, platform) => {
     },
 
     async isConnectedTo(name) {
-      const labels = await client.labels();
-      const at = labels.findIndex((label) => label.trim() === name);
+      const labels = (await client.labels()).map((label) => label.trim());
+      const at = labels.findIndex((label) => label === name);
       if (at < 0) return false;
-      // The ROW's own status line, which reads "ios - Connected - LAN". Deliberately not a loose
-      // /connected/i: the mesh summary says "1 connected", so a case-insensitive match reported every
-      // device as connected the moment any one session was live - a false pass.
-      return labels
-        .slice(at, at + 8)
-        .some((label) => /^\w+ - Connected\b/.test(label.trim()));
+      // The NEAREST status line in either direction, then read what it says.
+      //
+      // Two mistakes are avoided here, and both produced wrong verdicts on a real screen. Scanning
+      // only FORWARD is wrong because Android renders name-then-status while iOS renders the status
+      // first: an iPhone showing "macos - Connected - Nearby" reported false, the same directional
+      // bug as controlFor. And a loose /connected/i is wrong because the mesh summary line says
+      // "3 connected", so any device looked connected the moment any one session was live.
+      //
+      // Reading the nearest status line rather than "is there a Connected line nearby" also keeps a
+      // neighbouring row from answering for this one: rows sit next to each other, so a window wide
+      // enough to find this row's status is wide enough to find the next row's too.
+      // 14, not 8: a CONNECTED row carries more controls than a disconnected one (Disconnect, Send a
+      // model, Forget), which pushes its status line nine labels past the name - so a window sized on
+      // a disconnected row reports the connected one as not connected. Same span as controlFor.
+      const STATUS = /^(\w+) - (.+)$/;
+      for (let step = 1; step <= 14; step += 1) {
+        for (const index of [at + step, at - step]) {
+          const match = labels[index]?.match(STATUS);
+          if (match) return /^Connected\b/.test(match[2]);
+        }
+      }
+      return false;
     },
 
     /**
