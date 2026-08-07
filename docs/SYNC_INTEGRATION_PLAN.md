@@ -49,5 +49,5 @@ all live in the package, so there is no per-app protocol to keep in sync and no 
   as needing `@offgrid/sync`'s transport wired first).
 
 ## Cross-cutting
-- Pro entitlement gate. Device cap (2 free / 3+ paid) via the package's `cap.ts` + Keygen.
+- Pro entitlement gate. Device cap (Pro-only, 5-device personal mesh) via the package's `cap.ts` + Keygen.
 - Feature code in `pro/`; native modules + injection glue in core (native is app-level).

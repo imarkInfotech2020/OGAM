@@ -5,6 +5,7 @@ import type { RnTcpModule } from '@offgrid/sync/rn';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
+import { useAppStore } from '../../../src/stores/appStore';
 import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
@@ -71,6 +72,10 @@ describe('Pro Sync app-lifetime pairing persistence', () => {
     await AsyncStorage.clear();
     useSyncStore.getState().reset();
     resetDiscoveryBoundaries();
+    // Sync is a Pro feature, so a journey that exercises it runs on a licensed install. Without this the
+    // phone resolves as unlicensed and never advertises, which is correct behaviour and makes every
+    // assertion below fail for the wrong reason.
+    useAppStore.getState().setProActive(true);
     // A licensed phone with the fingerprint it actually has: the roster is what saved devices are built
     // from, and two unlicensed devices cannot pair at all.
     secrets = installLicensedPhone(mesh);

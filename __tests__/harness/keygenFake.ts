@@ -18,7 +18,7 @@ import { KEYGEN_API_BASE, KEYGEN_PRODUCT_ID } from '../../src/config/keygen';
 
 export interface KeygenFakeLicence {
   key: string;
-  /** How many installations this licence admits. Two on the free tier, three or more paid. */
+  /** How many installations this licence admits. */
   seats: number;
   expiry?: string | null;
   name?: string | null;

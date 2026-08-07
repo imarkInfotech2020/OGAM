@@ -269,14 +269,21 @@ describe('Pro mobile state sync journey', () => {
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
 
-    // Pairing moves the device out of AVAILABLE and into SAVED, because AVAILABLE lists only what is NOT saved.
-    // So AVAILABLE is empty again here - and the "no devices found, open Sync on a nearby device" notice must NOT
-    // come back, or the screen tells the user to go and do the thing they have just finished doing, directly above
-    // the device they did it to. It reads as the app failing to see the peer it is holding a pairing with.
+    // The "no devices found, open Sync on a nearby device" notice must NOT come back, or the screen tells the user
+    // to go and do the thing they have just finished doing, directly above the device they did it to. It reads as
+    // the app failing to see the peer it is holding a pairing with.
     expect(ui.queryByTestId('sync-no-devices')).toBeNull();
-    // And the "Available" heading goes with it. A heading over blank space is worse than the notice it replaced -
-    // it reads as a list that failed to load, so the user rescans a mesh that is working.
-    expect(ui.queryByText('Available')).toBeNull();
+    // AVAILABLE now means "on the network right now", saved or not - not "not yet saved". A device you just paired
+    // with is the most available thing on the screen, and burying it under SAVED next to devices that have been off
+    // for weeks made the one you can actually use the hardest to find. So the heading stays, with the device under
+    // it, rendered by the SAVED row template: it keeps disconnect, rename, forget and send-model, which a discovery
+    // row does not have. Offering "Pair" for a device already paired is what moving the row naively would produce.
+    expect(ui.getByText('Available')).toBeTruthy();
+    expect(ui.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy();
+    // No Saved heading at all here, and that is the point of the split: the only saved device is the one
+    // reachable above, so the Saved section has nothing left and hides itself rather than captioning blank
+    // space. Two headings - one from the reachable group, one from the rest - was the bug this replaced.
+    expect(ui.queryAllByText('Saved')).toHaveLength(0);
 
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
     fireEvent(ui.getByTestId('sync-projects-toggle'), 'valueChange', false);
