@@ -10,19 +10,22 @@ export interface ProAccessSlice {
   /** Paid features are available through a credential or Debug developer access. */
   isProActive: boolean;
   setProActive: (value: boolean) => void;
-  /** The current device is admitted to the authoritative licensed-device roster. */
-  isProDeviceActive: boolean;
-  setProDeviceActive: (value: boolean) => void;
   /**
-   * Admission as THREE states, because unknown is not the same as revoked.
+   * What the authoritative licensed-device roster last said about THIS device, in three states.
    *
-   * `isProDeviceActive` is a boolean that starts false, so it cannot tell "we have not heard from the
-   * roster yet" apart from "this device was deactivated". Gating features on it directly would revoke
-   * Pro on every cold start and for anyone offline; gating on the credential alone leaves a
-   * deactivated device fully Pro, which is what it did.
+   * Three because unknown is not revoked: a boolean starting false cannot tell "we have not heard from
+   * the roster yet" apart from "this device was deactivated". Gating on it directly would revoke Pro on
+   * every cold start and for anyone offline; gating on the credential alone leaves a deactivated device
+   * fully Pro, which is what it did.
+   *
+   * The ONLY admission state there is. It used to be shadowed by an `isProDeviceActive` boolean, which
+   * meant two fields to keep in step and, once admission was persisted and the boolean was not, a
+   * restart that put them in open contradiction - Pro granted while the header read "Device Not Active".
    */
   proDeviceAdmission: ProDeviceAdmission;
   setProDeviceAdmission: (value: ProDeviceAdmission) => void;
+  /** Report the roster's boolean answer. A reported answer is by definition known, so it resolves the tri-state. */
+  setProDeviceActive: (value: boolean) => void;
   devProDisabled: boolean;
   setDevProDisabled: (value: boolean) => void;
   proBannerDismissed: boolean;
@@ -43,17 +46,10 @@ export function createProAccessSlice(set: SetProAccessState): ProAccessSlice {
     setHasSavedProCredential: value => set({ hasSavedProCredential: value }),
     isProActive: false,
     setProActive: value => set({ isProActive: value }),
-    isProDeviceActive: false,
-    // One call keeps both in step: callers report a boolean from the roster, and a reported boolean is
-    // by definition known, so it resolves the tri-state too.
-    setProDeviceActive: value =>
-      set({
-        isProDeviceActive: value,
-        proDeviceAdmission: value ? 'active' : 'inactive',
-      }),
     proDeviceAdmission: 'unknown',
-    setProDeviceAdmission: value =>
-      set({ proDeviceAdmission: value, isProDeviceActive: value === 'active' }),
+    setProDeviceAdmission: value => set({ proDeviceAdmission: value }),
+    setProDeviceActive: value =>
+      set({ proDeviceAdmission: value ? 'active' : 'inactive' }),
     devProDisabled: false,
     setDevProDisabled: value => set({ devProDisabled: value }),
     proBannerDismissed: false,

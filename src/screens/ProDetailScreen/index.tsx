@@ -14,6 +14,7 @@ import { Button } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY, OFF_GRID_DESKTOP_URL } from '../../constants';
+import { selectHasProAccess } from '../../stores/proAccessSlice';
 import { useAppStore } from '../../stores';
 import { PRO_PAY_PAGE_URL } from '../../services/proLicenseService';
 import { withUtm } from '../../utils/utm';
@@ -63,21 +64,17 @@ export const ProDetailScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const hasSavedProCredential = useAppStore(s => s.hasSavedProCredential);
   const isProActive = useAppStore(s => s.isProActive);
-  const isProDeviceActive = useAppStore(s => s.isProDeviceActive);
+  const hasProAccess = useAppStore(selectHasProAccess);
   const hasSyncBootstrap = useHasRegisteredScreen('Sync');
   const [verifyModalVisible, setVerifyModalVisible] = useState(false);
   const pricing = getPricingCopy();
   const isDevelopmentAccess = __DEV__ && isProActive && !hasSavedProCredential;
-  const deviceStatus = isProDeviceActive
+  const deviceStatus = hasProAccess
     ? { icon: 'check', label: 'Pro Active' }
     : isDevelopmentAccess
     ? { icon: 'tool', label: 'Development Access' }
-    : hasSavedProCredential
-    ? { icon: 'alert-circle', label: 'Device Not Active' }
     : null;
-  const deviceStatusColor = isProDeviceActive
-    ? colors.primary
-    : colors.textMuted;
+  const deviceStatusColor = hasProAccess ? colors.primary : colors.textMuted;
 
   const openPayPage = () => {
     Linking.openURL(withUtm(PRO_PAY_PAGE_URL, 'pro-detail')).catch(() => {});
@@ -108,7 +105,7 @@ export const ProDetailScreen: React.FC = () => {
               <View
                 style={[
                   styles.proActiveBadge,
-                  !isProDeviceActive && styles.proInactiveBadge,
+                  !hasProAccess && styles.proInactiveBadge,
                 ]}
               >
                 <Icon
@@ -119,16 +116,16 @@ export const ProDetailScreen: React.FC = () => {
                 <Text
                   style={[
                     styles.proActiveBadgeText,
-                    !isProDeviceActive && styles.proInactiveBadgeText,
+                    !hasProAccess && styles.proInactiveBadgeText,
                   ]}
                 >
                   {deviceStatus.label}
                 </Text>
               </View>
             ) : null}
-            {/* License-key entry stays available while a saved credential needs
-                explicit device reactivation. */}
-            {!isProDeviceActive && !isDevelopmentAccess ? (
+            {/* The body already offers "I have a license key" to anyone without Pro; this is the
+                shortcut for someone who has it and is re-entering it. */}
+            {!hasProAccess && !isDevelopmentAccess ? (
               <TouchableOpacity
                 style={styles.headerKeyButton}
                 onPress={openVerifyModal}
@@ -138,7 +135,7 @@ export const ProDetailScreen: React.FC = () => {
                 <Icon name="key" size={16} color={colors.primary} />
               </TouchableOpacity>
             ) : null}
-            {!hasSavedProCredential && !isDevelopmentAccess ? (
+            {!hasProAccess && !isDevelopmentAccess ? (
               <TouchableOpacity
                 style={styles.getProButton}
                 onPress={openPayPage}
@@ -154,9 +151,10 @@ export const ProDetailScreen: React.FC = () => {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {hasSavedProCredential ? (
-          /* A saved credential shows subscription and device management, then what the licence
-             actually opened up. The header separately projects whether this device is admitted. */
+        {hasProAccess ? (
+          /* Pro, and this device still has it: subscription and device management, then what the
+             licence opened up. There is no in-between state - a device that was removed from the licence
+             is not Pro, so it sees exactly what someone who never bought it sees. */
           <>
             <ProManageSection />
             <ProIncludedSection />

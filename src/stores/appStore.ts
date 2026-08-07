@@ -455,6 +455,10 @@ export const useAppStore = create<AppState>()(
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
         hasRegisteredPro: state.hasRegisteredPro,
+        // Persisted so an eviction STICKS. Without it every relaunch starts at 'unknown', which grants
+        // access, and a device the owner removed is Pro again for as long as the roster takes to answer -
+        // or forever, if it never does because the app is offline.
+        proDeviceAdmission: state.proDeviceAdmission,
         devProDisabled: state.devProDisabled,
         proBannerDismissed: state.proBannerDismissed,
         desktopPromoDismissed: state.desktopPromoDismissed,

@@ -219,18 +219,13 @@ describe('ProDetailScreen', () => {
   });
 
   it('renders the Pro Active state with the management section when Pro is owned', async () => {
-    // "Pro Active" is about THIS DEVICE being admitted to the licence, not merely about owning one:
-    // isProDeviceActive is set once the roster confirms this install, and a device holding a licence it
-    // has not been admitted under is exactly the state the other label ("Device Not Active") is for.
-    // Three separate facts, and the screen reads a different one for each part of itself:
-    // hasSavedProCredential decides whether the management card exists at all (a credential is saved),
-    // isProDeviceActive decides the header label (this install is admitted to the licence), and
-    // hasRegisteredPro is what every upsell gate reads. Setting only the last two rendered the header
-    // and no card, which is what these tests were failing on.
+    // "Pro Active" is about THIS DEVICE being admitted to the licence, not merely about owning one.
+    // There are only two states now: a device the roster removed is not Pro and sees the buy screen,
+    // so admission has to be set here alongside the credential or nothing Pro renders at all.
     useAppStore.setState({
       hasRegisteredPro: true,
       hasSavedProCredential: true,
-      isProDeviceActive: true,
+      proDeviceAdmission: 'active' as const,
     });
     const { getByText } = render(<ProDetailScreen />);
     expect(getByText('Pro Active')).toBeTruthy();
@@ -244,7 +239,7 @@ describe('ProDetailScreen', () => {
     useAppStore.setState({
       hasRegisteredPro: true,
       hasSavedProCredential: true,
-      isProDeviceActive: true,
+      proDeviceAdmission: 'active' as const,
     });
     mockGetProLicenseInfo.mockResolvedValue({
       isPro: true,

@@ -8,6 +8,7 @@ import {
   registerProEntitlementProvider,
 } from '../services/proLicenseService';
 import { proEntitlementLifecycle } from '../services/proEntitlementLifecycle';
+import { selectHasProAccess } from '../stores/proAccessSlice';
 
 export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   let pro: any;
@@ -42,6 +43,10 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
   useAppStore.getState().setHasRegisteredPro(credentialActive);
   useAppStore.getState().setHasSavedProCredential(credentialSaved);
   useAppStore.getState().setProActive(active);
+  // A credential is not access. If the roster last told us this device is deactivated, the paid bundle
+  // must not load at all - loading it and then hiding the entry points leaves every Pro service running.
+  const admitted =
+    selectHasProAccess(useAppStore.getState()) || DEV_UNLOCK_PRO;
   if (typeof pro.activateSyncBootstrap === 'function') {
     pro.activateSyncBootstrap({
       registerScreen,
@@ -53,8 +58,10 @@ export async function loadProFeatures(isPro?: boolean): Promise<boolean> {
       },
     });
   }
-  if (!active) {
-    return false; // restricted Sync remains available; every other paid feature stays dormant
+  if (!active || !admitted) {
+    // Sync stays reachable on purpose even here: claiming a seat again, by key or from a paired device,
+    // goes through the mesh runtime, so tearing it down would strand a deactivated device with no way back.
+    return false; // every other paid feature stays dormant
   }
 
   pro.activate({

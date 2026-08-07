@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { selectHasProAccess } from '../stores/proAccessSlice';
 import { useAppStore } from '../stores';
 import {
   getProLicenseInfo,
@@ -16,7 +17,7 @@ export function useProStatusLabel(): {
 } {
   const hasSavedProCredential = useAppStore(s => s.hasSavedProCredential);
   const isProActive = useAppStore(s => s.isProActive);
-  const isProDeviceActive = useAppStore(s => s.isProDeviceActive);
+  const hasProAccess = useAppStore(selectHasProAccess);
   const [info, setInfo] = useState<ProLicenseInfo | null>(null);
   useEffect(() => {
     if (hasSavedProCredential)
@@ -31,10 +32,8 @@ export function useProStatusLabel(): {
   const isDevelopmentAccess = __DEV__ && isProActive && !hasSavedProCredential;
   const proStatusLabel = isDevelopmentAccess
     ? 'Development access'
-    : !hasSavedProCredential
+    : !hasProAccess
     ? 'Unlock premium features'
-    : !isProDeviceActive
-    ? 'Credential saved - device not active'
     : info?.isPro && meta?.renews && info.expiry
     ? `Active until ${new Date(info.expiry).toLocaleDateString(undefined, {
         month: 'short',
