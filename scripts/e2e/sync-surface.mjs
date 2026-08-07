@@ -1,0 +1,443 @@
+/**
+ * ONE vocabulary for Sync, on all four platforms.
+ *
+ * Every sync journey is the same handful of sentences - open Devices, read the code, pair with that
+ * device, is it connected, send it a file - and none of them are platform questions. What differs is
+ * only how you locate a thing on screen, and there are exactly two answers to that:
+ *
+ *   React Native (iOS, Android)  - testIDs, driven through WDA / adb
+ *   Electron     (macOS, Windows) - the DOM, driven through the DevTools protocol
+ *
+ * So this file has two drivers and one interface. A test written against the interface runs on any
+ * device, and a NEW capability is added once here rather than once per platform. That is the whole
+ * point: three one-off scripts had already re-implemented "pair these two" three times, each with a
+ * different set of hardcoded hostnames and roles, and each drifted.
+ *
+ * Devices are addressed by NAME, not by sync id. The id is the better key and the RN rows carry it in
+ * their testIDs, but nothing puts it in the Electron DOM, so name is the only address both families
+ * share. Names are unique enough in a personal mesh, and a test that says "pair with OGAD x.x.x.25"
+ * reads like the thing a person does.
+ */
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { AdbClient } from '../android/adb-client.mjs';
+import { WdaClient } from '../ios/wda-client.mjs';
+import { ANDROID_PACKAGE, IOS_BUNDLE_ID } from './device.mjs';
+
+const run = promisify(execFile);
+
+/** The pairing-code alphabet is confusable-free, so a code is unambiguous to match for. */
+const CODE = /\b([23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4})\b/;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitUntil = async (check, { label, timeoutMs = 60_000, intervalMs = 1000 }) => {
+  const deadline = Date.now() + timeoutMs;
+  let last;
+  for (;;) {
+    try {
+      const value = await check();
+      if (value) return value;
+    } catch (cause) {
+      last = cause;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`timed out after ${timeoutMs}ms waiting for ${label}${last ? `: ${last.message}` : ''}`);
+    }
+    await sleep(intervalMs);
+  }
+};
+
+// ---------------------------------------------------------------------------------------------
+// React Native surface (iOS, Android)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The RN apps put a testID on everything that matters, including the device id in the row's id -
+ * `sync-pair-<id>`, `sync-paired-<id>`. Addressing is by name, so this walks the flat label list to
+ * find the row's name and then takes the nearest action testID after it, which is that row's own.
+ */
+const rnSurface = (client, platform) => {
+  const controlFor = async (name, kinds) => {
+    const labels = await client.labels();
+    const at = labels.findIndex((label) => label.trim() === name);
+    if (at < 0) return undefined;
+    const pattern = new RegExp(`^sync-(${kinds.join('|')})-[0-9a-f]+$`);
+    // Rows render name-then-actions, so the first match after the name belongs to this row. Scanning
+    // the whole list instead would return whichever device happened to be rendered first.
+    return labels.slice(at, at + 14).find((label) => pattern.test(label));
+  };
+
+  return {
+    platform,
+    family: 'rn',
+
+    /**
+     * Reach the Devices screen from wherever the app happens to be. Idempotent on purpose.
+     *
+     * A block every journey starts with cannot assume it starts from the home screen: the app is
+     * usually already somewhere, often on Devices from the previous step. Insisting on home made this
+     * fail with "timed out waiting for android home" while the Devices screen was on screen.
+     */
+    async openDevices() {
+      const labels = await client.labels();
+      if (labels.includes('sync-this-device')) return;
+      if (!labels.includes('home-screen')) {
+        // Back out to a tab bar, then home. Both RN apps carry home-tab on every tab screen.
+        await client.tapLabel('home-tab').catch(async () => {
+          await client.back().catch(() => {});
+          await client.tapLabel('home-tab').catch(() => {});
+        });
+      }
+      await client.waitForLabel('home-screen', { label: `${platform} home`, timeoutMs: 40_000 });
+      // The sync entry point sits below the fold on a two-page home screen, so it is absent from the
+      // accessibility tree until scrolled to - tapWhenReady alone times out.
+      await client.scrollAndTap('open-sync-from-home', { timeoutMs: 30_000 });
+      await client.waitForLabel('sync-this-device', { label: `${platform} Devices`, timeoutMs: 40_000 });
+    },
+
+    async text() {
+      return (await client.labels()).join('\n');
+    },
+
+    async pairingCode() {
+      await client.waitForLabel('sync-pairing-code-value', { label: 'the pairing code', timeoutMs: 20_000 });
+      const code = (await client.labels()).map((l) => l.trim()).find((l) => CODE.test(l));
+      if (!code) throw new Error(`${platform} shows the pairing-code section but no code`);
+      return code;
+    },
+
+    async sees(name) {
+      return (await client.labels()).some((label) => label.trim() === name);
+    },
+
+    async rescan() {
+      await client.tapLabel('sync-rescan').catch(() => {});
+    },
+
+    async startPairing(name) {
+      const control = await controlFor(name, ['pair', 'repair', 'reconnect']);
+      if (!control) throw new Error(`${platform} lists no pair/repair control for "${name}"`);
+      await client.tapLabel(control);
+      return control;
+    },
+
+    /** Did a code prompt open? A reconnect on a held credential succeeds without one. */
+    async waitForCodePrompt(timeoutMs = 20_000) {
+      return client
+        .waitForLabel('sync-pairing-code-input', { label: 'the code dialog', timeoutMs })
+        .then(() => true)
+        .catch(() => false);
+    },
+
+    async enterPairingCode(code) {
+      // WAIT for the dialog: a reconnect is attempted first, so it arrives seconds later and a single
+      // early sample reads as "no prompt appeared".
+      await client.waitForLabel('sync-pairing-code-input', { label: 'the code dialog', timeoutMs: 45_000 });
+      // Focus FIRST - adb `input text` goes to whatever holds focus, so typing into an unfocused
+      // dialog silently does nothing and looks like a failed handshake.
+      await client.tapLabel('sync-pairing-code-input');
+      await sleep(800);
+      await client.type(code.replace('-', ''));
+      await sleep(800);
+      await client.tapLabel('sync-pairing-code-confirm');
+    },
+
+    async isConnectedTo(name) {
+      const labels = await client.labels();
+      const at = labels.findIndex((label) => label.trim() === name);
+      if (at < 0) return false;
+      // The ROW's own status line, which reads "ios - Connected - LAN". Deliberately not a loose
+      // /connected/i: the mesh summary says "1 connected", so a case-insensitive match reported every
+      // device as connected the moment any one session was live - a false pass.
+      return labels
+        .slice(at, at + 8)
+        .some((label) => /^\w+ - Connected\b/.test(label.trim()));
+    },
+
+    screenshot: (path) => client.screenshot(path),
+    close: async () => {},
+  };
+};
+
+// ---------------------------------------------------------------------------------------------
+// Electron surface (macOS, Windows)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The desktop apps are located by TEXT, because nothing puts the device id in their DOM.
+ *
+ * Driven over the DevTools protocol rather than the OS: macOS refuses synthetic clicks to an ssh
+ * session (-25211) and the app publishes no accessibility tree at all (-1700 on every query), so a
+ * DOM click through CDP is the only thing that works - and it is not an OS event, so nothing refuses
+ * it. It also keeps the REAL profile, licence and identity, which a Playwright launch cannot.
+ */
+const electronSurface = async (spec) => {
+  const { host, port = 9222, platform } = spec;
+
+  const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
+  const page = targets.find((t) => t.type === 'page' && /Off Grid/i.test(t.title ?? ''));
+  if (!page) {
+    throw new Error(
+      `no Off Grid page on ${host}:${port}. Start the app with --remote-debugging-port=${port}.`,
+    );
+  }
+
+  const socket = new WebSocket(page.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => {
+    socket.addEventListener('open', resolve, { once: true });
+    socket.addEventListener('error', () => reject(new Error('the debugging socket refused')), { once: true });
+  });
+  let nextId = 0;
+  const pending = new Map();
+  socket.addEventListener('message', (event) => {
+    const message = JSON.parse(event.data);
+    const waiting = pending.get(message.id);
+    if (!waiting) return;
+    pending.delete(message.id);
+    if (message.error) waiting.reject(new Error(message.error.message));
+    else waiting.resolve(message.result);
+  });
+  const send = (method, params = {}) =>
+    new Promise((resolve, reject) => {
+      const id = (nextId += 1);
+      pending.set(id, { resolve, reject });
+      socket.send(JSON.stringify({ id, method, params }));
+    });
+
+  const evaluate = async (expression) => {
+    const result = await send('Runtime.evaluate', {
+      expression: `(() => { ${expression} })()`,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
+    }
+    return result.result.value;
+  };
+
+  /** Click the smallest clickable whose text matches, optionally scoped to the CARD for `within`. */
+  const click = (label, within) =>
+    evaluate(`
+      const wanted = ${JSON.stringify(label)}.toLowerCase();
+      const scope = ${within ? JSON.stringify(within) : 'null'};
+      let root = document;
+      if (scope) {
+        // The <article> row, not the smallest node containing the name - that is the name span, which
+        // holds no buttons at all.
+        const card =
+          [...document.querySelectorAll('article')]
+            .filter((el) => (el.innerText ?? '').includes(scope) && el.offsetParent !== null)
+            .sort((a, b) => a.innerText.length - b.innerText.length)[0] ??
+          [...document.querySelectorAll('li, section, div')]
+            .filter((el) => (el.innerText ?? '').includes(scope) && el.offsetParent !== null)
+            .sort((a, b) => a.innerText.length - b.innerText.length)[0];
+        if (!card) return false;
+        root = card;
+      }
+      const hit = [...root.querySelectorAll('button, a, [role="button"], input, span, div')]
+        .filter((el) => (el.innerText ?? el.value ?? '').trim().toLowerCase().includes(wanted))
+        .filter((el) => el.offsetParent !== null)
+        .sort((a, b) => (a.innerText ?? '').length - (b.innerText ?? '').length)[0];
+      if (!hit) return false;
+      hit.click();
+      return true;
+    `);
+
+  return {
+    platform,
+    family: 'electron',
+    /** Escape hatch for diagnosing a surface, and for capabilities not yet in the vocabulary. */
+    evaluate,
+
+    async openDevices() {
+      if (/PAIRING CODE/i.test((await this.text()) ?? '')) return;
+      await click('Devices');
+      await waitUntil(async () => /PAIRING CODE/i.test(await this.text()), {
+        label: `the Devices screen on ${platform}`,
+        timeoutMs: 20_000,
+      });
+    },
+
+    text: () => evaluate('return document.body.innerText;'),
+
+    async pairingCode() {
+      const text = await this.text();
+      const match = text.match(CODE);
+      if (!match) throw new Error(`${platform} shows no pairing code`);
+      return match[1];
+    },
+
+    async sees(name) {
+      return (await this.text()).includes(name);
+    },
+
+    async rescan() {
+      await click('Rescan network');
+    },
+
+    async startPairing(name) {
+      // Whichever the card actually offers. A device whose credential is still held shows Reconnect and
+      // needs no code at all; only a lost credential asks for one. Trying "Pair" alone reported "offers
+      // no pair control" for a device that was one click from connecting.
+      for (const label of ['Pair again', 'Reconnect', 'Pair']) {
+        if (await click(label, name)) return label.toLowerCase();
+      }
+      throw new Error(`${platform} offers no pair, repair or reconnect control for "${name}"`);
+    },
+
+    /** Did a code prompt open? A reconnect succeeds without one. */
+    async waitForCodePrompt(timeoutMs = 20_000) {
+      return waitUntil(async () => /Enter the pairing code/i.test(await this.text()), {
+        label: `a code prompt on ${platform}`,
+        timeoutMs,
+        intervalMs: 1000,
+      })
+        .then(() => true)
+        .catch(() => false);
+    },
+
+    async enterPairingCode(code) {
+      await waitUntil(async () => /Pairing code/i.test(await this.text()), {
+        label: `the code dialog on ${platform}`,
+        timeoutMs: 45_000,
+      });
+      // EVERYTHING here is scoped to the dialog. The Devices screen renders a "Pair" button on every
+      // discovered card - eight were visible during this failure - so an unscoped smallest-match click
+      // hit a card instead of the dialog's confirm, and the dialog sat open with the code already in it.
+      const dialogJs = `
+        const dialog =
+          document.querySelector('[role="dialog"]') ??
+          [...document.querySelectorAll('div, section')]
+            .filter((el) => /Enter the pairing code/i.test(el.innerText ?? '') && el.offsetParent !== null)
+            .sort((a, b) => a.innerText.length - b.innerText.length)[0];
+      `;
+      const filled = await evaluate(`
+        ${dialogJs}
+        if (!dialog) return 'no dialog';
+        const field = [...dialog.querySelectorAll('input')].find((el) => el.offsetParent !== null);
+        if (!field) return 'no field';
+        // Through the native setter so React's onChange fires; assigning .value directly updates the
+        // DOM and leaves React's state empty, so the confirm stays disabled.
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(field, ${JSON.stringify(code)});
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        return 'ok';
+      `);
+      if (filled !== 'ok') throw new Error(`${platform}: could not fill the pairing code (${filled})`);
+      await sleep(600);
+      const confirmed = await evaluate(`
+        ${dialogJs}
+        if (!dialog) return false;
+        const confirm = [...dialog.querySelectorAll('button')]
+          .filter((b) => b.offsetParent !== null && !b.disabled)
+          .find((b) => /^pair/i.test((b.innerText ?? '').trim()));
+        if (!confirm) return false;
+        confirm.click();
+        return true;
+      `);
+      if (!confirmed) throw new Error(`${platform}: the dialog offered no enabled confirm button`);
+    },
+
+    async isConnectedTo(name) {
+      return evaluate(`
+        const wanted = ${JSON.stringify(name)};
+        // The <article> ROW, not the smallest node mentioning the name - that is the name span, which
+        // carries no status at all, so this reported false for a device the screen showed as connected.
+        const card = [...document.querySelectorAll('article')]
+          .filter((el) => (el.innerText ?? '').includes(wanted) && el.offsetParent !== null)
+          .sort((a, b) => a.innerText.length - b.innerText.length)[0];
+        if (!card) return false;
+        // Case-sensitive includes, NOT a regex: inside a template literal \\b is the backspace escape,
+        // not a word boundary, so the pattern silently matched nothing. Case matters because the summary
+        // chip says "N connected" - a loose match makes every device look connected at once.
+        return card.innerText.includes('Connected');
+      `);
+    },
+
+    async screenshot(path) {
+      const shot = await send('Page.captureScreenshot', { format: 'png' });
+      const { writeFile } = await import('node:fs/promises');
+      await writeFile(path, Buffer.from(shot.data, 'base64'));
+    },
+
+    close: () => socket.close(),
+  };
+};
+
+// ---------------------------------------------------------------------------------------------
+// The one entry point
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * A surface for one device.
+ *
+ *   connectSurface({ kind: 'android' })
+ *   connectSurface({ kind: 'ios', wdaUrl })
+ *   connectSurface({ kind: 'macos', host: '192.168.1.25', port: 9222 })
+ *   connectSurface({ kind: 'windows', host: '192.168.1.26', port: 9222 })
+ */
+export async function connectSurface(spec) {
+  const { kind, restart = false } = spec;
+  if (kind === 'android') {
+    const client = new AdbClient(spec.serial ?? process.env.E2E_ANDROID_SERIAL);
+    if (!(await client.isReady())) throw new Error('nothing is answering adb');
+    if (restart) await client.restart(ANDROID_PACKAGE);
+    else await client.session(ANDROID_PACKAGE);
+    return rnSurface(client, 'android');
+  }
+  if (kind === 'ios') {
+    const url = spec.wdaUrl ?? process.env.WDA_URL;
+    if (!url) throw new Error('the iPhone needs WDA_URL from scripts/ios/launch-wda.mjs');
+    const client = new WdaClient(url);
+    if (!(await client.isReady())) throw new Error(`WDA at ${url} is not answering`);
+    if (restart) await client.restart(IOS_BUNDLE_ID);
+    else await client.session(IOS_BUNDLE_ID);
+    return rnSurface(client, 'ios');
+  }
+  if (kind === 'macos' || kind === 'windows') return electronSurface({ ...spec, platform: kind });
+  throw new Error(`unknown device kind "${kind}"`);
+}
+
+/**
+ * Pair two devices, whatever they are.
+ *
+ * The joiner presents the code the HOST is showing; the host compares it itself. Both sides are then
+ * required to agree - a pairing only one side believes in is the failure this catches, and it is why
+ * the assertion is not simply "the joiner stopped erroring".
+ */
+export async function pair({ host, joiner, hostName, joinerName, timeoutMs = 120_000 }) {
+  await Promise.all([host.openDevices(), joiner.openDevices()]);
+
+  if (await joiner.isConnectedTo(hostName)) return { alreadyConnected: true };
+
+  // Discovery is asynchronous and a peer that restarted moves port, so the joiner's list can be stale.
+  // Rescan and WAIT before concluding anything: "lists no pair control" is a discovery symptom being
+  // reported as a pairing failure, which sends you looking in the wrong place.
+  if (!(await joiner.sees(hostName))) {
+    await joiner.rescan();
+    await waitUntil(() => joiner.sees(hostName), {
+      label: `${joiner.platform} to discover "${hostName}"`,
+      timeoutMs: 60_000,
+      intervalMs: 3000,
+    });
+  }
+
+  const code = await host.pairingCode();
+  const action = await joiner.startPairing(hostName);
+  // A code is only needed when the joiner has LOST its credential. A reconnect on a held one succeeds
+  // without a prompt, and waiting 45s for a dialog that will never open reads as a pairing failure.
+  const prompted = await joiner.waitForCodePrompt();
+  if (prompted) await joiner.enterPairingCode(code);
+
+  await waitUntil(async () => (await joiner.isConnectedTo(hostName)) && (await host.isConnectedTo(joinerName)), {
+    label: `${joiner.platform} and ${host.platform} to both report the pairing`,
+    timeoutMs,
+    intervalMs: 2000,
+  });
+  return { code, action, usedCode: prompted };
+}
+
+/** Poll any condition on a surface, with a diagnosis rather than a bare timeout. */
+export { waitUntil };
