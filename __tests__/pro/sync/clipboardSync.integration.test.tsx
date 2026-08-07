@@ -443,13 +443,15 @@ describe('mobile clipboard Sync journey', () => {
     // tab is still transitioning is dropped, and the journey then reads as a screen that never arrived.
     await waitFor(() => expect(ui!.getByText('Model Settings')).toBeTruthy());
     fireEvent.press(ui.getByTestId('open-sync-settings'));
-    // Wait for the Sync screen itself before reading anything off it. The status line is one word now -
-    // the route detail moved off it deliberately - and asking for that word while still on Settings
-    // reports a missing status rather than a screen that has not arrived.
+    // Wait for the Sync screen itself before reading anything off it: asking for its contents while
+    // still on Settings reports missing elements rather than a screen that has not arrived.
+    //
+    // Gated on the pairing code, which is on the screen whatever the mesh is doing. It used to also
+    // wait for the word "Discoverable", which was never about discoverability - the card no longer
+    // prints that word when the device is simply discoverable, because the switch beneath it says so.
     await waitFor(() =>
       expect(ui!.getByTestId('sync-pairing-code-value')).toBeTruthy(),
     );
-    await waitFor(() => expect(ui!.getByText('Discoverable')).toBeTruthy());
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);

@@ -219,7 +219,10 @@ describe('Pro mobile model transfer journey', () => {
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
-    await waitFor(() => expect(ui!.getByText('Discoverable')).toBeTruthy());
+    // The device card marks the Sync screen having arrived. Previously this waited for the word
+    // "Discoverable", which was only ever standing in for "the screen is here" - the card no longer
+    // prints it when the device is simply discoverable, because the switch beneath it already does.
+    await waitFor(() => expect(ui!.getByTestId('sync-this-device')).toBeTruthy());
 
     const mobile = useSyncStore.getState().thisDevice;
     const discovery = getDiscoveryBoundaries().at(-1);
