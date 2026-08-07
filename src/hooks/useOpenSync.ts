@@ -2,6 +2,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback } from 'react';
 import type { RootStackParamList } from '../navigation/types';
+import { selectHasProAccess } from '../stores/proAccessSlice';
 import { useAppStore } from '../stores';
 
 /**
@@ -18,9 +19,10 @@ export function useOpenSync(): {
 } {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const isSyncUnlocked = useAppStore(
-    state => state.isProActive || state.hasRegisteredPro,
-  );
+  // A credential alone is not enough. A device deactivated from the licensed-device roster is no
+  // longer Pro, and Sync is the feature the roster exists to meter - it kept working while the Pro
+  // screen's own header read "Device Not Active".
+  const isSyncUnlocked = useAppStore(selectHasProAccess);
   const openSync = useCallback(() => {
     navigation.navigate(isSyncUnlocked ? 'Sync' : 'ProDetail');
   }, [isSyncUnlocked, navigation]);

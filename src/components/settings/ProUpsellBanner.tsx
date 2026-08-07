@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, Linking } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedEntry } from '../AnimatedEntry';
 import { Button } from '../Button';
+import { selectHasProAccess } from '../../stores/proAccessSlice';
 import { useAppStore } from '../../stores';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
@@ -31,12 +32,10 @@ export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro }) => {
   const styles = useThemedStyles(createStyles);
   // A saved credential may need device reactivation, but it is never an upsell.
   // Debug access and active Pro features remain separate projections.
+  // Offer the upsell whenever this install does NOT have access - which now includes a device the
+  // roster has deactivated, not only one that never had a credential.
   const show = useAppStore(
-    (s) =>
-      !s.proBannerDismissed &&
-      !s.hasSavedProCredential &&
-      !s.hasRegisteredPro &&
-      !s.isProActive,
+    (s) => !s.proBannerDismissed && !selectHasProAccess(s),
   );
   const dismiss = useAppStore((s) => s.setProBannerDismissed);
   const pricing = getPricingCopy();
