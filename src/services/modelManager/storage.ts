@@ -4,6 +4,7 @@ import { DownloadedModel, LlamaDownloadedModel, LiteRTDownloadedModel, ModelFile
 import { LMSTUDIO_AUTHORS, OFFICIAL_MODEL_AUTHORS, VERIFIED_QUANTIZERS } from '../../constants';
 import { getCuratedLiteRTEntry } from '../curatedLiteRTRegistry';
 import logger from '../../utils/logger';
+import { collapseDuplicateFileRows } from './collapseDuplicateFileRows';
 
 const MODELS_STORAGE_KEY = '@local_llm/downloaded_models';
 const IMAGE_MODELS_STORAGE_KEY = '@local_llm/downloaded_image_models';
@@ -218,12 +219,13 @@ export async function loadDownloadedModels(modelsDir: string): Promise<Downloade
   }
 
   const { validModels, pathsUpdated } = await validateAndResolveModels(models, modelsDir);
+  const { models: deduped, collapsed } = collapseDuplicateFileRows(validModels);
 
-  if (validModels.length !== models.length || pathsUpdated) {
-    await saveModelsList(validModels);
+  if (validModels.length !== models.length || pathsUpdated || collapsed > 0) {
+    await saveModelsList(deduped);
   }
 
-  return validModels;
+  return deduped;
 }
 
 async function tryResolveImageModelPath(

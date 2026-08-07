@@ -320,17 +320,59 @@ async function doScanForUntrackedTextModels(
 ): Promise<DownloadedModel[]> {
   const discoveredModels: DownloadedModel[] = [];
   const registeredModels = await getModels();
-  const registeredPaths = new Set(registeredModels.map(m => m.filePath));
+  /**
+   * Index by FILE NAME, not by absolute path.
+   *
+   * The absolute path is not an identity. On iOS the models dir lives under
+   * /var/mobile/Containers/Data/Application/<UUID>/, and that UUID changes on every reinstall - so a
+   * path stored yesterday matches nothing today, this scan called the file untracked, and adopted it
+   * again under a fresh `recovered_<name>_<timestamp>` id while the old row stayed behind. One 508 MB
+   * download had accumulated 35 rows across 29 app starts before anyone opened the list.
+   *
+   * A file name is unique within the models dir, which is why it is the stable key - the same
+   * conclusion `useTextModels.ts` had already reached for its own display matching, applied here where
+   * the rows are actually created.
+   */
+  const registeredByFileName = new Map(
+    registeredModels
+      .filter(model => model.fileName)
+      .map(model => [model.fileName, model] as const),
+  );
+  let repairedPaths = false;
 
   const dirExists = await RNFS.exists(modelsDir);
   if (!dirExists) return discoveredModels;
 
   const items = await RNFS.readDir(modelsDir);
+  // The projectors sitting in this same directory. An adopted model has to be offered them, or a
+  // vision model comes back from recovery as text - the primary alone, 508 MB where the whole package
+  // is 706 MB, and a transfer that ships something which loads and cannot see.
+  const mmProjFiles = items.filter(entry => entry.isFile() && isMMProjFile(entry.name.toLowerCase()));
 
   for (const item of items) {
     const lowerName = item.name.toLowerCase();
     const isMmProj = isMMProjFile(lowerName);
-    if (!item.isFile() || !item.name.endsWith('.gguf') || registeredPaths.has(item.path) || isMmProj) {
+    if (!item.isFile() || !item.name.endsWith('.gguf') || isMmProj) {
+      continue;
+    }
+
+    // Already known. REPAIR the row's path rather than adding a second row for the same file: that is
+    // the whole difference between a registry that survives a reinstall and one that grows a duplicate
+    // on every launch.
+    const known = registeredByFileName.get(item.name);
+    if (known) {
+      if (known.filePath !== item.path) {
+        known.filePath = item.path;
+        repairedPaths = true;
+      }
+      // A row that arrived without its projector gets it here. linkMmProjToModel is a no-op when one is
+      // already linked, and only links a projector that STRICTLY belongs to this model by name and
+      // variant - the same rule the loader uses, so link time and load time cannot disagree.
+      // Narrowed because only a llama record has a projector at all; LiteRT has no such concept, and
+      // linkMmProjToModel returns early for it.
+      const hadProjector = known.engine === 'llama' && Boolean(known.mmProjPath);
+      linkMmProjToModel(known, mmProjFiles);
+      if (!hadProjector && known.engine === 'llama' && known.mmProjPath) repairedPaths = true;
       continue;
     }
 
@@ -346,7 +388,11 @@ async function doScanForUntrackedTextModels(
     }
 
     const newModel: LlamaDownloadedModel = {
-      id: `recovered_${item.name}_${Date.now()}`,
+      // Derived from the file name and NOTHING else. `Date.now()` in an id meant the same file adopted
+      // twice produced two different ids, so nothing downstream could ever tell them apart - and the
+      // registry had no way back to one row per file. A name is unique in this directory, so this id is
+      // stable across every scan, reinstall and container move.
+      id: `recovered_${item.name}`,
       name: item.name.replace(/\.gguf$/i, '').replace(/[_-]Q\d+.*/i, ''),
       author,
       filePath: item.path,
@@ -358,11 +404,17 @@ async function doScanForUntrackedTextModels(
       engine: 'llama',
     };
 
-    const models = await getModels();
-    models.push(newModel);
-    await saveModelsList(models);
+    // Adopted WITH its projector, so a recovered vision model is a vision model.
+    linkMmProjToModel(newModel, mmProjFiles);
+    registeredModels.push(newModel);
+    registeredByFileName.set(newModel.fileName, newModel);
+    repairedPaths = true;
     discoveredModels.push(newModel);
   }
+
+  // One write for the whole scan. It used to re-read the list and save inside the loop, which is why a
+  // path repaired in memory could not survive: the next iteration reloaded the stored copy over it.
+  if (repairedPaths) await saveModelsList(registeredModels);
 
   return discoveredModels;
 }
