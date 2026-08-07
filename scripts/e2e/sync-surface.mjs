@@ -57,15 +57,37 @@ const waitUntil = async (check, { label, timeoutMs = 60_000, intervalMs = 1000 }
  * `sync-pair-<id>`, `sync-paired-<id>`. Addressing is by name, so this walks the flat label list to
  * find the row's name and then takes the nearest action testID after it, which is that row's own.
  */
+/**
+ * Captions that sit next to the device card and are NOT the device's name. Listed once, because both
+ * phones render the same card with the lines in a different order and each would otherwise need its
+ * own guesswork.
+ */
+const CARD_CAPTIONS = new Set([
+  'This device',
+  'Discoverable',
+  'Not discoverable',
+  'Hidden',
+  'PERSONAL MESH',
+  'Rename this device',
+  'Discoverable to new devices',
+]);
+
 const rnSurface = (client, platform) => {
   const controlFor = async (name, kinds) => {
     const labels = await client.labels();
     const at = labels.findIndex((label) => label.trim() === name);
     if (at < 0) return undefined;
     const pattern = new RegExp(`^sync-(${kinds.join('|')})-[0-9a-f]+$`);
-    // Rows render name-then-actions, so the first match after the name belongs to this row. Scanning
-    // the whole list instead would return whichever device happened to be rendered first.
-    return labels.slice(at, at + 14).find((label) => pattern.test(label));
+    // Nearest match in BOTH directions. Android renders name-then-actions, iOS renders the actions
+    // FIRST and the name after them - so scanning only forward found nothing on an iPhone and reported
+    // "lists no pair control" for a saved Mac that was one Reconnect away.
+    for (let step = 1; step <= 14; step += 1) {
+      for (const index of [at + step, at - step]) {
+        const label = labels[index];
+        if (label && pattern.test(label)) return label;
+      }
+    }
+    return undefined;
   };
 
   return {
@@ -98,6 +120,33 @@ const rnSurface = (client, platform) => {
 
     async text() {
       return (await client.labels()).join('\n');
+    },
+
+    /**
+     * The name this device calls ITSELF, read off its own screen.
+     *
+     * Never passed in from a flow: a name typed into a script goes stale the moment someone renames a
+     * device, which happened repeatedly while this was being built.
+     */
+    async deviceName() {
+      const lines = (await client.labels()).map((line) => line.trim());
+      const at = lines.indexOf('sync-this-device');
+      if (at < 0) throw new Error(`no device card on ${platform}`);
+      // Nearest usable neighbour in BOTH directions: iOS emits the name just before the marker,
+      // Android just after, so a single-direction read is right on one phone and returns a caption on
+      // the other.
+      const usable = (line) =>
+        Boolean(line) &&
+        !line.startsWith('sync-') &&
+        !CARD_CAPTIONS.has(line) &&
+        !/^\d+$/.test(line) &&
+        !/devices saved|connected|Let new devices/i.test(line);
+      for (let step = 1; step <= 3; step += 1) {
+        for (const index of [at - step, at + step]) {
+          if (index >= 0 && index < lines.length && usable(lines[index])) return lines[index];
+        }
+      }
+      throw new Error(`could not read the device name on ${platform}`);
     },
 
     async pairingCode() {
@@ -261,6 +310,13 @@ const electronSurface = async (spec) => {
     },
 
     text: () => evaluate('return document.body.innerText;'),
+
+    /** The name this device calls itself. The desktops print it outright: "This device: <name>". */
+    async deviceName() {
+      const match = (await this.text()).match(/This device:\s*(.+)/);
+      if (!match) throw new Error(`could not read the device name on ${platform}`);
+      return match[1].trim();
+    },
 
     async pairingCode() {
       const text = await this.text();

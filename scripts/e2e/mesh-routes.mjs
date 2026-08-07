@@ -22,29 +22,10 @@
  * Every route is independent and non-fatal: a sweep that stops at the first failure hides the other
  * answers, which is the opposite of what it is for.
  */
+import { flag, specFor } from './mesh-config.mjs';
 import { connectSurface, pair } from './sync-surface.mjs';
 
-const argv = process.argv.slice(2);
-const flag = (name, fallback) => {
-  const at = argv.indexOf(`--${name}`);
-  return at < 0 ? fallback : argv[at + 1];
-};
-
-const MAC = flag('mac', '192.168.1.64');
-const WIN = flag('win', '192.168.1.94:9223');
 const only = flag('only');
-
-const spec = (kind) => {
-  if (kind === 'macos') {
-    const [host, port] = MAC.split(':');
-    return { kind, host, ...(port ? { port: Number(port) } : {}) };
-  }
-  if (kind === 'windows') {
-    const [host, port] = WIN.split(':');
-    return { kind, host, ...(port ? { port: Number(port) } : {}) };
-  }
-  return { kind };
-};
 
 /** host shows the code, joiner enters it. */
 const ROUTES = [
@@ -56,47 +37,6 @@ const ROUTES = [
   { group: 'desktop-to-desktop', host: 'macos', joiner: 'windows' },
 ];
 
-/**
- * The name a device calls ITSELF, read off its own screen.
- *
- * Never passed in: a name typed into a script goes stale the moment someone renames a device, which
- * happened repeatedly while this was being built.
- */
-const nameOf = async (surface) => {
-  const text = await surface.text();
-  if (surface.family === 'electron') {
-    const match = text.match(/This device:\s*(.+)/);
-    if (match) return match[1].trim();
-    throw new Error(`could not read the device name on ${surface.platform}`);
-  }
-  const lines = text.split('\n').map((line) => line.trim());
-  const at = lines.indexOf('sync-this-device');
-  if (at < 0) throw new Error(`no device card on ${surface.platform}`);
-  // Nearest usable neighbour in BOTH directions: iOS emits the name just before the marker, Android
-  // just after, so a single-direction read is right on one phone and returns a caption on the other.
-  const caption = new Set([
-    'This device',
-    'Discoverable',
-    'Not discoverable',
-    'Hidden',
-    'PERSONAL MESH',
-    'Rename this device',
-    'Discoverable to new devices',
-  ]);
-  const usable = (line) =>
-    Boolean(line) &&
-    !line.startsWith('sync-') &&
-    !caption.has(line) &&
-    !/^\d+$/.test(line) &&
-    !/devices saved|connected|Let new devices/i.test(line);
-  for (let step = 1; step <= 3; step += 1) {
-    for (const index of [at - step, at + step]) {
-      if (index >= 0 && index < lines.length && usable(lines[index])) return lines[index];
-    }
-  }
-  throw new Error(`could not read the device name on ${surface.platform}`);
-};
-
 const results = [];
 
 for (const route of ROUTES) {
@@ -106,10 +46,10 @@ for (const route of ROUTES) {
   let host;
   let joiner;
   try {
-    host = await connectSurface(spec(route.host));
-    joiner = await connectSurface(spec(route.joiner));
+    host = await connectSurface(specFor(route.host));
+    joiner = await connectSurface(specFor(route.joiner));
     await Promise.all([host.openDevices(), joiner.openDevices()]);
-    const [hostName, joinerName] = await Promise.all([nameOf(host), nameOf(joiner)]);
+    const [hostName, joinerName] = await Promise.all([host.deviceName(), joiner.deviceName()]);
     const outcome = await pair({ host, joiner, hostName, joinerName });
     const how = outcome.alreadyConnected
       ? 'already connected'
