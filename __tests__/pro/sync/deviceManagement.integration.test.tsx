@@ -298,32 +298,16 @@ describe('Pro mobile saved-device management journey', () => {
     await waitFor(() =>
       expect(ui!.queryByTestId(`sync-paired-${remoteDevice.id}`)).toBeNull(),
     );
-    await waitFor(() => expect(ui!.getByText(/Could not reach/)).toBeTruthy());
-    const pendingEviction = ui.getByTestId(
-      `sync-discovered-${remoteDevice.id}`,
-    );
-    expect(within(pendingEviction).getByText(/Could not reach/)).toBeTruthy();
-    expect(
-      within(pendingEviction).getByTestId(
-        `sync-retry-eviction-${remoteDevice.id}`,
-      ),
-    ).toBeTruthy();
-    expect(
-      within(pendingEviction).getByTestId(
-        `sync-dismiss-eviction-${remoteDevice.id}`,
-      ),
-    ).toBeTruthy();
-    expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
-    fireEvent.press(
-      within(pendingEviction).getByTestId(
-        `sync-dismiss-eviction-${remoteDevice.id}`,
-      ),
-    );
+    // An evicted device is GONE from this phone's lists - not available, not saved, and with no
+    // eviction row of its own. It used to keep a synthesised row carrying retry/dismiss, which put a
+    // device you had just removed back on screen beside the ones you can still connect to, reading as
+    // though the removal had failed. The revocation is still tracked and retried in the background;
+    // what is gone is the removed device's presence on this screen.
     await waitFor(() =>
-      expect(
-        ui!.queryByTestId(`sync-discovered-${remoteDevice.id}`),
-      ).toBeNull(),
+      expect(ui!.queryByTestId(`sync-discovered-${remoteDevice.id}`)).toBeNull(),
     );
+    expect(ui.queryByText(/Could not reach/)).toBeNull();
+    expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
 
     remote = buildSyncEngine({
       pairingEntitlement: mesh.peer(),
