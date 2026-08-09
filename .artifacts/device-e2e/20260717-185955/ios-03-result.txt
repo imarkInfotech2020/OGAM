@@ -1,0 +1,3 @@
+assistant_accessibility_id=assistant-message
+element_id=FA000000-0000-0000-CC09-000000000000
+label=T, Thought process, The user is asking me to reply with exactly OK. This is a simple instruction and..., ▶, OK, , Tools sent in request (4), , 7:00 PM, 1.7s, , •••
