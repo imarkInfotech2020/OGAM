@@ -1,6 +1,10 @@
 import { Platform } from 'react-native';
 import { useChatStore } from '../stores';
 import { GeneratedImage, GenerationMeta, Message } from '../types';
+import { parseModelOutput } from '../utils/messageContent';
+
+/** Header shown on the enhancement card (ThinkingBlock reads it as the block's label). */
+export const ENHANCED_PROMPT_LABEL = 'Enhanced prompt';
 
 interface ActiveImageModel {
   id: string;
@@ -33,6 +37,21 @@ export function getConversationContext(conversationId: string): Message[] {
 
 export function cleanEnhancedPrompt(raw: string): string {
   return raw.trim().replace(/(^["'])|(["']$)/g, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+
+/** THE one writer of the "Enhanced prompt" card's message content — partial (streaming) and final
+ *  both go through it, so the two can never disagree.
+ *
+ *  The card is a labelled `<think>` container the renderer turns into the collapsible block. Raw
+ *  model output must NEVER be dropped into it verbatim: the model emits its own `<think>…</think>`,
+ *  and a nested pair makes the outer container ambiguous (the first `</think>` closes it), which is
+ *  how markup reached the screen. So the partial is run through the ONE display parse first and only
+ *  its clean text is wrapped. While the model is still reasoning there is no answer yet — the
+ *  reasoning is shown instead, so the card fills in live rather than sitting empty. */
+export function buildEnhancementCardContent(raw: string): string {
+  const { reasoning, answer } = parseModelOutput(raw);
+  const body = (answer || reasoning || '').trim();
+  return `<think>__LABEL:${ENHANCED_PROMPT_LABEL}__\n${body}</think>`;
 }
 
 export function buildImageGenMeta(

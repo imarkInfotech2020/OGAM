@@ -235,6 +235,12 @@ export interface Message {
   timestamp: number;
   isStreaming?: boolean;
   isThinking?: boolean;
+  /** USER messages only: the modality this turn was DISPATCHED as, stamped when the router decides.
+   *  A resend replays this fact instead of re-deriving the turn's kind from whatever replies survived —
+   *  a cancelled image turn leaves only the "Enhanced prompt" reply and no image, and inferring from
+   *  that made the retry a TEXT turn (device-confirmed on Android and iOS). Absent on turns recorded
+   *  before this field existed; those still fall back to the reply scan. */
+  turnKind?: 'text' | 'image';
   /** Indicates this is a system info message (model loaded/unloaded, etc.) */
   isSystemInfo?: boolean;
   attachments?: MediaAttachment[];

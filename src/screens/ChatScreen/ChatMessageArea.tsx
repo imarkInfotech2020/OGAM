@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform, StyleSheet } from 'react-native';
+import { View, FlatList, Text, Keyboard, Platform, StyleSheet } from 'react-native';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
@@ -89,22 +89,28 @@ const ModelEvictedBar: React.FC<{ visible: boolean; onPress: () => void; styles:
 
 // Small status bar above the input: classifying takes precedence over the
 // background model-load indicator.
-const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelName?: string; styles: any; colors: any }> = ({
-  loading, classifying, modelName, styles, colors,
+const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelName?: string; styles: any }> = ({
+  loading, classifying, modelName, styles,
 }) => {
+  // The app's OWN "working" indicator, not the platform ActivityIndicator. On Android that renders a
+  // Material arc whose tapered end reads as a static rotate glyph — the bar looked like it was
+  // offering a retry button rather than telling you a model was loading (device-confirmed). The
+  // pulsing dots are the same thing the reply bubble uses while the model works, so "working" looks
+  // the same everywhere and can never be mistaken for something to press.
   if (classifying) {
     return (
       <View style={styles.classifyingBar}>
-        <ActivityIndicator size="small" color={colors.primary} />
-        <Text style={styles.classifyingText}>Understanding your request...</Text>
+        <ThinkingIndicator text="Understanding your request..." textStyle={styles.classifyingText} />
       </View>
     );
   }
   if (loading) {
     return (
       <View style={styles.classifyingBar}>
-        <ActivityIndicator size="small" color={colors.primary} />
-        <Text style={styles.classifyingText}>{modelName ? `Loading ${modelName}...` : 'Loading model...'}</Text>
+        <ThinkingIndicator
+          text={modelName ? `Loading ${modelName}...` : 'Loading model...'}
+          textStyle={styles.classifyingText}
+        />
       </View>
     );
   }
@@ -246,7 +252,6 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         classifying={chat.isClassifying}
         modelName={chat.loadingModel?.name}
         styles={styles}
-        colors={colors}
       />
       {chat.isCompacting && (
         <Animated.View entering={FadeIn.duration(200)} style={styles.classifyingBar}>

@@ -159,7 +159,7 @@ export const useChatScreen = () => {
 
   const {
     activeConversationId, conversations, createConversation, addMessage,
-    updateMessageContent, deleteMessagesAfter, streamingMessage, streamingReasoningContent,
+    updateMessageContent, updateMessageTurnKind, deleteMessagesAfter, streamingMessage, streamingReasoningContent,
     streamingForConversationId, isStreaming, isThinking, clearStreamingMessage,
     deleteConversation, setActiveConversation, setConversationProject,
   } = useChatStore();
@@ -209,6 +209,7 @@ export const useChatScreen = () => {
     ensureModelLoaded: async (onLoadedResume?: () => void) => ensureModelLoadedFn(modelDeps, onLoadedResume),
     ensureTextModelForChat: () => ensureTextModelForChatFn({ setShowModelSelector, setLoadingModel, setIsModelLoading }),
     setPendingMessage: (text: string, attachments?: MediaAttachment[]) => { pendingMessageRef.current = { text, attachments }; },
+    updateMessageTurnKind,
     createConversation,
     pendingProjectId,
   };

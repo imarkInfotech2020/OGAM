@@ -17,6 +17,13 @@ export interface ChatMessageMutationActions {
     messageId: string,
     isThinking: boolean,
   ) => void;
+  /** Stamp the modality a USER message's turn was dispatched as, so a resend replays the
+   *  DECISION rather than re-deriving it from the replies that happen to have survived. */
+  updateMessageTurnKind: (
+    conversationId: string,
+    messageId: string,
+    turnKind: NonNullable<Message['turnKind']>,
+  ) => void;
   updateMessageAudio: (
     conversationId: string,
     messageId: string,
@@ -103,6 +110,23 @@ export function createMessageMutationActions(
           })),
         ),
       );
+    },
+
+    updateMessageTurnKind: (conversationId, messageId, turnKind) => {
+      owner.updateConversations(conversations =>
+        mapConversation(conversations, conversationId, conversation =>
+          updateMessageInConversation(conversation, messageId, message => ({
+            ...message,
+            turnKind,
+          })),
+        ),
+      );
+      const message = owner
+        .getConversationMessages(conversationId)
+        .find(candidate => candidate.id === messageId);
+      if (message) {
+        emitSyncMutation(messagePutMutation(conversationId, message));
+      }
     },
 
     updateMessageAudio: (conversationId, messageId, audio) => {

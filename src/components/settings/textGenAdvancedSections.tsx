@@ -266,7 +266,7 @@ export const ShowGenerationDetailsToggle: React.FC = () => {
 export const CpuThreadsSlider: React.FC = () => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
   const { updateSettings } = useAppStore();
-  const { cpuThreadsSliderValue } = useTextGenerationAdvanced();
+  const { cpuThreadsSliderValue, cpuThreadsDisplayValue } = useTextGenerationAdvanced();
   return (
     <View style={styles.container}>
       <SliderSetting
@@ -274,6 +274,9 @@ export const CpuThreadsSlider: React.FC = () => {
         label="CPU Threads"
         description="Parallel threads for inference"
         value={cpuThreadsSliderValue}
+        // Unset means AUTO, and the slider's own minimum is 1 — so the screen read "1" while the
+        // engine was running the hardware-recommended count. Show what will actually be used.
+        formatValue={() => cpuThreadsDisplayValue}
         min={1} max={12} step={1}
         onChange={(v) => updateSettings({ nThreads: v })}
       />
