@@ -1,0 +1,65 @@
+Back
+
+Sync
+PERSONAL MESH
+sync-this-device
+OnePlus Nord 5
+Rename this device
+sync-rename-this-device
+
+This device
+Discoverable to new devices
+sync-toggle-discoverable
+4 of 5 devices saved
+3 connected
+PAIRING CODE
+Enter this code on the device you are pairing.
+sync-pairing-code-value
+APFA-RNGP
+Generate new code
+sync-rotate-pairing-code
+DEVICES
+Rescan
+sync-rescan
+AVAILABLE
+sync-paired-9d25c24e4b6a2753dcc08a89b0342194
+
+17 pro max
+Rename 17 pro max
+sync-rename-9d25c24e4b6a2753dcc08a89b0342194
+ios - Connected · LAN
+Disconnect 17 pro max
+sync-disconnect-9d25c24e4b6a2753dcc08a89b0342194
+
+Send a model to 17 pro max
+sync-send-model-9d25c24e4b6a2753dcc08a89b0342194
+
+Forget 17 pro max
+sync-forget-9d25c24e4b6a2753dcc08a89b0342194
+
+sync-paired-fa4d14a6a71272a2dc5c0c7a054c4f7d
+OGAD x.x.x.26 (Win)
+Rename OGAD x.x.x.26 (Win)
+sync-rename-fa4d14a6a71272a2dc5c0c7a054c4f7d
+windows - Connected · LAN
+Disconnect OGAD x.x.x.26 (Win)
+sync-disconnect-fa4d14a6a71272a2dc5c0c7a054c4f7d
+Send a model to OGAD x.x.x.26 (Win)
+sync-send-model-fa4d14a6a71272a2dc5c0c7a054c4f7d
+Forget OGAD x.x.x.26 (Win)
+sync-forget-fa4d14a6a71272a2dc5c0c7a054c4f7d
+sync-paired-e54de3b2c0df6739efd534e75ad5f856
+OGAD x.x.x.25 (MacOS)
+Rename OGAD x.x.x.25 (MacOS)
+sync-rename-e54de3b2c0df6739efd534e75ad5f856
+macos - Connected · LAN
+Disconnect OGAD x.x.x.25 (MacOS)
+sync-disconnect-e54de3b2c0df6739efd534e75ad5f856
+Send a model to OGAD x.x.x.25 (MacOS)
+sync-send-model-e54de3b2c0df6739efd534e75ad5f856
+Forget OGAD x.x.x.25 (MacOS)
+sync-forget-e54de3b2c0df6739efd534e75ad5f856
+MANAGE
+, Sharing, Choose chats, projects, clipboard, screenshots, downloads, and attachments., 
+sync-open-sharing
+Sharing

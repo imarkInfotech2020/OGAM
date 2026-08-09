@@ -1,0 +1,11 @@
+{
+  "outcome": "passed",
+  "startedAt": "2026-08-08T11:21:59.025Z",
+  "finishedAt": "2026-08-08T11:23:21.056Z",
+  "elapsedMs": 82031,
+  "iosName": "17 pro max",
+  "androidName": "OnePlus Nord 5",
+  "action": "sync-repair-9d25c24e4b6a2753dcc08a89b0342194",
+  "usedOnScreenCode": true,
+  "connectionLeftIntact": true
+}

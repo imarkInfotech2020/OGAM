@@ -1,0 +1,77 @@
+Off Grid AI
+Back
+Search
+Day
+Replay
+Reflect
+Meetings
+Actions
+Entities
+Projects
+Chat
+Voice
+Vault
+Clipboard
+Devices
+Integrations
+Models
+Gateway
+Notifications
+Model stopped
+Theme: System
+Settings
+Mobile app
+Devices
+
+Sync workspaces, models, copied text and media over your local network or directly to a nearby Apple device. Traffic is encrypted between paired devices.
+
+Discoverable
+LAN: ready
+Nearby: ready
+5 nearby
+3 connected
+24 tracked
+4/5 licensed devices
+This device: OGAD x.x.x.25 (MacOS)
+Devices
+Sync sharing
+Activity
+Files
+PAIRING CODE
+9MT6-UTCC
+
+Enter this code on the device you are pairing.
+
+Generate new code
+SAVED
+4 used
+No saved devices are away right now.
+AVAILABLE
+5
+Rescan network
+17 pro max
+iOS · LAN + Nearby
+Connected now
+OnePlus Nord 5
+Android · LAN
+Connected now
+OGAD x.x.x.26 (Win)
+windows · LAN
+Connected now
+Off Grid AI Desktop
+macOS · LAN
+Not paired
+Pair
+Off Grid AI Desktop
+macOS · LAN
+Not paired
+Pair
+Licensed devices
+
+4 of 5 licensed devices.
+
+OGAD x.x.x.25 (MacOS)
+macOS · This device
+LOCAL
+AVAILABLE DEVICE SLOT
+Close
