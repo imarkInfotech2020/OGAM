@@ -8,7 +8,7 @@ import logger from '../utils/logger';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForImage } from './proPrompt';
 import { SWEET_SPOT_SIZE, DEFAULT_IMAGE_GUIDANCE } from '../utils/imageGenAdvice';
-import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildImageGenMeta } from './imageGenerationHelpers';
+import { buildEnhancementMessages, getConversationContext, cleanEnhancedPrompt, buildEnhancementCardContent, buildImageGenMeta } from './imageGenerationHelpers';
 import { reportModelFailure } from './modelFailureHandler';
 import { reasonFromLoadError } from './modelFailureReasons';
 import { isOverridableMemoryError } from './modelLoadErrors';
@@ -169,7 +169,7 @@ class ImageGenerationService {
     if (!conversationId || !tempMessageId) return;
     const chatStore = useChatStore.getState();
     if (enhancedPrompt && enhancedPrompt !== originalPrompt) {
-      chatStore.updateMessageContent(conversationId, tempMessageId, `<think>__LABEL:Enhanced prompt__\n${enhancedPrompt}</think>`);
+      chatStore.updateMessageContent(conversationId, tempMessageId, buildEnhancementCardContent(enhancedPrompt));
       chatStore.updateMessageThinking(conversationId, tempMessageId, false);
     } else {
       logger.warn('[ImageGen] Enhancement produced no change, deleting thinking message');
@@ -250,11 +250,10 @@ class ImageGenerationService {
       let streamed = '';
       const onEnhanceToken = (token: string) => {
         streamed += token;
-        if (params.conversationId && tempMessageId) {
-          useChatStore.getState().updateMessageContent(
-            params.conversationId, tempMessageId, `<think>__LABEL:Enhanced prompt__\n${streamed}</think>`,
-          );
-        }
+        if (!params.conversationId || !tempMessageId) return;
+        useChatStore.getState().updateMessageContent(
+          params.conversationId, tempMessageId, buildEnhancementCardContent(streamed),
+        );
       };
       let raw = await generateStandalone(buildEnhancementMessages(params.prompt, contextMessages), onEnhanceToken);
       logger.log('[ImageGen] 📥 generateStandalone returned');
