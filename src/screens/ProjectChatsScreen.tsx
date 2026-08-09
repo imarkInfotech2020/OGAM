@@ -20,6 +20,7 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
+import { useConversationPreviewLine } from '../hooks/useConversationPreviewLine';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectChats'>;
@@ -146,6 +147,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
 });
 
 export const ProjectChatsScreen: React.FC = () => {
+  const previewLine = useConversationPreviewLine();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { projectId } = route.params;
@@ -207,7 +209,7 @@ export const ProjectChatsScreen: React.FC = () => {
   );
 
   const renderChat = ({ item }: { item: Conversation }) => {
-    const lastMessage = item.messages[item.messages.length - 1];
+    const preview = previewLine(item.messages);
 
     return (
       <Swipeable
@@ -229,11 +231,11 @@ export const ProjectChatsScreen: React.FC = () => {
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {lastMessage && (
+            {preview ? (
               <Text style={styles.chatPreview} numberOfLines={1}>
-                {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
+                {preview}
               </Text>
-            )}
+            ) : null}
           </View>
           <Icon name="chevron-right" size={16} color={colors.textMuted} />
         </TouchableOpacity>

@@ -20,11 +20,13 @@ import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
 import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
 import { formatWhen } from '../utils/localTime';
+import { useConversationPreviewLine } from '../hooks/useConversationPreviewLine';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectDetail'>;
 
 export const ProjectDetailScreen: React.FC = () => {
+  const previewLine = useConversationPreviewLine();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProps>();
   const { projectId } = route.params;
@@ -126,7 +128,7 @@ export const ProjectDetailScreen: React.FC = () => {
   );
 
   const renderChat = ({ item }: { item: Conversation }) => {
-    const lastMessage = item.messages[item.messages.length - 1];
+    const preview = previewLine(item.messages);
 
     return (
       <Swipeable
@@ -148,12 +150,11 @@ export const ProjectDetailScreen: React.FC = () => {
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {lastMessage && (
+            {preview ? (
               <Text style={styles.chatPreview} numberOfLines={1}>
-                {lastMessage.role === 'user' ? 'You: ' : ''}
-                {lastMessage.content}
+                {preview}
               </Text>
-            )}
+            ) : null}
           </View>
           <Icon name="chevron-right" size={14} color={colors.textMuted} />
         </TouchableOpacity>

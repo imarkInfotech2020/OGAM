@@ -1,5 +1,6 @@
 import type { ChatStreamPreviewRow } from '@offgrid/sync';
 import { Message } from '../../types';
+import { visibleMessages } from '../../utils/visibleMessages';
 export type ChatMessageItem = {
   id: string;
   role: 'assistant';
@@ -28,6 +29,8 @@ export type StreamingState = {
   isGeneratingForThisConversation?: boolean;
   /** Live previews from paired devices. Empty in free builds and when nothing is generating. */
   remotePreviews?: readonly RemoteStreamItem[];
+  /** This device's mesh id, so a peer's runtime notices can be told apart from its own. */
+  localDeviceId?: string | null;
 };
 
 /**
@@ -63,7 +66,11 @@ export function getDisplayMessages(
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {
   return withRemotePreviews(
-    localDisplayMessages(allMessages, streaming),
+    localDisplayMessages(
+      // The same rule the list rows use, so the thread and its preview never disagree.
+      [...visibleMessages(allMessages, streaming.localDeviceId)],
+      streaming,
+    ),
     streaming.remotePreviews,
   );
 }

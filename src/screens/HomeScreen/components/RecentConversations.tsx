@@ -7,6 +7,7 @@ import { useTheme, useThemedStyles } from '../../../theme';
 import { createStyles } from '../styles';
 import { Conversation } from '../../../types';
 import { formatWhen } from '../../../utils/localTime';
+import { useConversationPreviewLine } from '../../../hooks/useConversationPreviewLine';
 
 const formatDate = (dateStr: string): string => formatWhen(dateStr);
 
@@ -30,6 +31,7 @@ export const RecentConversations: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const previewLine = useConversationPreviewLine();
 
   const renderRightActions = (conversation: Conversation) => (
     <TouchableOpacity
@@ -75,13 +77,13 @@ export const RecentConversations: React.FC<Props> = ({
                   {formatDate(conv.updatedAt)}
                 </Text>
               </View>
-              {conv.messages.length > 0 && (() => {
-                const lastMsg = conv.messages[conv.messages.length - 1];
-                return (
+              {(() => {
+                const preview = previewLine(conv.messages);
+                return preview ? (
                   <Text style={styles.conversationPreview} numberOfLines={1}>
-                    {lastMsg.role === 'user' ? 'You: ' : ''}{lastMsg.content}
+                    {preview}
                   </Text>
-                );
+                ) : null;
               })()}
             </View>
             <Icon name="chevron-right" size={14} color={colors.textMuted} />
