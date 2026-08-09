@@ -1,127 +1,118 @@
 import type { ThemeColors, ThemeShadows } from '../../theme/palettes';
+import { SPACING, TYPOGRAPHY } from '../../constants';
 
+/**
+ * The add / edit server sheet, on the same tokens as the rest of the app.
+ *
+ * This file named no token at all before: fourteen hardcoded font sizes with no family, seven
+ * weights of 500 or 600 against a bar of 400, and about thirty magic spacings. So the sheet drew
+ * itself in the platform sans, heavier than anything around it, and read as another product's
+ * form. Fields are bordered now, the way every other surface here is, rather than filled slabs
+ * with a 12pt radius.
+ */
 export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
   return {
     container: {
       // No flex: 1 - let content size naturally with enableDynamicSizing
     },
     content: {
-      paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingHorizontal: SPACING.lg,
+      paddingVertical: SPACING.lg,
+      paddingBottom: SPACING.xxl,
     },
+
+    /* Field labels are the terminal's small uppercase key, not a heavier version of the value. */
     label: {
-      fontSize: 14,
-      fontWeight: '600' as const,
-      color: colors.textSecondary,
-      marginBottom: 6,
-      marginTop: 16,
+      ...TYPOGRAPHY.label,
+      textTransform: 'uppercase' as const,
+      color: colors.textMuted,
+      marginBottom: SPACING.xs,
+      marginTop: SPACING.lg,
     },
     input: {
-      backgroundColor: colors.surfaceLight,
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      fontSize: 16,
+      ...TYPOGRAPHY.body,
       color: colors.text,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingHorizontal: SPACING.md,
+      paddingVertical: SPACING.md,
     },
     inputError: {
-      borderWidth: 1,
       borderColor: colors.error,
     },
     errorText: {
+      ...TYPOGRAPHY.meta,
       color: colors.error,
-      fontSize: 12,
-      marginTop: 4,
+      marginTop: SPACING.xs,
     },
+
     warningContainer: {
-      backgroundColor: colors.errorBackground,
+      flexDirection: 'row' as const,
+      alignItems: 'flex-start' as const,
+      gap: SPACING.sm,
+      borderWidth: 1,
+      borderColor: colors.error,
       borderRadius: 8,
-      padding: 12,
-      marginTop: 12,
+      padding: SPACING.md,
+      marginTop: SPACING.md,
+    },
+    warningIcon: {
+      marginTop: 1,
     },
     warningText: {
+      ...TYPOGRAPHY.meta,
       color: colors.error,
-      fontSize: 13,
+      flex: 1,
+      lineHeight: 16,
     },
+
     helperText: {
-      fontSize: 12,
+      ...TYPOGRAPHY.meta,
       color: colors.textMuted,
-      marginTop: 4,
+      marginTop: SPACING.xs,
+      lineHeight: 15,
     },
+
     buttonRow: {
       flexDirection: 'row' as const,
-      gap: 10,
-      marginTop: 16,
+      gap: SPACING.sm,
+      marginTop: SPACING.lg,
     },
-    testButton: {
+    buttonHalf: {
       flex: 1,
-      backgroundColor: colors.primary,
-      borderRadius: 12,
-      paddingVertical: 14,
-      paddingHorizontal: 12,
-      alignItems: 'center' as const,
-      flexDirection: 'row' as const,
-      justifyContent: 'center' as const,
     },
-    testButtonDisabled: {
-      backgroundColor: colors.surfaceLight,
-    },
-    testButtonText: {
-      color: colors.background,
-      fontSize: 15,
-      fontWeight: '600' as const,
-    },
-    testButtonTextDisabled: {
-      color: colors.textMuted,
-    },
-    saveButton: {
-      flex: 1,
-      backgroundColor: colors.primary,
-      borderRadius: 12,
-      paddingVertical: 14,
-      paddingHorizontal: 12,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-    },
-    saveButtonDisabled: {
-      backgroundColor: colors.surfaceLight,
-    },
-    saveButtonText: {
-      color: colors.background,
-      fontSize: 15,
-      fontWeight: '600' as const,
-    },
-    saveButtonTextDisabled: {
-      color: colors.textMuted,
-    },
+
     modelList: {
-      marginTop: 8,
+      marginTop: SPACING.sm,
     },
     modelScroll: {
       maxHeight: 81,
     },
     modelItem: {
-      backgroundColor: colors.surfaceLight,
-      borderRadius: 6,
-      paddingVertical: 4,
-      paddingHorizontal: 8,
-      marginBottom: 3,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 4,
+      paddingVertical: SPACING.xs,
+      paddingHorizontal: SPACING.sm,
+      marginBottom: SPACING.xs,
     },
     modelName: {
-      fontSize: 13,
-      fontWeight: '500' as const,
+      ...TYPOGRAPHY.meta,
       color: colors.text,
     },
+
     statusContainer: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
-      marginTop: 8,
+      gap: SPACING.sm,
+      marginTop: SPACING.md,
     },
     statusDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      marginRight: 8,
+      width: 6,
+      height: 6,
+      borderRadius: 3,
     },
     statusDotSuccess: {
       backgroundColor: colors.success,
@@ -130,15 +121,17 @@ export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
       backgroundColor: colors.error,
     },
     statusText: {
-      fontSize: 14,
+      ...TYPOGRAPHY.meta,
       color: colors.textSecondary,
+      flex: 1,
     },
+
     sectionHeader: {
-      fontSize: 16,
-      fontWeight: '600' as const,
-      color: colors.text,
-      marginTop: 20,
-      marginBottom: 8,
+      ...TYPOGRAPHY.label,
+      textTransform: 'uppercase' as const,
+      color: colors.textMuted,
+      marginTop: SPACING.md,
+      marginBottom: SPACING.xs,
     },
     notesInput: {
       minHeight: 80,
@@ -147,15 +140,16 @@ export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
     apiKeyContainer: {
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
+      gap: SPACING.sm,
     },
     apiKeyInput: {
       flex: 1,
-      marginRight: 8,
     },
     apiKeyToggle: {
-      padding: 12,
-      backgroundColor: colors.surfaceLight,
-      borderRadius: 12,
+      padding: SPACING.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
     },
   };
 }

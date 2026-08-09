@@ -11,11 +11,11 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { AppSheet } from '../AppSheet';
+import { Button } from '../Button';
 import { CustomAlert } from '../CustomAlert';
 import { RemoteServer } from '../../types';
 import { createStyles } from './styles';
@@ -44,7 +44,7 @@ const TestResultSection: React.FC<TestResultSectionProps> = ({ testResult, disco
     )}
     {discoveredModels.length > 0 && (
       <View style={styles.modelList}>
-        <Text style={styles.sectionHeader}>Discovered Models</Text>
+        <Text style={styles.sectionHeader}>Models found</Text>
         <ScrollView style={styles.modelScroll} nestedScrollEnabled>
           {discoveredModels.map((model) => (
             <View key={model.id} style={styles.modelItem}>
@@ -97,13 +97,13 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
       visible={visible}
       onClose={onClose}
       onHeaderClosePress={handleDonePress}
-      title={server ? 'Edit Server' : 'Add Remote Server'}
+      title={server ? 'Edit server' : 'Add a server'}
       closeLabel="Done"
       snapPoints={['80%']}
       enableDynamicSizing
     >
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <Text style={styles.label}>Server Name</Text>
+        <Text style={styles.label}>Server name</Text>
         <TextInput
           style={[styles.input, errors.name && styles.inputError]}
           placeholder="e.g., Off Grid AI Desktop"
@@ -114,7 +114,7 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         />
         {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
 
-        <Text style={styles.label}>Endpoint URL</Text>
+        <Text style={styles.label}>Address</Text>
         <TextInput
           style={[styles.input, errors.endpoint && styles.inputError]}
           placeholder="http://192.168.1.50:7878"
@@ -128,18 +128,26 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         {errors.endpoint && <Text style={styles.errorText}>{errors.endpoint}</Text>}
         {isPublicNetwork && (
           <View style={styles.warningContainer}>
+            {/* An icon, not an emoji: emoji render per-platform and the design system bans them. */}
+            <Icon
+              name="alert-triangle"
+              size={13}
+              color={theme.colors.error}
+              style={styles.warningIcon}
+            />
             <Text style={styles.warningText}>
-              ⚠️ This endpoint is on the public internet. Your data will be sent to a remote server.
+              This address is on the public internet. What you type here leaves your network and
+              goes to whoever runs that server.
             </Text>
           </View>
         )}
         <Text style={styles.helperText}>
           {endpoint.trim()
             ? `Will connect to: ${endpoint.trim().replace(/\/+$/, '')}/v1/models`
-            : 'Enter the base URL — /v1/models will be appended automatically'}
+            : 'Enter the base address. This app adds /v1/models to it.'}
         </Text>
 
-        <Text style={styles.label}>API Key (Optional)</Text>
+        <Text style={styles.label}>API key (optional)</Text>
         <View style={styles.apiKeyContainer}>
           <TextInput
             style={[styles.input, styles.apiKeyInput]}
@@ -156,13 +164,13 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Required for cloud APIs (Groq, OpenAI, OpenRouter, etc.)
+          Cloud services need this. A server on your own network does not.
         </Text>
 
-        <Text style={styles.label}>Notes (Optional)</Text>
+        <Text style={styles.label}>Notes (optional)</Text>
         <TextInput
           style={[styles.input, styles.notesInput]}
-          placeholder="Add notes about this server..."
+          placeholder="What this server is for"
           placeholderTextColor={theme.colors.textMuted}
           value={notes}
           onChangeText={setNotes}
@@ -173,34 +181,28 @@ export const RemoteServerModal: React.FC<RemoteServerModalProps> = ({
         <TestResultSection testResult={testResult} discoveredModels={discoveredModels} styles={styles} />
         {!testResult?.success && (
           <Text style={styles.helperText}>
-            Test connection first to enable {server ? 'Update Server' : 'Add Server'}.
+            Test the connection first. That enables {server ? 'Update server' : 'Add server'}.
           </Text>
         )}
 
+        {/* The app's own buttons, not two more hand-built pills. No `loading` prop: it swaps the
+            label for the platform spinner, which reads as a retry arrow on Android. */}
         <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={[styles.testButton, isTesting && styles.testButtonDisabled]}
+          <Button
+            title={isTesting ? 'Testing' : 'Test connection'}
+            variant="secondary"
             onPress={handleTestConnection}
             disabled={isTesting}
-          >
-            {isTesting ? (
-              <ActivityIndicator size="small" color={theme.colors.background} />
-            ) : (
-              <Text style={[styles.testButtonText, isTesting && styles.testButtonTextDisabled]}>
-                Test Connection
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.saveButton, !testResult?.success && styles.saveButtonDisabled]}
+            style={styles.buttonHalf}
+            testID="test-connection"
+          />
+          <Button
+            title={server ? 'Update server' : 'Add server'}
             onPress={handleSave}
             disabled={!testResult?.success}
-          >
-            <Text style={[styles.saveButtonText, !testResult?.success && styles.saveButtonTextDisabled]}>
-              {server ? 'Update Server' : 'Add Server'}
-            </Text>
-          </TouchableOpacity>
+            style={styles.buttonHalf}
+            testID="save-server"
+          />
         </View>
       </ScrollView>
 
