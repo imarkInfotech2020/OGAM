@@ -248,12 +248,22 @@ class ImageGenerationService {
       // while and looked hung. Rendered under the same "Enhanced prompt" label the final
       // result uses, so the partial reads as the answer forming.
       let streamed = '';
+      let renderingAsCard = false;
       const onEnhanceToken = (token: string) => {
         streamed += token;
         if (!params.conversationId || !tempMessageId) return;
-        useChatStore.getState().updateMessageContent(
-          params.conversationId, tempMessageId, buildEnhancementCardContent(streamed),
-        );
+        const store = useChatStore.getState();
+        // The first token turns the STATUS ROW into a real assistant message. A row flagged
+        // isThinking renders its content VERBATIM (MessageContent → ThinkingIndicator), which is
+        // right for "Enhancing your prompt..." but leaks every marker once model output streams
+        // in. Clearing the flag here hands the row to the ONE display parse (parseModelOutput →
+        // ThinkingBlock), so the partial renders as the same markdown card the final result uses
+        // instead of as raw text that only becomes a card when the stream ends.
+        if (!renderingAsCard) {
+          renderingAsCard = true;
+          store.updateMessageThinking(params.conversationId, tempMessageId, false);
+        }
+        store.updateMessageContent(params.conversationId, tempMessageId, buildEnhancementCardContent(streamed));
       };
       let raw = await generateStandalone(buildEnhancementMessages(params.prompt, contextMessages), onEnhanceToken);
       logger.log('[ImageGen] 📥 generateStandalone returned');
