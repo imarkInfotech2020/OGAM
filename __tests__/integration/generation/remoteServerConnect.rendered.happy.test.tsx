@@ -4,7 +4,7 @@
  * level; this drives the FULL RemoteServersScreen with the real store + real remoteServerManager over a faked
  * HTTP probe (the network boundary).
  *
- * Real gestures: mount RemoteServersScreen, tap "Add Server", type a name + endpoint into the real modal, tap
+ * Real gestures: mount RemoteServersScreen, tap "Add manually", type a name + endpoint into the real modal, tap
  * Save. The real addServer + testConnection run; the /v1/models probe is faked at global.fetch (the LAN
  * boundary). Assert the server row shows "Connected".
  *
@@ -38,7 +38,7 @@ describe('T046 (rendered) — add a remote server → it connects (connected sta
     const ui = render(<RemoteServersScreen />);
 
     // Real gesture: open the Add Server modal (the screen's Add Server button).
-    fireEvent.press(ui.getByText('Add Server'));
+    fireEvent.press(ui.getByTestId('add-server'));
 
     // Fill the real modal inputs (targeted by their placeholders).
     fireEvent.changeText(await waitFor(() => ui.getByPlaceholderText('e.g., Off Grid AI Desktop')), 'My LM Studio');
@@ -46,12 +46,11 @@ describe('T046 (rendered) — add a remote server → it connects (connected sta
 
     // Tap Test Connection → the real probe runs over the faked /v1/models. The Save button stays disabled
     // until the probe succeeds, so this is a required real step.
-    fireEvent.press(ui.getByText('Test Connection'));
+    fireEvent.press(ui.getByTestId('test-connection'));
     await waitFor(() => { expect(ui.queryByText(/Connected \(/)).not.toBeNull(); }, { timeout: 4000 }); // modal success message
 
-    // Now the modal's save (labelled "Add Server", the 2nd such text) is enabled — tap it.
-    const addButtons = ui.getAllByText('Add Server');
-    fireEvent.press(addButtons[addButtons.length - 1]);
+    // Now the modal's save (labelled "Add manually", the 2nd such text) is enabled — tap it.
+    fireEvent.press(ui.getByTestId('save-server'));
 
     // Back on the screen: the server row appears and its status shows Connected (real addServer + testConnection).
     await waitFor(() => { expect(ui.queryByText('My LM Studio')).not.toBeNull(); }, { timeout: 4000 });

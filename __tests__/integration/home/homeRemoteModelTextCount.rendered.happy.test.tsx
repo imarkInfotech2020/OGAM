@@ -17,10 +17,10 @@
  * pins active===true, and the falsification proves it flips.
  *
  * ARRIVAL IS REAL (not seeded state-under-test): a remote model becomes active the way a user reaches it —
- *   1. On the REAL RemoteServersScreen: tap "Add Server", type name + endpoint, tap "Test Connection". The
+ *   1. On the REAL RemoteServersScreen: tap "Add manually", type name + endpoint, tap "Test connection". The
  *      real addServer + testConnection run over a faked global.fetch answering /v1/models (the LAN boundary,
  *      exactly as T046). testConnection populates the REAL useRemoteServerStore.discoveredModels.
- *   2. Tap the modal's "Add Server" to persist the connected server.
+ *   2. Tap the modal's "Add manually" to persist the connected server.
  *   3. Mount the REAL HomeScreen (shares the same real store). Its setup card now offers "Select Model"
  *      (remoteTextModels > 0). Tap it → the real ModelPickerSheet renders the discovered "remote-model-item".
  *   4. Tap the remote model → the real handleSelectRemoteTextModel → remoteServerManager.setActiveRemoteTextModel
@@ -68,13 +68,12 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
   const connectServerViaUI = async (env: ReturnType<typeof setup>) => {
     const { React, rtl, RemoteServersScreen, nav } = env;
     const srv = rtl.render(React.createElement(RemoteServersScreen, { navigation: nav }));
-    rtl.fireEvent.press(srv.getByText('Add Server'));
+    rtl.fireEvent.press(srv.getByTestId('add-server'));
     rtl.fireEvent.changeText(await rtl.waitFor(() => srv.getByPlaceholderText('e.g., Off Grid AI Desktop')), 'My LM Studio');
     rtl.fireEvent.changeText(srv.getByPlaceholderText('http://192.168.1.50:7878'), 'http://localhost:1234');
-    rtl.fireEvent.press(srv.getByText('Test Connection'));
+    rtl.fireEvent.press(srv.getByTestId('test-connection'));
     await rtl.waitFor(() => { expect(srv.queryByText(/Connected \(/)).not.toBeNull(); }, { timeout: 4000 });
-    const addButtons = srv.getAllByText('Add Server');
-    rtl.fireEvent.press(addButtons[addButtons.length - 1]);
+    rtl.fireEvent.press(srv.getByTestId('save-server'));
     await rtl.waitFor(() => { expect(srv.queryByText('My LM Studio')).not.toBeNull(); }, { timeout: 4000 });
     srv.unmount();
   };

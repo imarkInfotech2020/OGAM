@@ -49,13 +49,12 @@ describe('T053 (rendered) — remote model is marked in the selector (cloud/Remo
     // Real gesture: add a remote server via the modal (T046 flow) → real addServer + testConnection
     // populate the store (serverHealth healthy + discoveredModels from /v1/models).
     const servers = render(<RemoteServersScreen />);
-    fireEvent.press(servers.getByText('Add Server'));
+    fireEvent.press(servers.getByTestId('add-server'));
     fireEvent.changeText(await waitFor(() => servers.getByPlaceholderText('e.g., Off Grid AI Desktop')), 'My LM Studio');
     fireEvent.changeText(servers.getByPlaceholderText('http://192.168.1.50:7878'), 'http://localhost:1234');
-    fireEvent.press(servers.getByText('Test Connection'));
+    fireEvent.press(servers.getByTestId('test-connection'));
     await waitFor(() => { expect(servers.queryByText(/Connected \(/)).not.toBeNull(); }, { timeout: 4000 });
-    const addBtns = servers.getAllByText('Add Server');
-    fireEvent.press(addBtns[addBtns.length - 1]);
+    fireEvent.press(servers.getByTestId('save-server'));
     await waitFor(() => { expect(useRemoteServerStore.getState().servers).toHaveLength(1); }, { timeout: 4000 });
     servers.unmount();
 
