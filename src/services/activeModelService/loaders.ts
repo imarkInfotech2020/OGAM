@@ -159,6 +159,7 @@ async function doLoadLiteRTModel(ctx: TextLoadContext): Promise<void> {
       nThreads: ctx.store.settings.nThreads,
       nBatch: ctx.store.settings.nBatch,
       flashAttn: ctx.store.settings.flashAttn,
+      speculativeDecoding: ctx.store.settings.speculativeDecoding,
       cacheType: ctx.store.settings.cacheType,
     });
 
@@ -229,6 +230,7 @@ export async function doLoadTextModel(ctx: TextLoadContext): Promise<void> {
       nBatch: settings.nBatch,
       contextLength: settings.contextLength,
       flashAttn: settings.flashAttn,
+      speculativeDecoding: settings.speculativeDecoding,
       // Store the effective cache type (f16 may be forced for OpenCL) so the
       // banner doesn't show a false mismatch when the user setting differs.
       cacheType: settings.inferenceBackend === INFERENCE_BACKENDS.OPENCL ? 'f16' : settings.cacheType,

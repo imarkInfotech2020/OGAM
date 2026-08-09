@@ -80,7 +80,46 @@ const MODEL_SETTING_DESCRIPTORS: Readonly<
   gpuLayers: { localKey: 'gpuLayers', accepts: integerInRange(-1, 999) },
   threads: { localKey: 'nThreads', accepts: integerInRange(0, 256) },
   batchSize: { localKey: 'nBatch', accepts: integerInRange(1, 65_536) },
+  // Portable generation behaviour: these mean the same thing on every device, so a preference set
+  // on one is a preference everywhere. Hardware choices deliberately do NOT appear here — see below.
+  thinkingEnabled: {
+    localKey: 'thinkingEnabled',
+    accepts: value => typeof value === 'boolean',
+  },
+  imageSteps: { localKey: 'imageSteps', accepts: integerInRange(1, 200) },
+  imageGuidanceScale: {
+    localKey: 'imageGuidanceScale',
+    accepts: finiteInRange(0, 30),
+  },
+  imageWidth: { localKey: 'imageWidth', accepts: integerInRange(64, 4096) },
+  imageHeight: { localKey: 'imageHeight', accepts: integerInRange(64, 4096) },
+  enhanceImagePrompts: {
+    localKey: 'enhanceImagePrompts',
+    accepts: value => typeof value === 'boolean',
+  },
+  imageGenerationMode: {
+    localKey: 'imageGenerationMode',
+    accepts: value => value === 'auto' || value === 'manual',
+  },
+  autoDetectMethod: {
+    localKey: 'autoDetectMethod',
+    accepts: value => value === 'pattern' || value === 'llm',
+  },
 };
+
+/**
+ * DELIBERATELY NOT SYNCED — settings that describe the DEVICE, not the user's intent:
+ *
+ * - `inferenceBackend` / `liteRTBackend`: NPU on a Snapdragon phone is meaningless on an iPhone,
+ *   and pushing one device's accelerator to another selects a backend it cannot run.
+ * - `imageThreads` / `imageUseOpenCL`: same reason, for the image engine.
+ * - `speculativeDecoding`: whether MTP helps depends on the model FILE present on each device, and
+ *   the engine gate already decides that per load.
+ *
+ * `threads` and `gpuLayers` are in the map above and arguably belong in this list too — a count
+ * tuned for a desktop's cores is wrong for a phone's performance cluster. They sync today; changing
+ * that is a behaviour change for existing meshes, so it is called out rather than done quietly.
+ */
 
 export function modelSettingMutations(
   before: Record<string, unknown>,

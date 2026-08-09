@@ -81,6 +81,10 @@ export function computePendingSettings(
     changed(settings.inferenceBackend, loadedSettings.inferenceBackend) ||
     changed(settings.gpuLayers, loadedSettings.gpuLayers) ||
     changed(settings.flashAttn, loadedSettings.flashAttn) ||
+    // Speculative decoding is fixed when llama.cpp builds the graph, so it takes effect on the NEXT
+    // load and not before. Without it here, turning MTP on in settings changed nothing and said
+    // nothing — the next reply came back at the same tok/s and the reload banner never appeared.
+    changed(settings.speculativeDecoding, loadedSettings.speculativeDecoding) ||
     (loadedSettings.cacheType !== undefined && effCache !== loadedEffCache)
   );
 }
