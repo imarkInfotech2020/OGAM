@@ -259,6 +259,7 @@ const ImageAdvancedSection: React.FC = () => {
           <TouchableOpacity
             style={[styles.modeButton, !enhanceOn && styles.modeButtonActive]}
             onPress={() => updateSettings({ enhanceImagePrompts: false })}
+            testID="image-enhance-off"
           >
             <Text style={[styles.modeButtonText, !enhanceOn && styles.modeButtonTextActive]}>
               Off
@@ -268,6 +269,7 @@ const ImageAdvancedSection: React.FC = () => {
             style={[styles.modeButton, enhanceOn && styles.modeButtonActive]}
             disabled={!hasTextModel}
             onPress={() => updateSettings({ enhanceImagePrompts: true })}
+            testID="image-enhance-on"
           >
             <Text style={[styles.modeButtonText, enhanceOn && styles.modeButtonTextActive]}>
               On
