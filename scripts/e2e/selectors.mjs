@@ -56,6 +56,10 @@ export const SHEET_TITLE = /^(Evict|Forget|Remove|Disconnect)\b.*\?$/;
  */
 export const HIDDEN_STATUS = /^(Hidden|Not discoverable|Undiscoverable)$/i;
 
+/** The confusable-free code shown by every real Sync surface. */
+export const PAIRING_CODE =
+  /\b([23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4})\b/;
+
 /** The desktop equivalents, matched against the text a person reads. */
 export const DESKTOP = {
   forget: ['Forget', 'Evict'],

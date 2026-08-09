@@ -72,6 +72,13 @@ module.exports = {
   },
   overrides: [
     {
+      files: ['**/*.mjs'],
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+      },
+    },
+    {
       files: ['scripts/physical-sync/**/*.mjs'],
       parserOptions: {
         ecmaVersion: 2022,
