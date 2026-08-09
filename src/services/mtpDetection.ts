@@ -30,3 +30,17 @@ export async function modelSupportsMtp(modelPath: string | undefined): Promise<b
   cache.set(modelPath, supports);
   return supports;
 }
+
+/**
+ * Whether this load may actually enable MTP: the user asked for it AND the model declares draft
+ * layers. Passing speculative decoding to a model without them is not the harmless no-op llama.rn's
+ * docs imply — on iOS it left the context wedged, every completion failing with "Exception in host
+ * function. Context is busy" (device-confirmed). The setting states a preference; this is the one
+ * place that decides whether the engine can honour it.
+ */
+export async function resolveSpeculative(modelPath: string, requested: boolean | undefined): Promise<boolean> {
+  if (!requested) return false;
+  const supported = await modelSupportsMtp(modelPath);
+  if (!supported) logger.log('[MTP-SM] speculative requested but this model declares no draft layers — not enabling');
+  return supported;
+}
