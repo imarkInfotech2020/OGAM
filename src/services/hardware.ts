@@ -2,6 +2,7 @@ import { Platform, NativeModules } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 import logger from '../utils/logger';
+import { readPerformanceCoreCount } from './cpuTopologyReader';
 // Access NativeModules.LocalDreamModule dynamically (not destructured)
 // so it can be mocked in tests after module import.
 const getLocalDreamModule = () => NativeModules.LocalDreamModule;
@@ -437,8 +438,28 @@ class HardwareService {
       return matches ? matches.length : 4;
     } catch { return 4; }
   }
+  /** The cores worth running inference on. Cached for the process: CPU topology cannot change while
+   *  the app runs, and this sits on the model-load path. */
+  private performanceCores: number | null = null;
+  async getPerformanceCoreCount(): Promise<number> {
+    if (Platform.OS !== 'android') return 0; // no sysfs; the caller keeps its own rule
+    if (this.performanceCores !== null) return this.performanceCores;
+    const cores = await this.getCpuCoreCount();
+    const count = await readPerformanceCoreCount(cores);
+    logger.log(`[CPU-SM] performance cores=${count} of ${cores}`);
+    this.performanceCores = count;
+    return count;
+  }
   async getRecommendedThreadCount(): Promise<number> {
     const cores = await this.getCpuCoreCount();
+    // Android: thread the PERFORMANCE cluster and nothing else. The old rule was 80% of every core,
+    // which on an 8-core phone spilled two threads onto efficiency cores and ran slower than using
+    // four — the case this replaces. Below two the topology read told us nothing useful, so fall
+    // through to the generic rule rather than crippling the engine on a single thread.
+    if (Platform.OS === 'android') {
+      const fast = await this.getPerformanceCoreCount();
+      if (fast >= 2) return Math.min(fast, cores);
+    }
     return cores <= 4 ? cores : Math.floor(cores * 0.8);
   }
   /**
