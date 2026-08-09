@@ -70,6 +70,9 @@ const styles = StyleSheet.create({
   thinkingDots: {
     flexDirection: 'row',
     marginRight: 8,
+    // The dots are a fixed 30pt. Without this they give up width to the text on a narrow
+    // screen and the animation collapses.
+    flexShrink: 0,
   },
   thinkingDot: {
     width: 6,
@@ -79,6 +82,12 @@ const styles = StyleSheet.create({
   },
   thinkingText: {
     fontSize: 12,
-    fontStyle: 'italic',
+    // No italic. Callers style this with TYPOGRAPHY tokens, which name Menlo, and Menlo does not
+    // exist on Android. Android falls back to another face and SYNTHESISES the slant, so it
+    // measures the line with one typeface and draws it with another: "Looking for servers on
+    // your Wi-Fi" lost its last word, with the space it needed still empty to the right. iOS has
+    // Menlo, measures and draws the same face, and read correctly - which is why this only
+    // showed on one platform. The terminal type has no italic anyway.
+    flexShrink: 1,
   },
 });
