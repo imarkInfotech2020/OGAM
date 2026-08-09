@@ -10,7 +10,7 @@
  * match. Adding a new backend or setting means editing ONE place.
  */
 import React, { useEffect, useState } from 'react';
-import { Platform, View, Text, TouchableOpacity } from 'react-native';
+import { Platform, View, Text } from 'react-native';
 import { SliderSetting } from '../SliderSetting';
 import { useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
@@ -24,61 +24,9 @@ import {
 import { hardwareService } from '../../services/hardware';
 import { HTP_ENABLED as HTP_UI_ENABLED } from '../../config/featureFlags';
 import { createTextGenAdvancedStyles } from './textGenAdvancedStyles';
+import { SegmentedRow, BOOL_OPTIONS, type PillOption } from './segmentedRow';
 
 const isAndroid = Platform.OS === 'android';
-
-// ─── Reusable pill row ─────────────────────────────────────────────────────────
-
-interface PillOption<T extends string> {
-  id: T;
-  label: string;
-}
-
-/** A labelled segmented control: title + description + a row of pill buttons.
- *  The one place the pill markup lives, so every setting renders identically. */
-function SegmentedRow<T extends string>(props: {
-  label: string;
-  description: string;
-  options: PillOption<T>[];
-  current: T;
-  onSelect: (id: T) => void;
-  testIdFor?: (id: T) => string;
-  isDisabled?: (id: T) => boolean;
-  children?: React.ReactNode;
-}): React.ReactElement {
-  const styles = useThemedStyles(createTextGenAdvancedStyles);
-  const { label, description, options, current, onSelect, testIdFor, isDisabled, children } = props;
-  return (
-    <View style={styles.container}>
-      <View style={styles.info}>
-        <Text style={styles.label}>{label}</Text>
-        <Text style={styles.desc}>{description}</Text>
-      </View>
-      <View style={styles.buttons}>
-        {options.map(o => {
-          const active = current === o.id;
-          return (
-            <TouchableOpacity
-              key={o.id}
-              testID={testIdFor?.(o.id)}
-              style={[styles.button, active && styles.buttonActive]}
-              disabled={isDisabled?.(o.id)}
-              onPress={() => onSelect(o.id)}
-            >
-              <Text style={[styles.buttonText, active && styles.buttonTextActive]}>{o.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      {children}
-    </View>
-  );
-}
-
-const BOOL_OPTIONS: PillOption<'off' | 'on'>[] = [
-  { id: 'off', label: 'Off' },
-  { id: 'on', label: 'On' },
-];
 
 // ─── Inference Backend ─────────────────────────────────────────────────────────
 
@@ -171,6 +119,10 @@ export const LiteRTBackendSelector: React.FC = () => {
 };
 
 // ─── Flash Attention ──────────────────────────────────────────────────────────
+
+/** Lives in its own module for the file-size budget; re-exported so every surface keeps ONE
+ *  import path for the advanced text-generation controls. */
+export { SpeculativeDecodingToggle } from './SpeculativeDecodingToggle';
 
 export const FlashAttentionToggle: React.FC = () => {
   const { updateSettings } = useAppStore();
