@@ -258,6 +258,19 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           <ThinkingIndicator text="Compacting your conversation..." />
         </Animated.View>
       )}
+      {/* Everything between the list and the composer is one stack, ordered by SHAPE, not by
+          when it was added: rounded cards first, then the flat full-bleed bars directly above
+          the composer. A flat bar carries a top border edge-to-edge, so putting one above a
+          rounded card draws a hard rule across the card's top corners and the card reads as
+          clipped. Cards on top, bars at the bottom, and each group keeps its own order. */}
+      {/* Single dismissible surface for every model failure (text/image/tts/stt/
+          embedding). Reads modelFailureStore itself — no props. */}
+      <ModelFailureCard />
+      {/* GPU-path (no-NPU) image tips — shown in chat (not buried in settings) so a user
+          hitting slow/garbled generations sees the fix. Self-hides at good settings. */}
+      <ImageGenAdviceCard />
+      {/* Reload through the SAME seam the reload banner uses — one owner of "reload the text model". */}
+      <MtpAdviceCard onEnable={chat.handleReloadTextModel} />
       {chat.hasPendingSettings && !chat.isCompacting && !chat.activeModelInfo?.isRemote && (
         <Animated.View entering={FadeIn.duration(200)}>
           <AnimatedPressable testID="reload-model-banner" style={styles.pendingSettingsBar} onPress={chat.handleReloadTextModel}>
@@ -269,18 +282,9 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           </AnimatedPressable>
         </Animated.View>
       )}
-      {/* Single dismissible surface for every model failure (text/image/tts/stt/
-          embedding). Reads modelFailureStore itself — no props. Rendered ABOVE the
-          evicted snackbar so the rounded failure card is never capped by a flat bar. */}
-      <ModelFailureCard />
-      {/* GPU-path (no-NPU) image tips — shown in chat (not buried in settings) so a user
-          hitting slow/garbled generations sees the fix. Self-hides at good settings. */}
-      <ImageGenAdviceCard />
-      {/* Reload through the SAME seam the reload banner uses — one owner of "reload the text model". */}
-      <MtpAdviceCard onEnable={chat.handleReloadTextModel} />
       {/* Text model evicted to free RAM (e.g. voice-mode image/TTS load) but still
           selected — reload it on demand, even a large model. This flat "tap to continue"
-          snackbar sits directly above the composer, BELOW the rounded failure card. */}
+          snackbar sits directly above the composer, BELOW the rounded cards. */}
       <ModelEvictedBar
         visible={shouldShowEvictedBar(chat)}
         onPress={chat.handleReloadTextModel}
