@@ -1,7 +1,8 @@
 /**
- * Remote Servers Settings Screen
+ * Remote Servers
  *
- * Manage connections to remote LLM servers (Ollama, LM Studio, etc.)
+ * Point this phone at a machine that can run models it cannot: Off Grid AI Desktop on a Mac,
+ * or an Ollama / LM Studio server on the same network.
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -10,7 +11,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Linking,
   Switch,
 } from 'react-native';
@@ -21,6 +21,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme, useThemedStyles } from '../theme';
 import { useRemoteServerStore, useAppStore } from '../stores';
 import { RemoteServerModal } from '../components/RemoteServerModal';
+import { ScreenHeader } from '../components/ScreenHeader';
+import { Button } from '../components/Button';
+import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { RootStackParamList } from '../navigation/types';
 import { remoteServerManager } from '../services/remoteServerManager';
 import { discoverLANServers } from '../services/networkDiscovery';
@@ -44,6 +47,7 @@ export const RemoteServersScreen: React.FC = () => {
   const [editingServer, setEditingServer] = useState<typeof servers[0] | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [scanNote, setScanNote] = useState<string | null>(null);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   // Auto-check all server statuses when screen opens
@@ -58,13 +62,13 @@ export const RemoteServersScreen: React.FC = () => {
     setTestingId(serverId);
     try {
       const result = await testConnection(serverId);
-      if (result.success) {
-        setAlertState(showAlert('Success', `Connected successfully (${result.latency}ms)`));
-      } else {
-        setAlertState(showAlert('Connection Failed', result.error || 'Unknown error'));
+      // The row's own status line already says Connected or Offline, so a success needs no
+      // dialog to dismiss. Only a failure earns one, because it carries the reason.
+      if (!result.success) {
+        setAlertState(showAlert('Could not connect', result.error || 'The server did not answer.'));
       }
     } catch (error) {
-      setAlertState(showAlert('Error', error instanceof Error ? error.message : 'Unknown error'));
+      setAlertState(showAlert('Could not connect', error instanceof Error ? error.message : 'The server did not answer.'));
     } finally {
       setTestingId(null);
     }
@@ -72,23 +76,19 @@ export const RemoteServersScreen: React.FC = () => {
 
   const handleScanNetwork = useCallback(async () => {
     setIsScanning(true);
+    setScanNote(null);
     try {
       const discovered = await discoverLANServers();
-      if (discovered.length === 0) {
-        setAlertState(showAlert(
-          'No Servers Found',
-          'No LLM servers were found on your local network. Run Off Grid AI Desktop on your Mac to serve its models here.',
-          [
-            { text: 'Dismiss', style: 'cancel' },
-            { text: 'Get Off Grid AI Desktop', onPress: () => Linking.openURL(DESKTOP_URL).catch(() => {}) },
-          ],
-        ));
-        return;
-      }
       const existingEndpoints = new Set(servers.map(s => s.endpoint));
       const newServers = discovered.filter(d => !existingEndpoints.has(d.endpoint));
       if (newServers.length === 0) {
-        setAlertState(showAlert('Already Added', 'All discovered servers are already in your list.'));
+        // Say what was actually tried. "No servers found" leaves the user with nothing to act
+        // on; the ports do, because that is what has to be listening on the other machine.
+        setScanNote(
+          discovered.length > 0
+            ? 'Everything on this network is already in your list.'
+            : 'Nothing answered on this network. Off Grid AI Desktop serves on port 7878, Ollama on 11434, LM Studio on 1234.',
+        );
         return;
       }
       const added = await Promise.all(
@@ -101,10 +101,9 @@ export const RemoteServersScreen: React.FC = () => {
         )
       );
       added.forEach(s => remoteServerManager.testConnection(s.id).catch(() => { }));
-      setAlertState(showAlert('Discovery Complete', `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`));
+      setScanNote(`Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      setAlertState(showAlert('Scan Failed', message));
+      setScanNote(error instanceof Error ? error.message : 'The scan could not finish.');
     } finally {
       setIsScanning(false);
     }
@@ -112,12 +111,12 @@ export const RemoteServersScreen: React.FC = () => {
 
   const handleDeleteServer = useCallback((server: typeof servers[0]) => {
     setAlertState(showAlert(
-      'Delete Server',
-      `Are you sure you want to delete "${server.name}"?`,
+      'Remove this server',
+      `"${server.name}" will be removed from this phone. The server itself is not touched.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Remove',
           style: 'destructive',
           onPress: async () => {
             if (activeServerId === server.id) setActiveServerId(null);
@@ -128,157 +127,164 @@ export const RemoteServersScreen: React.FC = () => {
     ));
   }, [activeServerId, setActiveServerId]);
 
+  const openDesktopUrl = useCallback(() => {
+    Linking.openURL(DESKTOP_URL).catch(() => {});
+  }, []);
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Icon name="chevron-left" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Remote Servers</Text>
-      </View>
+      <ScreenHeader title="Remote Servers" onBack={() => navigation.goBack()} />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        <View style={styles.autoDiscoverRow}>
-          <View style={styles.autoDiscoverTextCol}>
-            <Text style={styles.autoDiscoverTitle}>Auto-discover on Wi-Fi</Text>
-            <Text style={styles.autoDiscoverDesc}>
-              Automatically find and add Ollama, LM Studio, and gateway servers on your network. Off by default — turn on to scan automatically.
-            </Text>
+        <Text style={styles.intro}>
+          Run models this phone cannot hold. Another machine on your network does the work and the
+          answer comes back here, over your own Wi-Fi.
+        </Text>
+
+        <View style={styles.card}>
+          <View style={styles.cardRow}>
+            <View style={styles.cardTextCol}>
+              <Text style={styles.cardTitle}>Auto-discover on Wi-Fi</Text>
+              {/* Describes what is happening NOW, not what the default was: the old copy read
+                  "Off by default" while the switch was on. */}
+              <Text style={styles.cardDesc}>
+                {autoDiscover
+                  ? 'Looks for servers on your network each time you open this screen.'
+                  : 'Turn this on to find servers on your network without scanning by hand.'}
+              </Text>
+            </View>
+            <Switch
+              testID="auto-discover-toggle"
+              value={autoDiscover}
+              onValueChange={(v) => updateSettings({ autoDiscoverRemoteModels: v })}
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+            />
           </View>
-          <Switch
-            testID="auto-discover-toggle"
-            value={autoDiscover}
-            onValueChange={(v) => updateSettings({ autoDiscoverRemoteModels: v })}
-            trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-          />
         </View>
 
+        <View style={styles.actionRow}>
+          {/* No `loading` prop: it swaps the label for the platform spinner, and on Android that
+              glyph reads as a retry arrow - the same thing that made the chat loading bar look
+              like a failure. The dots below carry the waiting instead. */}
+          <Button
+            title={isScanning ? 'Scanning' : 'Scan network'}
+            onPress={handleScanNetwork}
+            disabled={isScanning}
+            style={styles.actionButton}
+            testID="scan-network"
+            icon={<Icon name="wifi" size={14} color={theme.colors.primary} />}
+          />
+          <Button
+            title="Add manually"
+            variant="secondary"
+            onPress={() => setShowAddModal(true)}
+            style={styles.actionButton}
+            testID="add-server"
+            icon={<Icon name="plus" size={14} color={theme.colors.text} />}
+          />
+        </View>
+        {isScanning ? (
+          <ThinkingIndicator
+            text="Looking for servers on your Wi-Fi"
+            textStyle={styles.scanNote}
+          />
+        ) : null}
+        {!isScanning && scanNote ? <Text style={styles.scanNote}>{scanNote}</Text> : null}
+
         {servers.length === 0 ? (
-          <View style={styles.emptyState}>
-            <View style={styles.emptyIcon}>
-              <Icon name="wifi" size={32} color={theme.colors.textMuted} />
-            </View>
-            <Text style={styles.emptyTitle}>No Remote Servers</Text>
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>No servers yet</Text>
             <Text style={styles.emptyText}>
-              Connect to Off Grid AI Desktop, Ollama, LM Studio, or other LLM servers on your network
+              Off Grid AI Desktop serves your Mac&apos;s models to this phone. Ollama and LM Studio
+              work the same way.
             </Text>
             <TouchableOpacity
               style={styles.desktopLink}
-              onPress={() => Linking.openURL(DESKTOP_URL).catch(() => {})}
+              onPress={openDesktopUrl}
               accessibilityRole="link"
               accessibilityLabel="Get Off Grid AI Desktop"
             >
-              <Icon name="monitor" size={16} color={theme.colors.primary} />
+              <Icon name="monitor" size={14} color={theme.colors.primary} />
               <Text style={styles.desktopLinkText}>Get Off Grid AI Desktop</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
-              <Icon name="plus" size={20} color={theme.colors.background} />
-              <Text style={styles.addButtonText}>Add Server</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.scanButton} onPress={handleScanNetwork} disabled={isScanning}>
-              {isScanning ? (
-                <ActivityIndicator size="small" color={theme.colors.text} />
-              ) : (
-                <Icon name="wifi" size={20} color={theme.colors.text} />
-              )}
-              <Text style={styles.scanButtonText}>{isScanning ? 'Scanning...' : 'Scan Network'}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <>
+            <Text style={styles.sectionLabel}>Servers</Text>
             {servers.map((server) => {
               const isTesting = testingId === server.id;
+              const isActive = activeServerId === server.id;
               const health = serverHealth[server.id];
 
               let statusColor = styles.statusDotUnknown;
               if (health?.isHealthy === true) statusColor = styles.statusDotActive;
               else if (health?.isHealthy === false) statusColor = styles.statusDotInactive;
 
-              let statusText = 'Unknown';
-              if (isTesting) statusText = 'Testing...';
+              let statusText = 'Not checked yet';
+              if (isTesting) statusText = 'Checking';
               else if (health?.isHealthy === true) statusText = 'Connected';
-              else if (health?.isHealthy === false) statusText = 'Offline';
+              else if (health?.isHealthy === false) statusText = 'Not answering';
 
               return (
-                <View key={server.id} style={styles.serverItem}>
-                  <View style={styles.serverHeader}>
-                    <View style={styles.serverInfo}>
-                      <Text style={styles.serverName}>{server.name}</Text>
-                      <Text style={styles.serverEndpoint}>{server.endpoint}</Text>
+                <View
+                  key={server.id}
+                  style={[styles.serverCard, isActive && styles.serverCardActive]}
+                  testID={`server-${server.id}`}
+                >
+                  {/* Tapping the server chooses it. The store has always had an active server
+                      and this screen never let you set one, so the only way to pick was to go
+                      somewhere else. */}
+                  <TouchableOpacity
+                    style={styles.serverIdentity}
+                    onPress={() => setActiveServerId(isActive ? null : server.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={isActive ? `Stop using ${server.name}` : `Use ${server.name}`}
+                    testID={`server-use-${server.id}`}
+                  >
+                    <View style={styles.serverTopRow}>
+                      <View style={[styles.statusDot, statusColor]} />
+                      <Text style={styles.serverName} numberOfLines={1}>{server.name}</Text>
+                      <Text style={isActive ? styles.activeBadge : styles.useHint}>
+                        {isActive ? 'In use' : 'Use'}
+                      </Text>
                     </View>
-                  </View>
-
-                  <View style={styles.statusContainer}>
-                    <View style={[styles.statusDot, statusColor]} />
-                    <Text style={styles.statusText}>{statusText}</Text>
-                  </View>
+                    <Text style={styles.serverEndpoint} numberOfLines={1}>{server.endpoint}</Text>
+                    <Text style={styles.serverStatus}>{statusText}</Text>
+                  </TouchableOpacity>
 
                   <View style={styles.serverActions}>
                     <TouchableOpacity
-                      style={styles.actionButton}
+                      style={styles.serverAction}
                       onPress={() => handleTestServer(server.id)}
                       disabled={isTesting}
                     >
-                      {isTesting ? (
-                        <ActivityIndicator size="small" color={theme.colors.text} />
-                      ) : (
-                        <>
-                          <Icon name="refresh-cw" size={16} color={theme.colors.text} />
-                          <Text style={styles.actionButtonText}>Test</Text>
-                        </>
-                      )}
+                      {/* The row's status line already says "Checking", so the icon stays put
+                          rather than being swapped for a spinner that reads as retry. */}
+                      <Icon name="refresh-cw" size={13} color={theme.colors.textSecondary} />
+                      <Text style={styles.serverActionText}>{isTesting ? 'Checking' : 'Test'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.actionButton}
+                      style={styles.serverAction}
                       onPress={() => setEditingServer(server)}
                     >
-                      <Icon name="edit-2" size={16} color={theme.colors.text} />
-                      <Text style={styles.actionButtonText}>Edit</Text>
+                      <Icon name="edit-2" size={13} color={theme.colors.textSecondary} />
+                      <Text style={styles.serverActionText}>Edit</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.actionButton, styles.deleteButton]}
+                      style={[styles.serverAction, styles.serverActionDanger]}
                       onPress={() => handleDeleteServer(server)}
                     >
-                      <Icon name="trash-2" size={16} color={theme.colors.error} />
-                      <Text style={[styles.actionButtonText, styles.deleteButtonText]}>Delete</Text>
+                      <Icon name="trash-2" size={13} color={theme.colors.error} />
+                      <Text style={[styles.serverActionText, styles.serverActionDangerText]}>
+                        Remove
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
               );
             })}
-
-            <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
-              <Icon name="plus" size={20} color={theme.colors.background} />
-              <Text style={styles.addButtonText}>Add Another Server</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.scanButton} onPress={handleScanNetwork} disabled={isScanning}>
-              {isScanning ? (
-                <ActivityIndicator size="small" color={theme.colors.text} />
-              ) : (
-                <Icon name="wifi" size={20} color={theme.colors.text} />
-              )}
-              <Text style={styles.scanButtonText}>{isScanning ? 'Scanning...' : 'Scan Network'}</Text>
-            </TouchableOpacity>
           </>
         )}
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>About Remote Servers</Text>
-          <Text style={styles.infoText}>
-            Connect to LLM servers running on your local network, such as Off Grid AI Desktop, Ollama, or LM Studio.{'\n\n'}
-            Off Grid AI Desktop runs on your Mac and serves its models to this phone over your own network.{'\n\n'}
-            Make sure your server is running and accessible from your device. For security, only connect to servers on trusted networks.
-          </Text>
-          <TouchableOpacity
-            style={styles.desktopLink}
-            onPress={() => Linking.openURL(DESKTOP_URL).catch(() => {})}
-            accessibilityRole="link"
-            accessibilityLabel="Get Off Grid AI Desktop"
-          >
-            <Icon name="monitor" size={16} color={theme.colors.primary} />
-            <Text style={styles.desktopLinkText}>Get Off Grid AI Desktop</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
 
       <RemoteServerModal
