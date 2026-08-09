@@ -70,6 +70,8 @@ export type GenerationDeps = {
   ensureTextModelForChat: () => Promise<boolean>;
   /** Stash a message to replay after the user picks a text model. */
   setPendingMessage?: (text: string, attachments?: MediaAttachment[]) => void;
+  /** Stamp the modality on an EXISTING user message (resend); a new send carries it on addMessage. */
+  updateMessageTurnKind?: (conversationId: string, messageId: string, kind: TurnKind) => void;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
   pendingProjectId?: string;
 };
@@ -610,7 +612,7 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   const kind = await resolveTurnKind(deps, { text: messageTextForRoute, recordedKind });
   // Persist the resolved kind on the turn. A legacy turn (no stamp) classified just now, and a
   // cancelled run must not leave the next resend to re-derive the modality from the wreckage.
-  useChatStore.getState().updateMessageTurnKind(targetConversationId, userMessage.id, kind);
+  deps.updateMessageTurnKind?.(targetConversationId, userMessage.id, kind);
   // SAME post-decision dispatch seam as send: the image path is guarded on activeImageModel (so an
   // image turn resent with no image model FALLS BACK to text like send, instead of erroring), and the
   // text route provisions a text model on an image-only device (like send). skipUserMessage: the user
