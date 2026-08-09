@@ -287,7 +287,28 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
     !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
   migrateEnabledTools(merged);
   migrateBoostedContext(merged);
+  migrateGeneratedImageTimestamps(merged);
   return merged as AppState;
+}
+
+/**
+ * Generated images stamped with epoch milliseconds as text, put right.
+ *
+ * The Android image module wrote `"1786317315833"`, which satisfies `createdAt: string` and is a date
+ * to nobody: the gallery showed it as invalid, and every sync peer refused the image because
+ * `Date.parse` answers NaN. The producers now write ISO-8601, but a phone that has generated images
+ * already holds the old value, and nothing else would ever rewrite it.
+ */
+function migrateGeneratedImageTimestamps(merged: any): void {
+  if (!Array.isArray(merged.generatedImages)) return;
+  merged.generatedImages = merged.generatedImages.map((image: any) => {
+    const epochMs = Number(image?.createdAt);
+    return typeof image?.createdAt === 'string' &&
+      /^\d+$/.test(image.createdAt) &&
+      Number.isFinite(epochMs)
+      ? { ...image, createdAt: new Date(epochMs).toISOString() }
+      : image;
+  });
 }
 
 export const selectIsLiteRT = (state: AppState): boolean =>
