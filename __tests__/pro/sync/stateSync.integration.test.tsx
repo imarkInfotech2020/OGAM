@@ -243,8 +243,11 @@ describe('Pro mobile state sync journey', () => {
     if (!mobile || !discovery?.publishedPort) {
       throw new Error('Sync did not publish the mobile device');
     }
-    expect(ui.getByTestId('sync-no-devices')).toBeTruthy();
-    fireEvent.press(ui.getByTestId('sync-rescan'));
+    // The authoritative roster can settle after discovery starts. Reconciliation owns the follow-up
+    // scan, so the rendered journey must show that automatic work instead of briefly claiming there
+    // are no devices and making the user press Rescan themselves.
+    await waitFor(() => expect(ui!.getByTestId('sync-scanning')).toBeTruthy());
+    expect(ui.queryByTestId('sync-no-devices')).toBeNull();
     discovery.resolve(remoteDevice);
     await waitFor(() =>
       expect(
