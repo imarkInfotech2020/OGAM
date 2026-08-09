@@ -8,6 +8,7 @@ export {
   BackendSelector,
   LiteRTBackendSelector,
   FlashAttentionToggle,
+  SpeculativeDecodingToggle,
   KvCacheTypeToggle,
   CpuThreadsSlider,
   BatchSizeSlider,

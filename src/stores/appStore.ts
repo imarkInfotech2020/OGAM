@@ -60,6 +60,9 @@ type AppSettings = {
   imageThreads: number; imageWidth: number; imageHeight: number;
   imageUseOpenCL: boolean; enhanceImagePrompts: boolean;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
+  /** MTP speculative decoding: the model drafts several tokens per step and verifies them in one
+   *  pass. Only models carrying MTP draft layers benefit; the engine ignores it on the rest. */
+  speculativeDecoding: boolean;
   /** Aggressive model loading: commit more RAM + a smaller reserve so large models
    *  load (with a "Load Anyway" override when the budget still blocks). Off by
    *  default (behaviour-neutral). Single source of truth read by both the Settings
@@ -196,6 +199,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   contextLength: 4096,
   nThreads: 0,
   nBatch: 512,
+  speculativeDecoding: false,
   imageGenerationMode: 'auto' as ImageGenerationMode,
   autoDetectMethod: 'pattern' as AutoDetectMethod,
   classifierModelId: null,

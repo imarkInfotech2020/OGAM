@@ -73,7 +73,7 @@ export function effectiveCacheType(backend: string | undefined, requested: strin
 
 export function buildModelParams(
   modelPath: string,
-  settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number; cacheType?: string; inferenceBackend?: string },
+  settings: { nThreads?: number; nBatch?: number; contextLength?: number; flashAttn?: boolean; enableGpu?: boolean; gpuLayers?: number; cacheType?: string; inferenceBackend?: string; speculativeDecoding?: boolean },
 ): ModelLoadParams {
   const nThreads = settings.nThreads || getOptimalThreadCount();
   const nBatch = settings.nBatch || getOptimalBatchSize();
@@ -102,6 +102,12 @@ export function buildModelParams(
       // unified KV-cache reuse map ("kv_cache: reusing layers"). The engine's
       // per-arch default (false) handles SWA models correctly and keeps GPU/Metal.
       no_extra_bufts: false,
+      // MTP speculative decoding, enabled at CONTEXT CREATION (llama.rn's NativeContextParams) —
+      // it changes how the graph is built, so it cannot be toggled per completion. No draft model
+      // is named on purpose: MTP models carry their own draft layers, and llama.rn falls back to
+      // the target model's embedded ones when `draft` is omitted. A model without MTP weights
+      // simply never drafts, so the flag is safe to leave on for models that can't use it.
+      ...(settings.speculativeDecoding ? { speculative: { enabled: true, type: 'mtp' as const } } : {}),
       ...(backend === INFERENCE_BACKENDS.OPENCL ? {} : { cache_type_k: cacheType, cache_type_v: cacheType }),
     },
     nThreads, nBatch, ctxLen, nGpuLayers,
