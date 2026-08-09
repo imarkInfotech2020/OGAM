@@ -6,7 +6,7 @@ import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AttachStep } from 'react-native-spotlight-tour';
-import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard } from '../../components';
+import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard, MtpAdviceCard } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
@@ -276,6 +276,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
       {/* GPU-path (no-NPU) image tips — shown in chat (not buried in settings) so a user
           hitting slow/garbled generations sees the fix. Self-hides at good settings. */}
       <ImageGenAdviceCard />
+      {/* Reload through the SAME seam the reload banner uses — one owner of "reload the text model". */}
+      <MtpAdviceCard onEnable={chat.handleReloadTextModel} />
       {/* Text model evicted to free RAM (e.g. voice-mode image/TTS load) but still
           selected — reload it on demand, even a large model. This flat "tap to continue"
           snackbar sits directly above the composer, BELOW the rounded failure card. */}
