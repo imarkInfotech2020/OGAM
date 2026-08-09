@@ -27,7 +27,17 @@ const PROVIDERS = [
   { port: 7878,  type: 'gateway' as const,  name: 'Off Grid AI Gateway',   probePath: '/v1/models' },
 ];
 
-const TIMEOUT_MS = 500;
+/**
+ * How long a host gets to answer before we call it silent.
+ *
+ * 500ms was tighter than a real Wi-Fi round trip and the scan reported an empty network while
+ * the server was right there: an Off Grid AI Desktop on the same subnet answered /v1/models in
+ * 133, 285, 292, 454 and 676ms across five tries from a phone doing nothing else. Half of those
+ * lose to a 500ms deadline, and a sweep fires BATCH_SIZE probes at once, which only stretches
+ * them further. A dead address is refused immediately rather than waiting out the deadline, so
+ * the extra budget is spent almost entirely on hosts that are genuinely silent.
+ */
+const TIMEOUT_MS = 2000;
 const BATCH_SIZE = 50;
 const BATCH_DELAY_MS = 50;
 
@@ -187,8 +197,11 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
       }
     };
 
-    await Promise.all(subnetsToScan.map(async (base) => {
-      for (const provider of PROVIDERS) {
+    // The providers sweep at the same time rather than one after another. They wait on the
+    // network, not on the CPU, so running them in sequence spent three times the wall clock to
+    // do the same waiting - which is what paid for the old deadline being so tight.
+    await Promise.all(subnetsToScan.flatMap((base) =>
+      PROVIDERS.map(async (provider) => {
         log(`Probing ${base}.1-254 for ${provider.name} on port ${provider.port}...`);
         const tasks = Array.from({ length: 254 }, (_, i) => {
           const target = `${base}.${i + 1}`;
@@ -196,8 +209,8 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
         });
         await runBatch(tasks);
         log(`Done probing ${base}.x for ${provider.name}`);
-      }
-    }));
+      })
+    ));
 
     log(`Scan complete — found ${discovered.length} server(s)`);
     return discovered;
