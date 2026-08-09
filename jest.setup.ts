@@ -142,6 +142,9 @@ jest.mock('llama.rn', () => ({
       embedding: new Array(384).fill(0).map((_, i) => Math.sin(i + text.length * 0.1)),
     })),
   })),
+  // GGUF header read (no model load). Per-test control: the MTP probe reads what a model declares
+  // about itself, so a test serves real metadata rather than a hand-authored guess.
+  loadLlamaModelInfo: jest.fn(() => Promise.resolve({})),
   releaseContext: jest.fn(() => Promise.resolve()),
   completion: jest.fn(() => Promise.resolve({
     text: 'Test completion response',
