@@ -170,6 +170,15 @@ export function createNativeSync(
             if (!authenticator) return;
             await engine.pairWith(device, authenticator);
           },
+          // The outcome of that attempt, in words. Without it the log recorded an admission and then
+          // nothing, for every one of 150 attempts between a phone and a laptop that never connected.
+          onSilentJoinSettled: (device: DiscoveredDevice, error?: unknown) => {
+            logger.log(
+              `[SYNC] silent join ${error === undefined ? 'succeeded' : 'failed'} for ${
+                device.name ?? device.id
+              }${error === undefined ? '' : `: ${error instanceof Error ? error.message : String(error)}`}`,
+            );
+          },
         }
       : {}),
     onDiscovered: device => {
