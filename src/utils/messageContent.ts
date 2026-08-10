@@ -356,7 +356,13 @@ export interface ParsedModelOutput {
  * impossible — see the contract test in ChatMessageToolCallLeak / utils.test.
  */
 export function parseModelOutput(content: string, reasoningContent?: string | null): ParsedModelOutput {
-  if (reasoningContent) {
+  const p = parseThinkingContent(content);
+  // A LABELLED block was CONSTRUCTED by this app — the "Enhanced prompt" card — not streamed by a
+  // model. It names itself and carries its own body, so a separate reasoning channel must not
+  // replace either: that channel holds whatever the model happened to be mid-sentence on while the
+  // card was being written. Preferring it showed the card as "Thinking..." with the single word
+  // "Generated" in it, and threw the card's own name away.
+  if (reasoningContent && !p.thinkingLabel) {
     // Separate reasoning channel: content is the answer; strip any stray control/tool markup + think tags.
     const answer = stripControlTokens(content).replaceAll(/<\/?think>/gi, '').trim();
     // Reasoning is "complete" only once the ANSWER has begun — while reasoning is still
@@ -364,7 +370,6 @@ export function parseModelOutput(content: string, reasoningContent?: string | nu
     // the DONE "Thought process" label (Q6). The arriving answer is the completion signal.
     return { reasoning: reasoningContent, answer, isReasoningComplete: answer.length > 0 };
   }
-  const p = parseThinkingContent(content);
   // Strip the RESPONSE SLICE only (an empty slice stays empty — never fall back to the whole
   // message, or a reasoning-only message duplicates its reasoning into the answer).
   const answer = p.response ? stripControlTokens(p.response) : '';
