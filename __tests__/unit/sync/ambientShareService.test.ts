@@ -485,6 +485,9 @@ describe('sharing a file to another device without being asked', () => {
 
     it('drops it instead when the user asked for that', async () => {
       const harness = await launch();
+      // Stated, not inherited: a new install QUEUES for an absent device, so the drop this test is
+      // about is the user's explicit choice and the test has to make it explicitly.
+      await harness.service.setOfflineBehavior('skip');
       harness.destinations[0]!.connected = false;
       await harness.service.setRule({
         source: 'screenshot',
