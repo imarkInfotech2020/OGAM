@@ -23,6 +23,10 @@
 		0C1A00022F44000100C11A00 /* SyncClipboardModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C1A00042F44000100C11A00 /* SyncClipboardModule.swift */; };
 		0D2B00012F45000100C11A00 /* SyncProximityModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0D2B00032F45000100C11A00 /* SyncProximityModule.m */; };
 		0D2B00022F45000100C11A00 /* SyncProximityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2B00042F45000100C11A00 /* SyncProximityModule.swift */; };
+		0E3C00012F46000100C11A00 /* SyncScreenshotModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */; };
+		0E3C00022F46000100C11A00 /* SyncScreenshotModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */; };
+		0F4D00012F47000100C11A00 /* SyncDirectorySourceModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */; };
+		0F4D00022F47000100C11A00 /* SyncDirectorySourceModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F4D00042F47000100C11A00 /* SyncDirectorySourceModule.swift */; };
 		105E00012F48000100C11A00 /* MeshResidencyModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 105E00032F48000100C11A00 /* MeshResidencyModule.m */; };
 		105E00022F48000100C11A00 /* MeshResidencyModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105E00042F48000100C11A00 /* MeshResidencyModule.swift */; };
 		105E00B12F48000100C11A02 /* BlobFrameCipher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105E00B22F48000100C11A02 /* BlobFrameCipher.swift */; };
@@ -31,10 +35,6 @@
 		105E03B12F48000100C11A02 /* BlobChannelUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105E03B22F48000100C11A02 /* BlobChannelUploader.swift */; };
 		105E04B12F48000100C11A02 /* BlobChannelModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105E04B22F48000100C11A02 /* BlobChannelModule.swift */; };
 		105E05B12F48000100C11A02 /* BlobChannelModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 105E05B22F48000100C11A02 /* BlobChannelModule.m */; };
-		0E3C00012F46000100C11A00 /* SyncScreenshotModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */; };
-		0E3C00022F46000100C11A00 /* SyncScreenshotModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */; };
-		0F4D00012F47000100C11A00 /* SyncDirectorySourceModule.m in Sources */ = {isa = PBXBuildFile; fileRef = 0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */; };
-		0F4D00022F47000100C11A00 /* SyncDirectorySourceModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F4D00042F47000100C11A00 /* SyncDirectorySourceModule.swift */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		553E18B7CCC207C0885499E4 /* libPods-OffgridMobileTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D1B1541769AADA563D6CC44E /* libPods-OffgridMobileTests.a */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
@@ -70,6 +70,10 @@
 		0C1A00042F44000100C11A00 /* SyncClipboardModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncClipboardModule.swift; sourceTree = "<group>"; };
 		0D2B00032F45000100C11A00 /* SyncProximityModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncProximityModule.m; sourceTree = "<group>"; };
 		0D2B00042F45000100C11A00 /* SyncProximityModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProximityModule.swift; sourceTree = "<group>"; };
+		0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncScreenshotModule.m; sourceTree = "<group>"; };
+		0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncScreenshotModule.swift; sourceTree = "<group>"; };
+		0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncDirectorySourceModule.m; sourceTree = "<group>"; };
+		0F4D00042F47000100C11A00 /* SyncDirectorySourceModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDirectorySourceModule.swift; sourceTree = "<group>"; };
 		105E00032F48000100C11A00 /* MeshResidencyModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MeshResidencyModule.m; sourceTree = "<group>"; };
 		105E00042F48000100C11A00 /* MeshResidencyModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeshResidencyModule.swift; sourceTree = "<group>"; };
 		105E00B22F48000100C11A02 /* BlobFrameCipher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobFrameCipher.swift; sourceTree = "<group>"; };
@@ -78,10 +82,6 @@
 		105E03B22F48000100C11A02 /* BlobChannelUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobChannelUploader.swift; sourceTree = "<group>"; };
 		105E04B22F48000100C11A02 /* BlobChannelModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobChannelModule.swift; sourceTree = "<group>"; };
 		105E05B22F48000100C11A02 /* BlobChannelModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = BlobChannelModule.m; sourceTree = "<group>"; };
-		0E3C00032F46000100C11A00 /* SyncScreenshotModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncScreenshotModule.m; sourceTree = "<group>"; };
-		0E3C00042F46000100C11A00 /* SyncScreenshotModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncScreenshotModule.swift; sourceTree = "<group>"; };
-		0F4D00032F47000100C11A00 /* SyncDirectorySourceModule.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SyncDirectorySourceModule.m; sourceTree = "<group>"; };
-		0F4D00042F47000100C11A00 /* SyncDirectorySourceModule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncDirectorySourceModule.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* OffgridMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OffgridMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = OffgridMobile/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = OffgridMobile/Info.plist; sourceTree = "<group>"; };
