@@ -4,7 +4,7 @@ import { GeneratedImage, GenerationMeta, Message } from '../types';
 import { parseModelOutput } from '../utils/messageContent';
 
 /** Header shown on the enhancement card (ThinkingBlock reads it as the block's label). */
-export const ENHANCED_PROMPT_LABEL = 'Enhanced prompt';
+const ENHANCED_PROMPT_LABEL = 'Enhanced prompt';
 
 interface ActiveImageModel {
   id: string;

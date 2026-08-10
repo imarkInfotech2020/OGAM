@@ -39,7 +39,7 @@ export function visibleMessages(
 }
 
 /** The most recent message a user would see, which is what a list row summarises. */
-export function lastVisibleMessage(
+function lastVisibleMessage(
   messages: readonly Message[],
   localDeviceId: string | null | undefined,
 ): Message | undefined {
