@@ -26,13 +26,44 @@ export function buildEnhancementMessages(prompt: string, contextMessages: Messag
   ];
 }
 
+/**
+ * The conversation as a READER sees it, which is the only thing a model should be shown.
+ *
+ * Sending `message.content` sent the STORAGE form: the enhancement card's own container markup, and
+ * our completion strings. Shown ten of those, the model stopped enhancing and started imitating -
+ * it emitted `<think>__LABEL:Enhanced prompt__` token by token, and returned `Generated image for:
+ * "Draw a fox"` as its idea of an enhanced prompt. A marker we invented for the screen must never
+ * become model input.
+ *
+ * So: the enhancement's own cards are dropped, because they are this feature talking to itself and
+ * carry no conversation, and everything else is passed through the one display parse.
+ */
 export function getConversationContext(conversationId: string): Message[] {
   const conversation = useChatStore.getState().conversations.find(c => c.id === conversationId);
   if (!conversation?.messages) return [];
   return conversation.messages
     .slice(-10)
     .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-    .map(msg => ({ id: `ctx-${msg.id}`, role: msg.role, content: msg.content.slice(0, 500), timestamp: msg.timestamp }));
+    .map(msg => ({ id: `ctx-${msg.id}`, role: msg.role, content: readableText(msg), timestamp: msg.timestamp }))
+    .filter(msg => msg.content.length > 0);
+}
+
+/**
+ * What this message says, with every marker the renderer owns removed.
+ *
+ * An empty string means "this is not conversation". Two assistant messages are written by the APP
+ * rather than by a model - this feature's own card, and the caption under a finished image - and
+ * both were being fed back in as though a model had said them. Four of the last six messages were
+ * ours, so imitation beat instruction and the model answered with a caption. The user's own turn
+ * ("Draw a fox") states the request, and it is kept, so nothing about the conversation is lost.
+ */
+function readableText(message: Message): string {
+  if (message.role !== 'assistant') return message.content.slice(0, 500);
+  // `resolution` is written by the image generator alone: this is the caption under a picture.
+  if (message.generationMeta?.resolution) return '';
+  const { answer, reasoning, reasoningLabel } = parseModelOutput(message.content, message.reasoningContent);
+  if (reasoningLabel === ENHANCED_PROMPT_LABEL) return '';
+  return (answer || reasoning || '').slice(0, 500);
 }
 
 export function cleanEnhancedPrompt(raw: string): string {
