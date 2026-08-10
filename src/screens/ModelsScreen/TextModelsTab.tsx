@@ -1,14 +1,11 @@
 import React, { useEffect } from 'react';
-import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, InteractionManager, Platform } from 'react-native';
+import { View, Text, FlatList, TextInput, ActivityIndicator, RefreshControl, TouchableOpacity, Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
 import { fileExceedsBudget } from '../../services/memoryBudget';
-import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { CustomAlert, hideAlert, showAlert, AlertState } from '../../components/CustomAlert';
-import { consumePendingSpotlight, peekPendingSpotlight, setPendingSpotlight } from '../../components/onboarding/spotlightState';
-import { DOWNLOAD_MANAGER_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useTheme, useThemedStyles } from '../../theme';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { CREDIBILITY_LABELS } from '../../constants';
@@ -101,20 +98,9 @@ const ModelDetailView: React.FC<DetailProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { goTo } = useSpotlightTour();
 
-  // If user arrived here via onboarding spotlight flow, show file card spotlight
   // Pre-set the next pending (Download Manager icon) so it fires regardless of
   // how the user dismisses step 9 (button or backdrop tap).
-  useEffect(() => {
-    const pending = consumePendingSpotlight();
-    if (pending !== null) {
-      setPendingSpotlight(DOWNLOAD_MANAGER_STEP_INDEX);
-      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
-      return () => task.cancel();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Heal the durable vision flag from the authoritative catalog: this screen KNOWS a model is vision (its
   // repo ships an mmproj → modelFiles carry mmProjFile), so persist isVisionModel:true onto any downloaded
@@ -161,7 +147,6 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const s = getFileCardState(item);
     const proceedDownload = () => {
       handleDownload(selectedModel, item);
-      if (peekPendingSpotlight() !== null) setTimeout(onBack, 800);
     };
     const onDownload = buildFileDownloadHandler({ s, fileName: item.name, sizeBytes: item.size, ramGB, proceedDownload, setAlertState });
     const liteRTMeta = LITERT_FILE_META[item.name];
@@ -181,8 +166,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         onRemove: () => handleCancelDownload(s.downloadKey),
       }
       : undefined;
-    const inner = (
-      <ModelCard
+    return <ModelCard
         model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
         isDownloading={!!s.progress && !s.hasFailed && !isQueuedStatus(s.progress.status)}
@@ -198,9 +182,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         recommended={recommended}
         supportsAcceleration={isAccelerableQuant(item.quantization) || !!liteRTMeta}
         failedState={failedState}
-      />
-    );
-    return index === 0 ? <AttachStep index={9} fill>{inner}</AttachStep> : inner;
+      />;
   };
 
   return (
@@ -297,15 +279,12 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   // Strip files for the LiteRT parent so ModelCard skips the size-range / "N files"
   // badges (curated chips cover it); the original item still flows through onPress.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
-  const card = (<AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>);
-  return index === 0 ? <AttachStep index={0} fill>{card}</AttachStep> : card;
+  return <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>;
 };
 
-function applyBackNavigation(setSelectedModel: (m: ModelInfo | null) => void, setModelFiles: (f: ModelFile[]) => void, goTo: (step: number) => void): void {
-  const pending = consumePendingSpotlight();
+function applyBackNavigation(setSelectedModel: (m: ModelInfo | null) => void, setModelFiles: (f: ModelFile[]) => void): void {
   setSelectedModel(null);
   setModelFiles([]);
-  if (pending !== null) { InteractionManager.runAfterInteractions(() => goTo(pending)); }
 }
 
 interface SortPanelProps {
@@ -348,13 +327,12 @@ export const TextModelsTab: React.FC<Props> = (props) => {
 
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { goTo } = useSpotlightTour();
 
   const renderModelItem = ({ item, index }: { item: ModelInfo; index: number }) => (
     <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={() => handleSelectModel(item)} />
   );
 
-  const onBack = () => applyBackNavigation(setSelectedModel, setModelFiles, goTo);
+  const onBack = () => applyBackNavigation(setSelectedModel, setModelFiles);
 
   if (selectedModel) {
     return (

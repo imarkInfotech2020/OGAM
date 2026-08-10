@@ -15,12 +15,12 @@ import { createDownloadedModel } from '../../utils/factories';
 describe('model selector loader — spinner on the active row during a no-tap reload (settings-changed card)', () => {
   it('reloading the already-active model (no row tapped) puts the spinner on the active row', async () => {
     installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const rtl = requireRTL();
     const { useAppStore } = require('../../../src/stores');
     const { ModelSelectorModal } = require('../../../src/components/ModelSelectorModal');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     const A = createDownloadedModel({ id: 'a', name: 'Model A', engine: 'llama', filePath: '/models/a.gguf', fileName: 'a.gguf' });
     const B = createDownloadedModel({ id: 'b', name: 'Model B', engine: 'llama', filePath: '/models/b.gguf', fileName: 'b.gguf' });
     // A is the ACTIVE model and it is currently loaded — the exact state when the "settings changed" card

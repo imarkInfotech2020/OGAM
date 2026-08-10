@@ -14,10 +14,10 @@ import { createONNXImageModel } from '../../utils/factories';
 describe('Q14 — advisory vs authoritative image-RAM estimate diverge (red-flow)', () => {
   it('sizes the same image model identically in the pre-check and the load gate', async () => {
     installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { checkMemoryForModel } = require('../../../src/services/activeModelService/memory');
     const { hardwareService } = require('../../../src/services/hardware');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     await hardwareService.refreshMemoryInfo();
 
     const model = createONNXImageModel({ id: 'sd', name: 'SD', size: 2 * GB, backend: 'mnn' });

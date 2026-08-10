@@ -14,7 +14,7 @@
 export async function installPro(): Promise<void> {
   // isPro=true → the real bootstrap requires @offgrid/pro and calls pro.activate({...registries}),
   // registering every pro slot (chatInput.modeToggle, chatInput.audioMode, message.speakButton, …).
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const { loadProFeatures } = require('../../src/bootstrap/loadProFeatures');
   await loadProFeatures(true);
 }

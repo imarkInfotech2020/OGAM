@@ -23,12 +23,12 @@ describe('happy — switching text models swaps residency (one heavy model accou
   it('evicts the LiteRT model from residency when a llama.cpp model is loaded', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
     requireRTL();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { modelResidencyManager } = require('../../../src/services/modelResidency');
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();

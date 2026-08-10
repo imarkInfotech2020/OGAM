@@ -10,7 +10,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AttachStep } from 'react-native-spotlight-tour';
 import {
   useNavigation,
   CommonActions,
@@ -178,7 +177,6 @@ export const SettingsScreen: React.FC = () => {
         />
 
         {/* Navigation Items */}
-        <AttachStep index={5} fill>
           <View style={styles.navSection}>
             {[
               {
@@ -257,7 +255,6 @@ export const SettingsScreen: React.FC = () => {
               </AnimatedListItem>
             ))}
           </View>
-        </AttachStep>
 
         {/* PRO Button */}
         <AnimatedEntry index={6} staggerMs={40} trigger={focusTrigger}>

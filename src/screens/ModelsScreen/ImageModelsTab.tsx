@@ -1,10 +1,8 @@
-import React, { useEffect } from 'react';
-import { View, Text, TextInput, ActivityIndicator, TouchableOpacity, ScrollView, InteractionManager } from 'react-native';
+import React from 'react';
+import { View, Text, TextInput, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
-import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { ModelCard } from '../../components';
-import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
 import { useTheme, useThemedStyles } from '../../theme';
 import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBrowser';
 import { ImageModelRecommendation } from '../../types';
@@ -147,18 +145,7 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { goTo } = useSpotlightTour();
 
-  // Consume pending spotlight from the onboarding flow (queued when user taps "Try image generation")
-  useEffect(() => {
-    if (!hfModelsLoading && filteredHFModels.length > 0) {
-      const pending = consumePendingSpotlight();
-      if (pending !== null) {
-        const task = InteractionManager.runAfterInteractions(() => goTo(pending));
-        return () => task.cancel();
-      }
-    }
-  }, [hfModelsLoading, filteredHFModels.length, goTo]);
   let emptyMessage: string;
   if (imageSearchQuery.trim()) {
     emptyMessage = 'No models match your search';
@@ -232,9 +219,8 @@ const ImageModelsScrollContent: React.FC<ScrollContentProps> = ({
                 handleCancelImageDownload={handleCancelImageDownload}
               />
             );
-            // Spotlight the first image model card for the onboarding flow
             if (index === 0) {
-              return <AttachStep key={model.id} index={17} fill>{card}</AttachStep>;
+              return card;
             }
             return card;
           }

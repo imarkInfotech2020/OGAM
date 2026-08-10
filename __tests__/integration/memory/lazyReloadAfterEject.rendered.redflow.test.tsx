@@ -19,7 +19,7 @@ describe('per-model eject — lazy reload on next use', () => {
   it('reloads an ejected text model when a message is sent, and answers', async () => {
     const h = await setupChatScreen({ engine: 'litert', platform: 'android' });
     h.render();
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { modelResidencyManager } = require('../../../src/services/modelResidency');
     const textResident = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).some(r => r.type === 'text');
 

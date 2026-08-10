@@ -55,13 +55,13 @@ describe('T103 / M6 (rendered) — aggressive policy over-commits a 9GB dirty im
     const h = await setupChatScreen({ engine: 'litert', platform: 'android' });
     h.render();
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { ModelLoadingModeSelector } = require('../../../src/components/settings/textGenAdvancedSections');
     const { startLoadPolicySync } = require('../../../src/services/loadPolicySync');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
     const { hardwareService } = require('../../../src/services/hardware');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // BOUNDARY: a downloaded+extracted 9GB-dirty CoreML image model on disk. Core ML skips the mnn/qnn
     // integrity gate → straight to the memory gate. Its on-disk size drives the 2.5× estimate to 9GB dirty.

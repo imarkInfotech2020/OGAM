@@ -36,7 +36,7 @@ describe('happy — support-share sheet dismisses after Share on X and does not 
 
     // The X-share device leaf. Same module graph as the freshly-required SharePromptSheet (installNativeBoundary
     // resets modules, so we grab Linking from the post-reset react-native instance the component uses).
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { Linking } = require('react-native');
     const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
 

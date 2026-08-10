@@ -105,8 +105,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // spotlight (step 12) fires and wraps the send button in an AttachStep, which intercepts the composer
   // gesture in tests. The tour is unrelated to any behavior under test, so mark it done up front.
    
-  require('../../src/components/onboarding/spotlightState').setPendingSpotlight(null);
-  useAppStore.setState({ checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
+  useAppStore.setState({ checklistDismissed: true });
 
   // Activate PRO (audio/voice mode header toggle, audio layout, TTS, MCP) via the real bootstrap BEFORE any
   // screen mounts, so pro slots render in Home + ChatScreen. Reusable seam (proHarness.installPro).

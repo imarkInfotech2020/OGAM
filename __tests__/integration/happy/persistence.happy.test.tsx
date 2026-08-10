@@ -20,12 +20,12 @@ describe('happy — a user-created project survives a relaunch (real persist + r
     // --- Launch 1: create the project through the REAL form gesture ---
     jest.resetModules();
     {
-      /* eslint-disable @typescript-eslint/no-var-requires */
+       
       const React = require('react');
       const { requireRTL } = require('../../harness/nativeBoundary');
       const { render, fireEvent } = requireRTL();
       const { ProjectEditScreen } = require('../../../src/screens/ProjectEditScreen');
-      /* eslint-enable @typescript-eslint/no-var-requires */
+       
 
       const form = render(React.createElement(ProjectEditScreen, {}));
       fireEvent.changeText(form.getByPlaceholderText('e.g., Spanish Learning, Code Review'), 'Persisted Project');
@@ -37,13 +37,13 @@ describe('happy — a user-created project survives a relaunch (real persist + r
 
     // --- Relaunch: fresh module graph → stores rehydrate from persisted storage ---
     jest.resetModules();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { requireRTL } = require('../../harness/nativeBoundary');
     const { render, waitFor } = requireRTL();
     const { useProjectStore } = require('../../../src/stores');
     const { ProjectsScreen } = require('../../../src/screens/ProjectsScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     await useProjectStore.persist?.rehydrate?.();
     await waitFor(() => { expect(useProjectStore.getState().projects.length).toBeGreaterThan(0); });

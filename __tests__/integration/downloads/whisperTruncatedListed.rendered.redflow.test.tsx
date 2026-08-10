@@ -14,11 +14,11 @@ describe('V2 (rendered) — truncated whisper file shows as a downloaded card', 
     const dir = `${boundary.fs!.DocumentDirectoryPath}/whisper-models`;
     boundary.fs!.seedFile(`${dir}/ggml-tiny.en.bin`, 75 * 1024 * 1024); // valid
     boundary.fs!.seedFile(`${dir}/ggml-base.en.bin`, 5 * 1024 * 1024);  // truncated (< MIN_MODEL_FILE_SIZE)
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, waitFor } = requireRTL();
     const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     const view = render(React.createElement(DownloadManagerScreen, {}));
 

@@ -30,7 +30,7 @@ describe('T118 (rendered) — embedding model co-resides as a sidecar after a KB
     // with a REAL node:sqlite engine WITHOUT a second reset (composed), so ragDatabase runs real SQL.
     const boundary = installNativeBoundary({ fs: true, llama: true, ram: { platform: 'ios', totalBytes: 8 * 1024 * MB, availBytes: 6 * 1024 * MB } });
     doMockRealSqlite();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const rtl = requireRTL();
     const RNFS = require('react-native-fs');
@@ -38,7 +38,7 @@ describe('T118 (rendered) — embedding model co-resides as a sidecar after a KB
     const { useProjectStore } = require('../../../src/stores/projectStore');
     const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     const docs = boundary.fs!.DocumentDirectoryPath;
     // DEVICE BOUNDARY: the embedding model file present on disk → ensureModelCopied skips the asset copy and

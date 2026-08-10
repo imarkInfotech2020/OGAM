@@ -14,12 +14,12 @@ import { createProject } from '../../utils/factories';
 describe('Q11 — context-full "New chat" drops the project (red-flow)', () => {
   it('creates the continuation chat inside the same project', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { llmService } = require('../../../src/services/llm');
     const { hardwareService } = require('../../../src/services/hardware');
     const { startGenerationFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
     const { useProjectStore, useChatStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();

@@ -1,9 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Animated, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../../../components/AppSheet';
-import { consumePendingSpotlight } from '../../../components/onboarding/spotlightState';
-import { MODEL_PICKER_STEP_INDEX } from '../../../components/onboarding/spotlightConfig';
 import { Button, ModelRow } from '../../../components';
 import { useTheme, useThemedStyles } from '../../../theme';
 import { createStyles } from '../styles';
@@ -110,7 +108,6 @@ export const ModelPickerSheet: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const [highlightFirst, setHighlightFirst] = useState(false);
   const pulseAnim = React.useRef(new Animated.Value(0)).current;
 
   const servers = useRemoteServerStore((s) => s.servers);
@@ -127,25 +124,6 @@ export const ModelPickerSheet: React.FC<Props> = ({
     return Object.values(groups);
   }, [remoteTextModels, servers]);
 
-  // NOTE: Can't use AttachStep/spotlight-tour inside Modal (separate view hierarchy).
-  // Pulse the first model's border as a visual hint instead.
-  useEffect(() => {
-    if (pickerType === 'text') {
-      const pending = consumePendingSpotlight();
-      if (pending === MODEL_PICKER_STEP_INDEX) {
-        setHighlightFirst(true);
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: false }),
-            Animated.timing(pulseAnim, { toValue: 0, duration: 800, useNativeDriver: false }),
-          ]),
-          { iterations: 3 },
-        ).start(() => setHighlightFirst(false));
-      }
-    } else {
-      setHighlightFirst(false);
-    }
-  }, [pickerType, pulseAnim]);
 
   const highlightBorderColor = pulseAnim.interpolate({
     inputRange: [0, 1],
@@ -198,14 +176,14 @@ export const ModelPickerSheet: React.FC<Props> = ({
                 {downloadedModels.length > 0 && (
                   <>
                     <Text style={styles.sectionLabel}>Local Models</Text>
-                    {downloadedModels.map((model, idx) => {
+                    {downloadedModels.map((model) => {
                       const totalSize = model.fileSize + getMmProjFileSize(model);
                       const estimatedMemoryGB = (totalSize * 1.5) / (1024 * 1024 * 1024);
                       // Owned verdict (DR3 fix): file vs the device-tier budget of TOTAL RAM — never instantaneous free RAM.
                       const memoryFits = memoryInfo
                         ? !fileExceedsBudget(totalSize, memoryInfo.memoryTotal / (1024 * 1024 * 1024))
                         : true;
-                      const isHighlighted = idx === 0 && highlightFirst;
+                      const isHighlighted = false;
                       const modelItem = (
                         <ModelRow
                           testID="model-item"

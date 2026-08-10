@@ -8,13 +8,12 @@ import { OnboardingSheet } from '../../components/onboarding/OnboardingSheet';
 import { PulsatingIcon } from '../../components/onboarding/PulsatingIcon';
 import { useOnboardingSheet } from '../../components/onboarding/useOnboardingSheet';
 import { useFocusTrigger } from '../../hooks/useFocusTrigger';
-import { AttachStep } from 'react-native-spotlight-tour';
 import Icon from 'react-native-vector-icons/Feather';
 import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemedStyles, useTheme } from '../../theme';
 import { createStyles } from './styles';
 import { useHomeScreen, HomeScreenNavigationProp } from './hooks/useHomeScreen';
-import { useHomeScreenSpotlight } from './hooks/useHomeScreenSpotlight';
+import { useOnboardingChecklistNavigation } from './hooks/useOnboardingChecklistNavigation';
 import { RecentConversations } from './components/RecentConversations';
 import { ModelPickerSheet } from './components/ModelPickerSheet';
 import { LoadingOverlay } from './components/LoadingOverlay';
@@ -36,9 +35,6 @@ type HomeScreenProps = {
   navigation: HomeScreenNavigationProp;
 };
 
-// AttachStep wraps children in a View that otherwise shrinks to content width;
-// stretch it so the Models summary row fills the column like the other cards.
-const stretchStyle = { alignSelf: 'stretch' as const };
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
@@ -87,12 +83,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     handleDeleteConversation,
   } = useHomeScreen(navigation);
 
-  const { handleStepPress } = useHomeScreenSpotlight({
-    navigation,
-    closeSheet,
-    activeImageModelId,
-    downloadedImageModelsCount: downloadedImageModels.length,
-  });
+  const { handleStepPress } = useOnboardingChecklistNavigation({ navigation, closeSheet });
 
   // ── Collapsed Models control ──────────────────────────────────────────────
   const [modelsManagerOpen, setModelsManagerOpen] = React.useState(false);
@@ -175,16 +166,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           {/* Collapsed Models summary — tap to open the manager sheet. Both the
               text (1) and image (13) tour steps anchor here now. */}
           <AnimatedEntry index={0} staggerMs={50} trigger={focusTrigger}>
-            <AttachStep index={1} style={stretchStyle}>
-              <AttachStep index={13} style={stretchStyle}>
                 <ModelsSummaryRow
                   labels={modelLabels}
                   counts={modelCounts}
                   isLoading={loadingState.isLoading}
                   onPress={() => setModelsManagerOpen(true)}
                 />
-              </AttachStep>
-            </AttachStep>
           </AnimatedEntry>
 
           {/* New Chat Button */}

@@ -37,8 +37,8 @@ function makeFakeZeroconf() {
     unpublishService() {
       z.published = undefined;
     },
-    emitResolved: svc => on['resolved']?.(svc),
-    emitRemove: n => on['remove']?.(n),
+    emitResolved: svc => on.resolved?.(svc),
+    emitRemove: n => on.remove?.(n),
   };
   return z;
 }

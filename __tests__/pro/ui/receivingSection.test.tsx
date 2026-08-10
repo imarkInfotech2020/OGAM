@@ -58,24 +58,24 @@ const handlers = () => ({
 // DEFAULT_RECEIVE_POLICY means this test cannot drift from the shape the app actually stores.
 /** The category ids the projection actually offers, so the test names real rows rather than guessing. */
 const categoryIds = (policy: never, deviceId?: string): string[] => {
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const { projectSyncReceiving } = require('@offgrid/sync');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
   return projectSyncReceiving(policy, deviceId).categories.map(
     (category: { id: string }) => category.id,
   );
 };
 
 const policyWith = (overrides: Record<string, unknown> = {}): never => {
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const { DEFAULT_RECEIVE_POLICY } = require('@offgrid/sync');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
   return { ...DEFAULT_RECEIVE_POLICY, ...overrides } as never;
 };
 
 describePro('the Receiving section', () => {
   const maybe = (name: string, body: jest.ProvidesCallback): void => {
-    // eslint-disable-next-line jest/valid-title, jest/no-disabled-tests
+     
     (available ? it : it.skip)(name, body);
   };
 

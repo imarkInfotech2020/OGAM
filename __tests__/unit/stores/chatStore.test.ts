@@ -1209,9 +1209,9 @@ describe('chatStore', () => {
   });
 
   describe('streaming TTS answer gating (only the answer is spoken)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { registerHook, _clearHooksForTesting } = require('../../../src/bootstrap/hookRegistry');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { useAppStore } = require('../../../src/stores/appStore');
     let spoken: string[];
 

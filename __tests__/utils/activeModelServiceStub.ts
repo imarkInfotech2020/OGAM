@@ -25,7 +25,7 @@ export function activeModelSelectionStub(): {
     lastTextModelId: string | null;
   } => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const hook = require('../../src/stores').useAppStore as any;
       // A suite may drive the store through getState, or by mocking the hook itself with a selector
       // implementation. Read whichever it actually uses, or the stub contradicts the fixtures the

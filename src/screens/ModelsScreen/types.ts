@@ -13,7 +13,7 @@ export interface ImageDownloadDeps {
   activeImageModelId: string | null;
   setActiveImageModelId: (id: string) => void;
   setAlertState: (s: AlertState) => void;
-  /** When false, skip auto-load so the onboarding spotlight can guide the user to load manually. */
+  /** When false, skip auto-load and leave the model for the user to load by hand. */
   triedImageGen: boolean;
 }
 

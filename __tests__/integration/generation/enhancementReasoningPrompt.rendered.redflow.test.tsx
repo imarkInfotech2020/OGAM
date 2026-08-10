@@ -37,7 +37,7 @@ describe('T072 (rendered) — enhancement reasoning must not become the image pr
     h.render();
 
     await h.placeImageModel({ backend: 'coreml' });
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { activeModelService } = require('../../../src/services/activeModelService');
     await activeModelService.loadImageModel('sd');
     await h.cycleImageMode(); // auto → ON(force): "draw a cat" routes to IMAGE

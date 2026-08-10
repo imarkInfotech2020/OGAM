@@ -44,7 +44,7 @@ describe('scanning a network that has an Off Grid AI Desktop on it', () => {
     useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
 
     // Device boundary: this phone's own address, and that it is a real handset so the scan runs.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const DeviceInfo = require('react-native-device-info');
     DeviceInfo.isEmulator = jest.fn(async () => false);
     DeviceInfo.getIpAddress = jest.fn(async () => PHONE_IP);

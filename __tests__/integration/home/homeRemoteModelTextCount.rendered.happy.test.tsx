@@ -40,13 +40,13 @@ describe('T097 (rendered) — Home Text count with a remote model active is not 
   const setup = (opts: { selectRemoteModel: boolean }) => {
     installNativeBoundary();
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const rtl = requireRTL();
     const { RemoteServersScreen } = require('../../../src/screens/RemoteServersScreen');
     const { HomeScreen } = require('../../../src/screens/HomeScreen');
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // Fresh remote store (no servers) + ZERO local text models — the exact device precondition (0 local).
     useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {}, activeServerId: null, activeRemoteTextModelId: null, activeRemoteImageModelId: null });

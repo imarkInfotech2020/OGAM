@@ -68,12 +68,12 @@ export async function installRemoteModel(opts: {
   providerType?: 'openai-compatible' | 'anthropic';
   caps?: Partial<{ supportsVision: boolean; supportsToolCalling: boolean; supportsThinking: boolean }>;
 } = {}): Promise<{ serverId: string; modelId: string }> {
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const { useRemoteServerStore } = require('../../src/stores');
   const { providerRegistry } = require('../../src/services/providers');
   const { createProviderForServerImpl } = require('../../src/services/remoteServerManagerUtils');
   const { llmService } = require('../../src/services/llm');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
   // A remote model is only USED when no local model is loaded/selected: generationService prefers a loaded
   // local model, and the dispatch keys off appStore.activeModelId. On device, selecting a remote model
   // clears the local selection and no local model is loaded — mirror that so the send routes remote.

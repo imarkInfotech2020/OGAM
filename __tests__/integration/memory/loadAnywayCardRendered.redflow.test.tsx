@@ -44,11 +44,11 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
       deferInitialLoad: true,
     });
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { ModelLoadingModeSelector } = require('../../../src/components/settings/textGenAdvancedSections');
     const { startLoadPolicySync } = require('../../../src/services/loadPolicySync');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // BOUNDARY: the ACTUAL on-disk model file is 5GB — resolveSafeContext sizes the model from the real
     // file (RNFS.stat), so its weight estimate (6144MB) exceeds the 5120MB raw-available snapshot and it

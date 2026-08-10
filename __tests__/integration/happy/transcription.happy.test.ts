@@ -13,14 +13,14 @@ import { createDownloadedModel } from '../../utils/factories';
 describe('happy — audio-mode transcription auto-sends the spoken text', () => {
   it('records, transcribes, and dispatches the transcript as the turn content', async () => {
     const boundary = installNativeBoundary({ fs: true, ram: { platform: 'ios', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { renderHook, act } = require('../../harness/nativeBoundary').requireRTL();
     const { liteRTService } = require('../../../src/services/litert');
     const { useVoiceInput } = require('../../../src/components/ChatInput/Voice');
     const { useAppStore, useWhisperStore } = require('../../../src/stores');
     const { useUiModeStore } = require('../../../src/stores/uiModeStore');
     const whisperRn = require('whisper.rn');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // The (faked) native whisper context transcribes this recording to a known phrase.
     whisperRn.initWhisper.mockResolvedValue({ id: 'w', transcribe: () => ({ promise: Promise.resolve({ result: 'book a flight to tokyo' }) }) });

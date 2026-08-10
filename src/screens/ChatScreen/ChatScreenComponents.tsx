@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AttachStep } from 'react-native-spotlight-tour';
 import { ModelSelectorModal } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { createStyles } from './styles';
@@ -136,11 +135,9 @@ export const ChatHeader: React.FC<{
         </View>
       </View>
       <View style={styles.headerActions}>
-        <AttachStep index={16}>
           <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)} testID="chat-settings-icon">
             <Icon name="sliders" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
-        </AttachStep>
       </View>
     </View>
   </View>

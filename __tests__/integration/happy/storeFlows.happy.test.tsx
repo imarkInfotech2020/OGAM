@@ -23,13 +23,13 @@ jest.mock('@react-navigation/native', () => ({
 describe('happy — create a project by tapping through the real form', () => {
   it('typing a name and tapping Save creates the project, which then lists on the Projects screen', () => {
     installNativeBoundary();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, fireEvent } = requireRTL();
     const { useProjectStore } = require('../../../src/stores');
     const { ProjectEditScreen } = require('../../../src/screens/ProjectEditScreen');
     const { ProjectsScreen } = require('../../../src/screens/ProjectsScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     mockRoute = { params: {} }; // no projectId → "New Project"
 

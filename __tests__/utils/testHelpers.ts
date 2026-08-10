@@ -85,7 +85,6 @@ export const resetStores = (): void => {
     imageGenerationStatus: null,
     imagePreviewPath: null,
     generatedImages: [],
-    shownSpotlights: {},
     textGenerationCount: 0,
     imageGenerationCount: 0,
     hasEngagedSharePrompt: false,

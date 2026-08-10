@@ -8,12 +8,12 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 describe('D4 (rendered) — iOS interrupted download leaves no failed card', () => {
   it('keeps a failed/retriable download card on the DownloadManager after an iOS app-kill', async () => {
     const boundary = installNativeBoundary({ download: true, ram: { platform: 'ios', totalBytes: 8 * 1024 ** 3, availBytes: 4 * 1024 ** 3 } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, waitFor } = requireRTL();
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
     const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     boundary.download!.seedActive({ downloadId: 'dl-txt', fileName: 'gemma-4b.gguf', modelId: 'gemma-4b', modelType: 'text', status: 'running', bytesDownloaded: 2 * 1024 ** 3, totalBytes: 6 * 1024 ** 3 });
     await hydrateDownloadStore();

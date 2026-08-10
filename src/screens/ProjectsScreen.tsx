@@ -12,7 +12,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
-import { AttachStep } from 'react-native-spotlight-tour';
 import { Button } from '../components/Button';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
 import { AnimatedEntry } from '../components/AnimatedEntry';
@@ -123,7 +122,6 @@ export const ProjectsScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Projects</Text>
-        <AttachStep index={7}>
           <Button
             title="New"
             variant="primary"
@@ -131,7 +129,6 @@ export const ProjectsScreen: React.FC = () => {
             onPress={handleNewProject}
             icon={<Icon name="plus" size={16} color={colors.primary} />}
           />
-        </AttachStep>
       </View>
 
       <Text style={styles.subtitle}>

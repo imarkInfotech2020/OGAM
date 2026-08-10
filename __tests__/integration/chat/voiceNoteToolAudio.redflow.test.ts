@@ -15,11 +15,11 @@ import type { MediaAttachment, Message } from '../../../src/types';
 describe('Q17 (harness) — voice note + tool on LiteRT sends audio to native (red-flow)', () => {
   it('sends the transcript and NO audio to the native LiteRT model', async () => {
     const boundary = installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { liteRTService } = require('../../../src/services/litert');
     const { runToolLoop } = require('../../../src/services/generationToolLoop');
     const { useAppStore, useChatStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     await liteRTService.loadModel('/models/gemma.litertlm', 'gpu', { maxNumTokens: 4096 });
     useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'lrt', engine: 'litert' })], activeModelId: 'lrt' });

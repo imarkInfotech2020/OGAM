@@ -36,13 +36,7 @@ jest.mock('../../../src/components/AppSheet', () => ({
   },
 }));
 
-jest.mock('../../../src/components/onboarding/spotlightState', () => ({
-  consumePendingSpotlight: jest.fn(() => null),
-}));
 
-jest.mock('../../../src/components/onboarding/spotlightConfig', () => ({
-  MODEL_PICKER_STEP_INDEX: 2,
-}));
 
 jest.mock('../../../src/components', () => ({
   Button: ({ title, onPress }: any) => {

@@ -25,10 +25,10 @@ describe('T116 (rendered) — text + whisper allowed co-residence (In Memory UI)
     // Roomy device so both the heavy and the sidecar fit (co-residence is about the RULE, not the budget).
     const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true });
     h.render();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     const openSelector = () => h.rtl.render(React.createElement(ModelsManagerSheet, {
       visible: true, onClose: () => {}, labels: { text: '—', image: '—', voice: '—', speech: '—' },
       loadingState: { isLoading: false }, isEjecting: false, hasActiveModel: false,

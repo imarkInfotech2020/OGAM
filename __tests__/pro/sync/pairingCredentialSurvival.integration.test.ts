@@ -52,7 +52,7 @@ describe('pairing credentials survive a restart', () => {
    */
   const restart = async (): Promise<typeof pairingSecretStore> => {
     jest.resetModules();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const reloaded = require('../../../pro/sync/pairingSecretStore')
       .pairingSecretStore as typeof pairingSecretStore;
     await reloaded.load();

@@ -5,7 +5,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { AttachStep } from 'react-native-spotlight-tour';
 import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard, MtpAdviceCard } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
@@ -31,7 +30,6 @@ export type ChatMessageAreaProps = {
   colors: ReturnType<typeof useTheme>['colors'];
   handleScroll: (event: any) => void;
   renderItem: (info: { item: any; index: number }) => React.JSX.Element;
-  chatSpotlight: number | null;
 };
 
 // The bottom gap below the input controls should visually MATCH the top gap
@@ -118,7 +116,7 @@ const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelNa
 };
 
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
-  flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
+  flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem,
 }) => {
   // Hide FlatList until initial layout + scroll is complete to prevent visible scroll jump
   const [isListReady, setIsListReady] = useState(false);
@@ -291,13 +289,10 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         styles={styles}
         colors={colors}
       />
-      {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).
-         Steps 12/16 are handled inside ChatInput via activeSpotlight prop. */}
       <View
         onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
         style={{ backgroundColor: colors.background, paddingBottom: footerPaddingBottom }}
       >
-        <AttachStep index={[3, 15]} fill>
           <ChatInput
             onSend={chat.handleSend}
             onStop={chat.handleStop}
@@ -326,10 +321,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             supportsThinking={chat.supportsThinking}
             onRepairVision={handleRepairVision}
             isRemote={chat.activeModelInfo.isRemote}
-            activeSpotlight={chatSpotlight === 12 ? chatSpotlight : null}
             onImagePress={chat.handleImagePress}
           />
-        </AttachStep>
       </View>
     </>
   );

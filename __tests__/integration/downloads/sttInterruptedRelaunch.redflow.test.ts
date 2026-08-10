@@ -12,11 +12,11 @@ import { installNativeBoundary } from '../../harness/nativeBoundary';
 describe('V3 — interrupted STT download lost on relaunch (red-flow)', () => {
   it('surfaces an interrupted STT download as a retriable entry after relaunch', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
     const { sttProvider } = require('../../../src/services/modelDownloadService/providers/sttProvider');
     const { useDownloadStore } = require('../../../src/stores/downloadStore');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // base.en is mid-download: a native row + a partial file on disk.
     boundary.download!.seedActive({ downloadId: 'dl-stt', fileName: 'ggml-base.en.bin', modelId: 'base.en', modelType: 'stt', status: 'running', bytesDownloaded: 40 * 1024 * 1024, totalBytes: 142 * 1024 * 1024 });

@@ -17,11 +17,11 @@ import { installRealSqlite } from '../../harness/sqliteFake';
 describe('PR#452 — KB indexDocument leaves a dead entry on embed failure (red-flow)', () => {
   it('rolls back the document (no silent non-searchable entry) when embedding fails', async () => {
     installRealSqlite();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { ragService } = require('../../../src/services/rag');
     const { embeddingService } = require('../../../src/services/rag/embedding');
     const { documentService } = require('../../../src/services/documentService');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // Native doc extraction → real text (so chunking produces chunks against the real DB).
     jest.spyOn(documentService, 'processDocumentFromPath').mockResolvedValue({

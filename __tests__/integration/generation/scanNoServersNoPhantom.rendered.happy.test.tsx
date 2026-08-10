@@ -34,7 +34,7 @@ describe('T047 (rendered) — empty LAN scan shows the alert AND adds no phantom
   it('reports that nothing answered and leaves the list empty when nothing is discovered', async () => {
     // Device boundary: an emulator can't run the concurrent LAN scan → discoverLANServers returns [] (the
     // real "nothing found" outcome). This is a native leaf, not our discovery service.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const DeviceInfo = require('react-native-device-info');
     DeviceInfo.isEmulator = jest.fn(async () => true);
 

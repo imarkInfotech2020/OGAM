@@ -23,13 +23,13 @@ import { installNativeBoundary, requireRTL, MB } from '../../harness/nativeBound
 describe('T001 (rendered) — download badge vs Download Manager active count', () => {
   it('shows the SAME active-download count on the badge and the Download Manager', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, waitFor } = requireRTL();
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
     const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
     const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // Device condition: two text models in flight + a vision model (main + mmproj sidecar, folded into ONE
     // store entry via mmProjDownloadId) + ONE model that FAILED (a network drop while others continued).

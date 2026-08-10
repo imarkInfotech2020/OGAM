@@ -18,9 +18,9 @@ jest.mock('@react-navigation/native', () => ({
 describe('thinking toggle applies to the next turn (no off-by-one) — device 2026-07-14', () => {
   it('the <|think|> activation follows the LIVE thinking setting, not a stale snapshot (LiteRT loaded)', async () => {
     const h = await setupChatScreen({ engine: 'litert', platform: 'android' }); // litert model 'm' loaded
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { wantsLeadingThinkToken } = require('../../../src/services/engines');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     const model = h.useAppStore.getState().downloadedModels.find((m: { id: string }) => m.id === 'm');
 
     // Toggle OFF → the decision is OFF on the very next read (no one-turn lag).

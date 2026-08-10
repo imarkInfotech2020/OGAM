@@ -8,12 +8,12 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 describe('V3 (rendered) — interrupted STT download lost on relaunch', () => {
   it('keeps a retriable STT-download card on the DownloadManager after relaunch', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, waitFor } = requireRTL();
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
     const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     boundary.download!.seedActive({ downloadId: 'dl-stt', fileName: 'ggml-base.en.bin', modelId: 'base.en', modelType: 'stt', status: 'running', bytesDownloaded: 40 * 1024 * 1024, totalBytes: 142 * 1024 * 1024 });
     await hydrateDownloadStore();

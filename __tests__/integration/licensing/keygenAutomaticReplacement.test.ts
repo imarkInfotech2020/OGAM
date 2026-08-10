@@ -87,7 +87,7 @@ describe('activating a key when every seat is taken', () => {
   };
 
   const activateWith = async (key: string): Promise<{ ok: boolean; reason?: string }> => {
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const service = require('../../../src/services/proLicenseService');
     require('@offgrid/pro').configureProEntitlementProvider(
       service.registerProEntitlementProvider,
@@ -116,7 +116,7 @@ describe('activating a key when every seat is taken', () => {
         onRegistryChanged: async () => undefined,
       }),
     );
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     try {
       return await service.activateProByKey(key);
     } finally {

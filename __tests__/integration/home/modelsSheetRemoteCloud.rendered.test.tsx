@@ -18,13 +18,13 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 describe('Models manager sheet — remote TEXT selection carries the cloud marker (rendered)', () => {
   const setup = () => {
     installNativeBoundary();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const rtl = requireRTL();
     const { RemoteServersScreen } = require('../../../src/screens/RemoteServersScreen');
     const { HomeScreen } = require('../../../src/screens/HomeScreen');
     const { useRemoteServerStore, useAppStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {}, activeServerId: null, activeRemoteTextModelId: null, activeRemoteImageModelId: null });
     useAppStore.setState({ downloadedModels: [], activeModelId: null, downloadedImageModels: [], activeImageModelId: null });

@@ -35,7 +35,7 @@ function loadLiteRT() {
     const log = jest.fn();
     return { __esModule: true, default: { log, error: log, warn: log } };
   });
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const { liteRTService } = require('../../../src/services/litert');
   return { liteRTService, nativeModule };
 }

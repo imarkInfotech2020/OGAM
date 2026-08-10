@@ -25,10 +25,10 @@ describe('T020 (rendered) — LiteRT select is lazy (no eager warm), loads on fi
     // deferInitialLoad: leave the model in the real select-but-not-loaded state (no forced pre-load).
     const h = await setupChatScreen({ engine: 'litert', platform: 'android', deferInitialLoad: true });
     h.render();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     const openSelector = () => h.rtl.render(React.createElement(ModelsManagerSheet, {
       visible: true, onClose: () => {}, labels: { text: '—', image: '—', voice: '—', speech: '—' },
       loadingState: { isLoading: false }, isEjecting: false, hasActiveModel: false,

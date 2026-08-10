@@ -18,12 +18,12 @@ const ARGS_OBJECT = '{"name": "calculator", "arguments": {"expression": "2+2"}}'
 
 async function toolResultContentFor(callBody: string): Promise<string> {
   const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 8 * 1024 ** 3 } });
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const { llmService } = require('../../../src/services/llm');
   const { generationService } = require('../../../src/services/generationService');
   const { hardwareService } = require('../../../src/services/hardware');
   const { useAppStore, useChatStore } = require('../../../src/stores');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
 
   boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
   await hardwareService.refreshMemoryInfo();

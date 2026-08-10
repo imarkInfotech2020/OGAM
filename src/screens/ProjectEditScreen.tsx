@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,11 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
-import { consumePendingSpotlight } from '../components/onboarding/spotlightState';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
@@ -32,18 +29,9 @@ export const ProjectEditScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { goTo } = useSpotlightTour();
   const { getProject, createProject, updateProject } = useProjectStore();
   const existingProject = projectId ? getProject(projectId) : null;
 
-  // If user arrived here via onboarding spotlight flow, show name input spotlight
-  useEffect(() => {
-    const pending = consumePendingSpotlight();
-    if (pending !== null) {
-      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
-      return () => task.cancel();
-    }
-  }, []);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -114,7 +102,6 @@ export const ProjectEditScreen: React.FC = () => {
         >
           {/* Name */}
           <Text style={styles.label}>Name *</Text>
-          <AttachStep index={8} fill>
             <TextInput
               style={styles.input}
               value={formData.name}
@@ -122,7 +109,6 @@ export const ProjectEditScreen: React.FC = () => {
               placeholder="e.g., Spanish Learning, Code Review"
               placeholderTextColor={colors.textMuted}
             />
-          </AttachStep>
 
           {/* Description */}
           <Text style={styles.label}>Description</Text>

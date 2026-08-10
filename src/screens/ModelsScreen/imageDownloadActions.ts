@@ -194,7 +194,7 @@ export async function registerAndNotify(
   await modelManager.addDownloadedImageModel(imageModel);
   deps.addDownloadedImageModel(imageModel);
   // Auto-load the first image model unless onboarding is still active (Step 13 needs
-  // activeImageModelId null so the "Load your image model" spotlight fires on Home).
+  // activeImageModelId null).
   if (!deps.activeImageModelId && deps.triedImageGen) deps.setActiveImageModelId(imageModel.id);
   removeStoreEntry(imageModel.id);
   deps.setAlertState(showAlert('Success', `${modelName} downloaded successfully!`));

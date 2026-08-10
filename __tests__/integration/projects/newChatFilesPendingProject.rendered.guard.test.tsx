@@ -23,7 +23,7 @@ describe('Q10 (rendered) — new chat files a pending project', () => {
   it('lists the new conversation under the pending project after first send', async () => {
     mockRouteProjectId = 'proj-1';
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render } = require('../../harness/nativeBoundary').requireRTL();
     const { llmService } = require('../../../src/services/llm');
@@ -31,7 +31,7 @@ describe('Q10 (rendered) — new chat files a pending project', () => {
     const { handleSendFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
     const { useProjectStore } = require('../../../src/stores');
     const { ProjectChatsScreen } = require('../../../src/screens/ProjectChatsScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();

@@ -20,12 +20,12 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 describe('T022 (rendered) — whisper resident after download-only (DEV-B1)', () => {
   it('does NOT leave whisper resident just from downloading it (never transcribed)', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { TranscriptionModelsTab } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     const ui = render(
       React.createElement(React.Fragment, null,

@@ -164,9 +164,6 @@ interface AppState extends ProAccessSlice {
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
   clearGeneratedImages: () => void;
-  shownSpotlights: Record<string, boolean>;
-  markSpotlightShown: (key: string) => void;
-  resetShownSpotlights: () => void;
   /** Image models that have completed at least one generation. The FIRST run for a
    *  model compiles/warms the backend (OpenCL kernels on Android, the CoreML model
    *  on iOS) and takes ~120s — this drives the one-time warm-up notice on BOTH
@@ -327,7 +324,7 @@ export const useAppStore = create<AppState>()(
       completeChecklistStep: (key) =>
         set((state) => ({ onboardingChecklist: { ...state.onboardingChecklist, [key]: true } })),
       dismissChecklist: () => set({ checklistDismissed: true }),
-      resetChecklist: () => set({ checklistDismissed: false, onboardingChecklist: { ...DEFAULT_CHECKLIST }, shownSpotlights: {} }),
+      resetChecklist: () => set({ checklistDismissed: false, onboardingChecklist: { ...DEFAULT_CHECKLIST } }),
       deviceInfo: null,
       modelRecommendation: null,
       setDeviceInfo: (info) => set({ deviceInfo: info }),
@@ -438,11 +435,6 @@ export const useAppStore = create<AppState>()(
       },
       clearGeneratedImages: () =>
         set({ generatedImages: [] }),
-      // Reactive spotlight tracking
-      shownSpotlights: {},
-      markSpotlightShown: (key) =>
-        set((state) => ({ shownSpotlights: { ...state.shownSpotlights, [key]: true } })),
-      resetShownSpotlights: () => set({ shownSpotlights: {} }),
       warmedImageModels: [],
       markImageModelWarmed: (modelId) =>
         set((state) => state.warmedImageModels.includes(modelId)
@@ -475,7 +467,6 @@ export const useAppStore = create<AppState>()(
         modelSettingProvenance: state.modelSettingProvenance,
         activeImageModelId: state.activeImageModelId,
         generatedImages: state.generatedImages,
-        shownSpotlights: state.shownSpotlights,
         warmedImageModels: state.warmedImageModels,
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,

@@ -17,14 +17,14 @@ import { createONNXImageModel } from '../../utils/factories';
 async function setup(ram: { platform: 'ios' | 'android'; totalBytes: number; availBytes: number }, modelSizeBytes: number) {
   const boundary = installNativeBoundary({ ram });
   void boundary;
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const React = require('react');
   const { render } = requireRTL();
   const { imageGenerationService } = require('../../../src/services/imageGenerationService');
   const { hardwareService } = require('../../../src/services/hardware');
   const { useAppStore } = require('../../../src/stores');
   const { ModelFailureCard } = require('../../../src/components/ModelFailureCard');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
 
   // CoreML backend → activeModelService skips the mnn/qnn integrity (FS) gate, straight to the memory gate.
   const model = createONNXImageModel({ id: 'sd', name: 'Big SD', modelPath: '/models/big', backend: 'coreml' as never, size: modelSizeBytes });

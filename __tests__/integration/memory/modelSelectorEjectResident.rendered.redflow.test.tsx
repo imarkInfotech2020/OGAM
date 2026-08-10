@@ -28,12 +28,12 @@ describe('per-model eject (TDD) — model selector In Memory section', () => {
     h.render();
     // Real interactions to reach image + whisper resident.
     await h.placeImageModel({ backend: 'mnn' });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { modelResidencyManager } = require('../../../src/services/modelResidency');
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     await activeModelService.loadImageModel('sd');
     await h.setupWhisperModel();
 

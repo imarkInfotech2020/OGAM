@@ -19,7 +19,7 @@ import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBound
 import { createDownloadedModel } from '../../utils/factories';
 
 describe('model selector loader — the spinner follows what is being loaded', () => {
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const load = () => {
     installNativeBoundary({
       llama: true,
@@ -48,7 +48,7 @@ describe('model selector loader — the spinner follows what is being loaded', (
     useAppStore.setState({ downloadedModels: [A, B], activeModelId: 'a' });
     return { React, rtl, useAppStore, ModelSelectorModal, loadingTextRowId, A, B };
   };
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
 
   const props = {
     visible: true,

@@ -17,10 +17,10 @@ describe('STT reclaim on send (memory-tight) — rendered characterization', () 
       ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 9 * GB },
     });
     h.render();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { modelResidencyManager } = require('../../../src/services/modelResidency');
     const { hardwareService } = require('../../../src/services/hardware');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     const types = () => (modelResidencyManager.getResidents() as Array<{ type: string }>).map(r => r.type).sort();
 
     await h.setupWhisperModel();
@@ -35,10 +35,10 @@ describe('STT reclaim on send (memory-tight) — rendered characterization', () 
 
     // Validate the reclaim through the REAL "In Memory" indicator in the model selector (the feature that
     // removes the residency black box) — NOT by reading getResidents(). The section polls the real manager.
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     const sel = h.rtl.render(React.createElement(ModelsManagerSheet, {
       visible: true, onClose: () => {}, labels: { text: '—', image: '—', voice: '—', speech: '—' },
       loadingState: { isLoading: false }, isEjecting: false, hasActiveModel: false,

@@ -37,7 +37,7 @@ describe('adding a server by hand', () => {
 
   beforeEach(() => {
     useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const DeviceInfo = require('react-native-device-info');
     DeviceInfo.isEmulator = jest.fn(async () => false);
     DeviceInfo.getIpAddress = jest.fn(async () => '192.168.1.10');
