@@ -224,8 +224,8 @@ describe('making a transferred file appear in the app', () => {
     });
 
     it.each([
-      ['a type this build does not know', 'video', 'document'],
-      ['no type at all', undefined, 'document'],
+      ['a type this build does not know', 'video', 'image'],
+      ['no type at all', undefined, 'image'],
       ['an image', 'image', 'image'],
       ['audio', 'audio', 'audio'],
     ])('treats %s as %s', (_label, attachmentType, expected) => {
@@ -240,9 +240,26 @@ describe('making a transferred file appear in the app', () => {
         }),
       );
 
-      // Falling back to a document means the row still renders and still opens; an unknown type would
-      // render as nothing at all.
+      // With no usable declared type, the FILE decides - this record is a PNG. Falling straight to
+      // 'document' hung a picture in the chat as a file row, which is how a synced generated image
+      // arrived. An unknown type would render as nothing at all, so there is still always a fallback.
       expect(attachmentsOn('chat-7', 'message-1')[0].type).toBe(expected);
+    });
+
+    it('falls back to a document when the file is not one it can show', () => {
+      useChatStore.setState({ conversations: [conversation()] });
+
+      materializeSharedFile(
+        record({
+          kind: 'message_attachment',
+          conversationId: 'chat-7',
+          messageId: 'message-1',
+          mimeType: 'application/pdf',
+          metadataJson: JSON.stringify({}),
+        }),
+      );
+
+      expect(attachmentsOn('chat-7', 'message-1')[0].type).toBe('document');
     });
 
     it.each([

@@ -118,12 +118,13 @@ describe('what the phone remembers about ambient sharing', () => {
       ).toBe(true);
     });
 
-    it('skips rather than queues, until the user asks for a queue', async () => {
+    it('queues for a device that is away, rather than dropping the file', async () => {
       const loaded = await new AmbientShareStateStore().load(preferences());
 
-      // Queuing means holding files for a device that is away, which is storage the user did not ask for. The
-      // safe migration is to skip.
-      expect(loaded.policy.offlineBehavior).toBe('skip');
+      // A device that was asleep when the file was made is the normal case, not a reason to drop it.
+      // Skipping made the outcome depend on which device happened to be awake, which nobody can
+      // predict or check afterwards.
+      expect(loaded.policy.offlineBehavior).toBe('queue');
     });
 
     it('has nothing waiting and nothing already decided', async () => {
@@ -210,7 +211,7 @@ describe('what the phone remembers about ambient sharing', () => {
       expect(
         loaded.policy.rules.find(rule => rule.source === 'screenshot')?.mode,
       ).toBe('auto');
-      expect(loaded.policy.offlineBehavior).toBe('skip');
+      expect(loaded.policy.offlineBehavior).toBe('queue');
     });
 
     it.each([
