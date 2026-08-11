@@ -95,6 +95,10 @@ describe('making a transferred file appear in the app', () => {
           prompt: 'a lighthouse at dusk',
           negativePrompt: 'daylight',
           imagePath: '/docs/shared_files/lighthouse.png',
+          // The name the MESH knows, which is deliberately not this path's basename. Deriving it from
+          // the path put the local `<syncId>-` storage prefix onto the wire, so the name grew another
+          // syncId on every hop.
+          fileName: 'a lighthouse at dusk.png',
           width: 768,
           height: 512,
           steps: 24,

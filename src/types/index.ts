@@ -353,6 +353,16 @@ export interface GeneratedImage {
   prompt: string;
   negativePrompt?: string;
   imagePath: string;
+  /**
+   * The file's own name, as every device knows it. NEVER derived from `imagePath`.
+   *
+   * A received file is stored under `<syncId>-<name>` so two files with one name cannot collide, and
+   * that is a LOCAL convention. Taking the portable name from the local path let the convention onto
+   * the wire, so the name gained another syncId on every hop - `<id>-<id>-img.png` - until it would
+   * have passed what a filesystem accepts. Message attachments always carried this; generated images
+   * did not, which is why only they grew.
+   */
+  fileName?: string;
   width: number;
   height: number;
   steps: number;
