@@ -11,7 +11,6 @@
   ],
   "ignoreBinaries": [
     "swiftlint",
-    "maestro",
     "xcpretty",
     "xcrun"
   ],

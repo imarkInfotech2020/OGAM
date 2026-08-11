@@ -417,14 +417,6 @@ OffgridMobile/
 │   ├── specs/                           # Behavior specifications (YAML)
 │   └── utils/                           # Test helpers, factories & spotlight mocks
 │
-├── .maestro/                            # E2E tests (Maestro framework)
-│   ├── E2E_TESTING.md                   # E2E testing guide
-│   ├── flows/p0/                        # 5 critical-path E2E flows (app launch, text/image gen, stop gen)
-│   ├── flows/p1/                        # 4 important-path flows (attachments, retry)
-│   ├── flows/p2/                        # 4 model management flows (download, uninstall, selection, unload)
-│   ├── flows/p3/                        # 3 image model management flows
-│   └── utils/
-│
 ├── docs/                                # Documentation
 │   ├── ARCHITECTURE.md                  # System architecture & build guide
 │   ├── PRIVACY_POLICY.md               # Privacy policy
@@ -2025,49 +2017,9 @@ React Native Testing Library tests:
 - `navigation/AppNavigator.test.tsx`
 - `hooks/useFocusTrigger.test.ts`
 
-### E2E Tests (Maestro, `.maestro/`)
+### Key testIDs Required
 
-**Configuration:** App ID `ai.offgridmobile`, 30-second default timeout, screenshots on failure.
-
-#### E2E Flows by Priority (16 flows across 4 tiers)
-
-**P0 — Critical Path (5 flows)**
-
-| Flow | File | What It Tests |
-|------|------|---------------|
-| Model Setup | `p0/00-setup-model.yaml` | Model setup utility for other tests |
-| App Launch | `p0/01-app-launch.yaml` | Launch → loading disappears → home screen visible |
-| Text Generation | `p0/02-text-generation.yaml` | Home → new chat → type message → send → assistant responds |
-| Stop Generation | `p0/03-stop-generation.yaml` | Send message → tap stop during streaming → generation halts |
-| Image Generation | `p0/04-image-generation.yaml` | Image generation + auto-download |
-
-**P1 — Important Path (4 flows)**
-
-| Flow | File | What It Tests |
-|------|------|---------------|
-| Document Attachment | `p1/06a-document-attachment.yaml` | Attach document to chat |
-| Image Attachment | `p1/06b-image-attachment.yaml` | Attach image to chat |
-| Text Gen Full | `p1/06c-text-generation-full.yaml` | Full text generation with attachments |
-| Text Gen Retry | `p1/06d-text-generation-retry.yaml` | Retry/regenerate text generation |
-
-**P2 — Model Management (4 flows)**
-
-| Flow | File | What It Tests |
-|------|------|---------------|
-| Model Uninstall | `p2/05a-model-uninstall.yaml` | Model deletion |
-| Model Download | `p2/05b-model-download.yaml` | Models screen → trigger download → progress → complete |
-| Model Selection | `p2/05b-model-selection.yaml` | Model switching between downloaded models |
-| Model Unload | `p2/05c-model-unload.yaml` | Model unloading from memory |
-
-**P3 — Image Model Management (3 flows)**
-
-| Flow | File | What It Tests |
-|------|------|---------------|
-| Image Model Uninstall | `p3/07a-image-model-uninstall.yaml` | Image model deletion |
-| Image Model Download | `p3/07b-image-model-download.yaml` | Image model download |
-| Image Model Activate | `p3/07c-image-model-set-active.yaml` | Image model activation |
-
-#### Key testIDs Required
+These are the UI-layer anchors the Jest + RNTL integration tests assert against.
 
 | Area | testIDs |
 |------|---------|
@@ -2081,8 +2033,6 @@ React Native Testing Library tests:
 **Test commands:**
 ```bash
 npm run test              # Jest unit/integration/contract tests
-npm run test:e2e          # All P0 Maestro flows
-npm run test:e2e:single   # Single Maestro flow
 ```
 
 ---
