@@ -108,7 +108,17 @@ else
     # Keep package-lock's top-level version in step if present (no full reinstall).
     [ -f package-lock.json ] && node -e "const fs=require('fs'),l=require('./package-lock.json');l.version='${TARGET_VERSION}';if(l.packages&&l.packages['']){l.packages[''].version='${TARGET_VERSION}';}fs.writeFileSync('./package-lock.json',JSON.stringify(l,null,2)+'\n')" || true
     git add package.json package-lock.json 2>/dev/null || git add package.json
-    git commit -m "chore(release): ${TARGET_VERSION}"
+    # uat.sh now cuts every beta at its OWN version and commits package.json with it, so by the time
+    # a beta is promoted the number is usually ALREADY correct on the tested commit and there is
+    # nothing to commit. `git commit` exits non-zero on an empty index, which under `set -e` would
+    # abort the promote before it reached the stores. The tag is the point of this step, not the
+    # commit: with nothing to change, v<version> lands directly on the tested bytes, which is
+    # strictly closer to "promote what was tested" than a commit on top of them.
+    if git diff --cached --quiet; then
+      info "package.json is already ${TARGET_VERSION} on the tested commit - tagging those bytes as-is."
+    else
+      git commit -m "chore(release): ${TARGET_VERSION}"
+    fi
     git tag "v${TARGET_VERSION}"
   else
     warn "Tag v${TARGET_VERSION} exists locally but NOT on origin - a prior run's push failed. Re-attempting the push (idempotent)."
