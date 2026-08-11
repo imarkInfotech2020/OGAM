@@ -30,9 +30,12 @@ if ! output=$(run_sonar "$@" 2>&1); then
   # Analysis), so a local/manual scan is best-effort and must NEVER block a push. Skip (not
   # fail) on the known can't-run-locally cases: automatic-analysis is on, OR the token is
   # read-only / the project isn't manually scannable with it ("Not authorized or project not
-  # found" — what a local scan gets when Automatic Analysis owns the project). Any OTHER
-  # scanner error still hard-fails.
-  if echo "$output" | grep -qE "running manual analysis while Automatic Analysis is enabled|Not authorized or project not found"; then
+  # found" — what a local scan gets when Automatic Analysis owns the project), OR the scanner
+  # refuses to run on this machine's JDK at all ("Java 17 is not supported. Please upgrade to
+  # Java 21 or newer" — the server raised the scanner's Java floor, so the bundled npm scanner
+  # cannot start until the JDK is upgraded; that is this Mac's toolchain, not the code being
+  # pushed). Any OTHER scanner error still hard-fails.
+  if echo "$output" | grep -qE "running manual analysis while Automatic Analysis is enabled|Not authorized or project not found|Java [0-9]+ is not supported"; then
     echo "Skipping local Sonar scan — analysis runs server-side (SonarCloud Automatic Analysis) on push."
     exit 0
   fi
