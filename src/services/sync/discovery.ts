@@ -27,6 +27,8 @@ export interface BuildDiscoveryArgs {
     Partial<Pick<SyncEngine, 'retryMembershipRevocation'>>;
   localDevice: DeviceInfo;
   getSharedSecret: (deviceId: string) => string | undefined;
+  /** Whether storage HOLDS a credential, asked as a plain lookup. */
+  hasCredential?: (deviceId: string) => boolean;
   getMembershipId?: (deviceId: string) => string | undefined;
   /** A new (unpaired) device appeared — surface it for the pairing UI. */
   onDiscovered?: (device: DiscoveredDevice) => void;
@@ -71,6 +73,7 @@ export function buildDiscovery(
       ? {}
       : { discoverable: args.discoverable }),
     getSharedSecret: args.getSharedSecret,
+    ...(args.hasCredential ? { hasCredential: args.hasCredential } : {}),
     getMembershipId: args.getMembershipId,
     ...(args.admitSilently ? { admitSilently: args.admitSilently } : {}),
     onDiscovered: args.onDiscovered,

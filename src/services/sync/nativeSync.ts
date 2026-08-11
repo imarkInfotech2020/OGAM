@@ -41,6 +41,8 @@ export interface NativeSyncCallbacks {
   getPassphrase?: SyncEngineOptions['getPassphrase'];
   /** Stored shared secret for a device (for silent reconnect). */
   getSharedSecret?: (deviceId: string) => string | undefined;
+  /** Whether storage HOLDS a credential. Never a judgement about whether to use it. */
+  hasCredential?: (deviceId: string) => boolean;
   getMembershipId?: (deviceId: string) => string | undefined;
   pairingEntitlement?: SyncEngineOptions['pairingEntitlement'];
   /** The persisted discoverability choice. Absent means advertise, as it always did. */
@@ -169,6 +171,7 @@ export function createNativeSync(
       ? {}
       : { discoverable: cbs.discoverable }),
     getSharedSecret: cbs.getSharedSecret ?? (() => undefined),
+    ...(cbs.hasCredential ? { hasCredential: cbs.hasCredential } : {}),
     getMembershipId: cbs.getMembershipId,
     // The initiator half. Same resolver the engine answers with.
     ...(cbs.resolveMeshAdmission
