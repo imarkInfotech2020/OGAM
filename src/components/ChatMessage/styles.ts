@@ -145,8 +145,10 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     color: colors.textMuted,
   },
   attachmentImage: {
-    width: 140,
-    height: 140,
+    // Full width of the bubble, with the height following the picture's own shape. A fixed 140 square
+    // left a band of empty bubble beside every image, and cropped anything that was not square.
+    // The ratio comes from the attachment, because only it knows its shape.
+    width: '100%' as const,
     borderRadius: 12,
   },
 });
