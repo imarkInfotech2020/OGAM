@@ -543,23 +543,6 @@ jest.mock('react-native-zip-archive', () => ({
 // Mock react-native-vector-icons
 jest.mock('react-native-vector-icons/Feather', () => 'Icon');
 
-// react-native-spotlight-tour mock
-jest.mock('react-native-spotlight-tour', () => ({
-  SpotlightTourProvider: ({ children }: { children: React.ReactNode }) => children,
-  AttachStep: ({ children }: { children: React.ReactNode }) => children,
-  useSpotlightTour: () => ({
-    start: jest.fn(),
-    stop: jest.fn(),
-    next: jest.fn(),
-    previous: jest.fn(),
-    goTo: jest.fn(),
-    current: 0,
-    status: 'idle',
-    pause: jest.fn(),
-    resume: jest.fn(),
-  }),
-}));
-
 // react-native-screens mock — the native Screen/ScreenStack components are undefined in jest, which
 // crashes @react-navigation/native-stack ($$typeof undefined). Map them to plain Views so a REAL
 // NavigationContainer + navigator mounts and real cross-screen navigation can be driven in tests.
