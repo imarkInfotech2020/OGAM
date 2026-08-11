@@ -19,6 +19,8 @@ import type {
   DeviceCap,
   SyncDiscoverabilityHealthInput,
   SyncEngineOptions,
+  PeerLink,
+  PeerLinkEvent,
 } from '@offgrid/sync';
 import type { RnTcpModule } from '@offgrid/sync/rn';
 import type { RnZeroconf } from '@offgrid/sync/rn-discovery';
@@ -101,6 +103,10 @@ export interface NativeSync {
   send(deviceId: string, message: Message): boolean;
   sendApp(deviceId: string, channel: string, data: unknown): boolean;
   isPaired(deviceId: string): boolean;
+  /** What this device believes about one peer. The host renders it; it never derives it. */
+  peerLink(deviceId: string): PeerLink;
+  /** Report a fact about a peer. The host never decides what it means. */
+  notePeerLink(deviceId: string, event: PeerLinkEvent): void;
 }
 
 /** Construct (but don't start) the mobile Sync stack for a given local device. */
@@ -374,6 +380,8 @@ export function createNativeSync(
     sendApp: (deviceId, channel, data) =>
       engine.sendApp(deviceId, channel, data),
     isPaired: deviceId => engine.isPaired(deviceId),
+    peerLink: deviceId => orchestrator.peerLink(deviceId),
+    notePeerLink: (deviceId, event) => orchestrator.notePeerLink(deviceId, event),
   };
 }
 
