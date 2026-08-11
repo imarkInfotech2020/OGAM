@@ -28,6 +28,14 @@ import { IosProximityAdapter } from './nativeProximity';
 import { nativeSyncLanAddress } from './nativeBlobChannel';
 import logger from '../../utils/logger';
 
+/**
+ * How often to check whether this device's own address has changed.
+ *
+ * One cheap native call, and it does work only when the answer differs. Often enough that walking into
+ * a different building settles in seconds, instead of waiting for the user to pull to refresh.
+ */
+const LOCAL_ADDRESS_POLL_MS = 15_000;
+
 export interface NativeSyncCallbacks {
   /** Passphrase for an INBOUND pairing (UI prompt). Return null to refuse. */
   getPassphrase?: SyncEngineOptions['getPassphrase'];
@@ -205,6 +213,7 @@ export function createNativeSync(
   });
   let active = false;
   let rescanTask: Promise<void> | null = null;
+  let addressWatch: ReturnType<typeof setInterval> | null = null;
 
   async function refreshLocalNetworkAddress(): Promise<boolean> {
     let nextHost = '';
@@ -222,6 +231,51 @@ export function createNativeSync(
     localDevice.host = nextHost;
     logger.log(`[SYNC] local LAN address=${nextHost || 'unavailable'}`);
     return true;
+  }
+
+  /**
+   * The one response to "this device's address may have changed": ask, and re-advertise if it did.
+   *
+   * Written once because it was written twice - a rescan did both, a rename did only half - and the
+   * half that gets forgotten is the re-advertisement, which is the one peers depend on.
+   */
+  async function reactToLocalAddress(): Promise<void> {
+    if (await refreshLocalNetworkAddress()) {
+      await orchestrator.refreshAdvertisement();
+    }
+  }
+
+  /**
+   * Notice a network change without being told.
+   *
+   * The address was only ever re-read when the USER did something - a pull to refresh, a rename, a
+   * discoverability toggle - so carrying a phone from one network to another left it advertising the
+   * address it used to have, and peers dialling a house it had moved out of. A phone that moved from
+   * 192.168.1.38 to 192.168.1.26 kept being dialled at .38, which by then belonged to somebody else,
+   * so the dial was refused and the pair stayed down with nothing reporting why.
+   *
+   * A poll rather than a platform network event: reading this device's own address is one cheap native
+   * call, and every platform already answers it, so there is nothing to add per platform and nothing
+   * to keep in step. Only the CHANGE does any work.
+   */
+  function watchLocalAddress(): void {
+    if (addressWatch) return;
+    addressWatch = setInterval(() => {
+      if (!active) return;
+      void reactToLocalAddress().catch((error: unknown) => {
+        logger.warn(
+          `[SYNC] could not follow this device's address change: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+    }, LOCAL_ADDRESS_POLL_MS);
+  }
+
+  function stopWatchingLocalAddress(): void {
+    if (!addressWatch) return;
+    clearInterval(addressWatch);
+    addressWatch = null;
   }
 
   function healthSnapshot(): SyncDiscoverabilityHealthInput {
@@ -249,6 +303,7 @@ export function createNativeSync(
         await refreshLocalNetworkAddress();
         await orchestrator.start();
         active = true;
+        watchLocalAddress();
         publishHealth();
         logger.log(
           `[SYNC] started id=${localDevice.id} port=${localDevice.port} platform=${localDevice.platform}`,
@@ -262,6 +317,7 @@ export function createNativeSync(
       active = false;
       await rescanTask?.catch(() => undefined);
       await orchestrator.stop();
+      stopWatchingLocalAddress();
       await engine.stop();
       discoveredDeviceIds.clear();
       publishHealth();
@@ -271,9 +327,7 @@ export function createNativeSync(
       if (!active) throw new Error('Sync is not running.');
       if (rescanTask) return rescanTask;
       rescanTask = (async () => {
-        if (await refreshLocalNetworkAddress()) {
-          await orchestrator.refreshAdvertisement();
-        }
+        await reactToLocalAddress();
         await orchestrator.rescan();
         logger.log('[SYNC] discovery rescanned');
       })();
