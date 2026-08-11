@@ -108,6 +108,8 @@ describe('sharing a file to another device without being asked', () => {
     await ambientShareService.start(PREFERENCES, {
       destinations: () => destinations,
       getFile: (syncId: string) => files.get(syncId),
+      // Made on this device, so there is no origin to keep it away from.
+      originOf: () => undefined,
       scheduleDelivery: (
         deviceId: string,
         file: SharedFileDescriptor,

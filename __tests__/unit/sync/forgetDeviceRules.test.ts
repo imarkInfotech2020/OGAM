@@ -37,6 +37,8 @@ beforeEach(async () => {
   await ambientShareService.start(PREFERENCES, {
     destinations: () => [{ deviceId: THE_PHONE, deviceName: "Mac's iPhone", connected: true }],
     getFile: () => undefined,
+    // Made on this device, so there is no origin to keep it away from.
+    originOf: () => undefined,
     scheduleDelivery: () => {}
   } as never);
 });
