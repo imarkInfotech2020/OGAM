@@ -47,8 +47,8 @@ import {
   scanForUntrackedTextModels,
   scanForUntrackedImageModels,
   deleteOrphanedFile,
-  importLocalModel,
-} from '../../../../src/services/modelManager/scan';
+  } from '../../../../src/services/modelManager/scan';
+import { importLocalModel } from '../../../../src/services/modelManager/importLocalModel';
 import * as storage from '../../../../src/services/modelManager/storage';
 import { copyFileWithProgress } from '../../../../src/services/modelManager/copyFile';
 

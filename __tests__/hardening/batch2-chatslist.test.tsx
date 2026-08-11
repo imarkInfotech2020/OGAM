@@ -17,6 +17,11 @@
  * services barrel, and vector icons — none of which is the logic under test.
  */
 
+import {
+  formatClockTime,
+  formatShortDate,
+  formatWeekday,
+} from '../../src/utils/localTime';
 import React from 'react';
 import { render, fireEvent, within } from '@testing-library/react-native';
 import { useAppStore } from '../../src/stores/appStore';
@@ -84,6 +89,8 @@ jest.mock('../../src/components/CustomAlert', () => ({
 jest.mock('../../src/services', () => ({
   onnxImageGeneratorService: { deleteGeneratedImage: jest.fn(() => Promise.resolve()) },
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../utils/activeModelServiceStub').activeModelSelectionStub(),
     loadTextModel: jest.fn(() => Promise.resolve()),
     loadImageModel: jest.fn(() => Promise.resolve()),
     unloadTextModel: jest.fn(() => Promise.resolve()),
@@ -121,13 +128,19 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
   });
 
   // Case 26: today's conversation shows a clock time, NOT a date.
-  it('case26: shows a clock time (HH:MM) for a conversation from today', () => {
+  // These used to build their expected string with toLocaleTimeString / toLocaleDateString. The app
+  // deliberately stopped using those: Hermes ships without ICU data in most React Native builds, so they
+  // silently answered in UTC - a message written at 10:12 in Delhi read "4:42 AM" on the phone while the
+  // Mac beside it said 10:12. src/utils/localTime.ts replaced them with methods that are always the
+  // device's own zone, so asserting through those same functions is the only way this test agrees with
+  // the app on a machine in any timezone - and it fails if the formatting is changed in one place only.
+  it('case26: shows a clock time for a conversation from today', () => {
     const now = new Date();
     const conv = createConversation({ title: 'Today Chat', updatedAt: now.toISOString() });
     useChatStore.setState({ conversations: [conv] });
 
     const { getByText } = render(<ChatsListScreen />);
-    const expectedClock = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const expectedClock = formatClockTime(now);
     expect(getByText(expectedClock)).toBeTruthy();
     // it is NOT a weekday or month/day string
     expect(expectedClock).toMatch(/\d/);
@@ -141,7 +154,7 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
     useChatStore.setState({ conversations: [conv] });
 
     const { getByText } = render(<ChatsListScreen />);
-    const expectedWeekday = threeDaysAgo.toLocaleDateString([], { weekday: 'short' });
+    const expectedWeekday = formatWeekday(threeDaysAgo);
     expect(getByText(expectedWeekday)).toBeTruthy();
     // guard: a weekday short name is not a HH:MM clock
     expect(expectedWeekday).not.toMatch(/^\d{1,2}:\d{2}/);
@@ -155,7 +168,7 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
     useChatStore.setState({ conversations: [conv] });
 
     const { getByText } = render(<ChatsListScreen />);
-    const expectedMonthDay = twoWeeksAgo.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const expectedMonthDay = formatShortDate(twoWeeksAgo);
     expect(getByText(expectedMonthDay)).toBeTruthy();
   });
 

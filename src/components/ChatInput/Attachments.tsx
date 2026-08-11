@@ -1,10 +1,25 @@
 import React, { useState, useRef } from 'react';
 
-let _attachmentIdSeq = 0;
-const nextAttachmentId = () => `${Date.now()}-${(++_attachmentIdSeq).toString(36)}`;
-import { View, Text, Image, ScrollView, TouchableOpacity, Platform, ActionSheetIOS } from 'react-native';
-import { launchImageLibrary, launchCamera, Asset } from 'react-native-image-picker';
-import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
+import {
+  View,
+  Text,
+  Image,
+  ScrollView,
+  TouchableOpacity,
+  Platform,
+  ActionSheetIOS,
+} from 'react-native';
+import {
+  launchImageLibrary,
+  launchCamera,
+  Asset,
+} from 'react-native-image-picker';
+import {
+  pick,
+  types,
+  isErrorWithCode,
+  errorCodes,
+} from '@react-native-documents/picker';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { MediaAttachment } from '../../types';
@@ -13,6 +28,7 @@ import { audioSessionManager } from '../../services/audioSessionManager';
 import { AlertState, showAlert, hideAlert } from '../CustomAlert';
 import { createStyles } from './styles';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
+import { generateId } from '../../utils/generateId';
 
 // ─── useAttachments hook ──────────────────────────────────────────────────────
 
@@ -24,7 +40,7 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     const newAttachments: MediaAttachment[] = assets
       .filter(asset => asset.uri)
       .map(asset => ({
-        id: nextAttachmentId(),
+        id: generateId(),
         type: 'image' as const,
         uri: asset.uri!,
         mimeType: asset.type,
@@ -45,8 +61,14 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       // collides with the native picker and hangs the app (device 2026-07-15). No-op on
       // Android and when no session is active.
       await audioSessionManager.deactivate();
-      const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
-      if (result.assets && result.assets.length > 0) addAttachments(result.assets);
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      });
+      if (result.assets && result.assets.length > 0)
+        addAttachments(result.assets);
     } catch (_pickError) {
       // no-op: image picker already reports failure to the user via native UI
     } finally {
@@ -61,8 +83,14 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       // Release the iOS audio session first (see pickFromLibrary): the camera grabs audio
       // hardware and collides with an active voice-mode session. No-op on Android.
       await audioSessionManager.deactivate();
-      const result = await launchCamera({ mediaType: 'photo', quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
-      if (result.assets && result.assets.length > 0) addAttachments(result.assets);
+      const result = await launchCamera({
+        mediaType: 'photo',
+        quality: 0.8,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      });
+      if (result.assets && result.assets.length > 0)
+        addAttachments(result.assets);
     } catch (_cameraError) {
       // no-op: camera picker already reports failure to the user via native UI
     } finally {
@@ -74,21 +102,34 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
   const handlePickImage = () => {
     if (Platform.OS === 'ios') {
       ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Camera', 'Photo Library', 'Cancel'], cancelButtonIndex: 2 },
-        (index) => {
+        {
+          options: ['Camera', 'Photo Library', 'Cancel'],
+          cancelButtonIndex: 2,
+        },
+        index => {
           if (index === 0) pickFromCamera();
           else if (index === 1) pickFromLibrary();
         },
       );
     } else {
-      setAlertState(showAlert(
-        'Add Image',
-        'Choose image source',
-        [
-          { text: 'Camera', onPress: () => { setAlertState(hideAlert()); setTimeout(pickFromCamera, 300); } },
-          { text: 'Photo Library', onPress: () => { setAlertState(hideAlert()); setTimeout(pickFromLibrary, 300); } },
-        ],
-      ));
+      setAlertState(
+        showAlert('Add Image', 'Choose image source', [
+          {
+            text: 'Camera',
+            onPress: () => {
+              setAlertState(hideAlert());
+              setTimeout(pickFromCamera, 300);
+            },
+          },
+          {
+            text: 'Photo Library',
+            onPress: () => {
+              setAlertState(hideAlert());
+              setTimeout(pickFromLibrary, 300);
+            },
+          },
+        ]),
+      );
     }
   };
 
@@ -96,31 +137,49 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     if (isPickingRef.current) return;
     isPickingRef.current = true;
     try {
-      const result = await pick({ type: [types.allFiles], allowMultiSelection: false });
+      const result = await pick({
+        type: [types.allFiles],
+        allowMultiSelection: false,
+      });
       const file = result[0];
       if (!file) return;
       const fileName = file.name || 'document';
       if (!documentService.isSupported(fileName)) {
-        setAlertState(showAlert(
-          'Unsupported File',
-          `"${fileName}" is not supported. Supported types: txt, md, csv, json, pdf, and code files.`,
-          [{ text: 'OK' }],
-        ));
+        setAlertState(
+          showAlert(
+            'Unsupported File',
+            `"${fileName}" is not supported. Supported types: txt, md, csv, json, pdf, and code files.`,
+            [{ text: 'OK' }],
+          ),
+        );
         return;
       }
-      const attachment = await documentService.processDocumentFromPath(file.uri, fileName);
+      const attachment = await documentService.processDocumentFromPath(
+        file.uri,
+        fileName,
+      );
       if (attachment) setAttachments(prev => [...prev, attachment]);
     } catch (pickError: any) {
-      if (isErrorWithCode(pickError) && pickError.code === errorCodes.OPERATION_CANCELED) return;
+      if (
+        isErrorWithCode(pickError) &&
+        pickError.code === errorCodes.OPERATION_CANCELED
+      )
+        return;
       if (isPickerStuck(pickError)) {
-        setAlertState(showAlert(
-          'File Picker Unavailable',
-          "The file picker isn't responding. Please close and reopen the app, then try again.",
-          [{ text: 'OK' }],
-        ));
+        setAlertState(
+          showAlert(
+            'File Picker Unavailable',
+            "The file picker isn't responding. Please close and reopen the app, then try again.",
+            [{ text: 'OK' }],
+          ),
+        );
         return;
       }
-      setAlertState(showAlert('Error', pickError.message || 'Failed to read document', [{ text: 'OK' }]));
+      setAlertState(
+        showAlert('Error', pickError.message || 'Failed to read document', [
+          { text: 'OK' },
+        ]),
+      );
     } finally {
       isPickingRef.current = false;
     }
@@ -133,7 +192,7 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
     transcription?: string;
   }) => {
     const attachment: MediaAttachment = {
-      id: nextAttachmentId(),
+      id: generateId(),
       type: 'audio',
       uri: audio.uri,
       audioFormat: audio.audioFormat,
@@ -142,14 +201,23 @@ export function useAttachments(setAlertState: (state: AlertState) => void) {
       // Reuse `textContent` (the attachment's associated text) for the whisper
       // transcription. This is display-only for audio: llmMessages sends the
       // transcription to the model via `message.content`, never from here.
-      ...(audio.transcription?.trim() ? { textContent: audio.transcription.trim() } : {}),
+      ...(audio.transcription?.trim()
+        ? { textContent: audio.transcription.trim() }
+        : {}),
     };
     setAttachments(prev => [...prev, attachment]);
   };
 
   const clearAttachments = () => setAttachments([]);
 
-  return { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument, addAudioAttachment };
+  return {
+    attachments,
+    removeAttachment,
+    clearAttachments,
+    handlePickImage,
+    handlePickDocument,
+    addAudioAttachment,
+  };
 }
 
 // ─── AttachmentPreview component ─────────────────────────────────────────────
@@ -163,7 +231,11 @@ interface AttachmentPreviewProps {
   onImagePress?: (uri: string) => void;
 }
 
-export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({ attachments, onRemove, onImagePress }) => {
+export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
+  attachments,
+  onRemove,
+  onImagePress,
+}) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
@@ -178,7 +250,11 @@ export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({ attachment
       showsHorizontalScrollIndicator={false}
     >
       {attachments.map(attachment => (
-        <View key={attachment.id} testID={`attachment-preview-${attachment.id}`} style={styles.attachmentPreview}>
+        <View
+          key={attachment.id}
+          testID={`attachment-preview-${attachment.id}`}
+          style={styles.attachmentPreview}
+        >
           {attachment.type === 'image' ? (
             <TouchableOpacity
               testID={`attachment-image-${attachment.id}`}
@@ -192,12 +268,20 @@ export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({ attachment
               />
             </TouchableOpacity>
           ) : attachment.type === 'audio' ? (
-            <View testID={`audio-preview-${attachment.id}`} style={styles.documentPreview}>
+            <View
+              testID={`audio-preview-${attachment.id}`}
+              style={styles.documentPreview}
+            >
               <Icon name="mic" size={24} color={colors.primary} />
-              <Text style={styles.documentName} numberOfLines={2}>Voice</Text>
+              <Text style={styles.documentName} numberOfLines={2}>
+                Voice
+              </Text>
             </View>
           ) : (
-            <View testID={`document-preview-${attachment.id}`} style={styles.documentPreview}>
+            <View
+              testID={`document-preview-${attachment.id}`}
+              style={styles.documentPreview}
+            >
               <Icon name="file-text" size={24} color={colors.primary} />
               <Text style={styles.documentName} numberOfLines={2}>
                 {attachment.fileName || 'Document'}

@@ -24,7 +24,7 @@ jest.mock('@react-navigation/native', () => ({
 describe('T010 (rendered) — scanned/no-text-layer PDF must show a clear message (DEV)', () => {
   it('the extraction-failure alert names the scanned/no-text-layer cause, not a vague message', async () => {
     const boundary = installNativeBoundary({ fs: true, ram: { platform: 'ios', totalBytes: 8 * 1024 * MB, availBytes: 6 * 1024 * MB } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const rtl = requireRTL();
     const RN = require('react-native');
@@ -34,7 +34,7 @@ describe('T010 (rendered) — scanned/no-text-layer PDF must show a clear messag
     const picker = require('@react-native-documents/picker');
     const { useProjectStore } = require('../../../src/stores/projectStore');
     const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     boundary.fs!.seedFile('/docs/scan.pdf', 200 * 1024); // a small scanned PDF (under 5MB)
     picker.pick.mockResolvedValue([{ uri: 'file:///docs/scan.pdf', name: 'scan.pdf', size: 200 * 1024 }]);

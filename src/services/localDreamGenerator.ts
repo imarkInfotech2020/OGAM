@@ -156,7 +156,10 @@ class LocalDreamGeneratorService {
       steps: params.steps || 8,
       seed: result.seed,
       modelId: '',
-      createdAt: Date.now().toString(),
+      // ISO-8601, the one form every consumer of this field can read - the gallery's date, and the
+      // sync descriptor that a peer validates with Date.parse. Epoch milliseconds as text passes the
+      // `string` type and fails every reader.
+      createdAt: new Date().toISOString(),
     };
   }
 

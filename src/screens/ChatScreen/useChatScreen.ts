@@ -3,10 +3,12 @@ import { AppState } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
+import { useSyncIdentityStore } from '../../stores/syncIdentityStore';
+import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
+import { useActiveTextModel } from '../../hooks/useActiveTextModel';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
-import logger from '../../utils/logger';
 import {
-  llmService, generationService, imageGenerationService, activeModelService,
+  llmService, generationService, imageGenerationService,
   ImageGenerationState, hardwareService, QueuedMessage,
   contextCompactionService,
 } from '../../services';
@@ -15,7 +17,8 @@ import { generationSession } from '../../services/generationSession';
 import { useGeneratingConversationId } from '../../hooks/useGenerationSession';
 import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel } from '../../types';
 import { RootStackParamList } from '../../navigation/types';
-import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, initiateModelLoad, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
+import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
+import { reloadTextModel } from './reloadTextModel';
 import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, dispatchGenerationFn } from './useChatGenerationActions';
 import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
 import { getDisplayMessages } from './types';
@@ -79,6 +82,10 @@ export function computePendingSettings(
     changed(settings.inferenceBackend, loadedSettings.inferenceBackend) ||
     changed(settings.gpuLayers, loadedSettings.gpuLayers) ||
     changed(settings.flashAttn, loadedSettings.flashAttn) ||
+    // Speculative decoding is fixed when llama.cpp builds the graph, so it takes effect on the NEXT
+    // load and not before. Without it here, turning MTP on in settings changed nothing and said
+    // nothing — the next reply came back at the same tok/s and the reload banner never appeared.
+    changed(settings.speculativeDecoding, loadedSettings.speculativeDecoding) ||
     (loadedSettings.cacheType !== undefined && effCache !== loadedEffCache)
   );
 }
@@ -157,7 +164,7 @@ export const useChatScreen = () => {
 
   const {
     activeConversationId, conversations, createConversation, addMessage,
-    updateMessageContent, deleteMessagesAfter, streamingMessage, streamingReasoningContent,
+    updateMessageContent, updateMessageTurnKind, deleteMessagesAfter, streamingMessage, streamingReasoningContent,
     streamingForConversationId, isStreaming, isThinking, clearStreamingMessage,
     deleteConversation, setActiveConversation, setConversationProject,
   } = useChatStore();
@@ -166,34 +173,10 @@ export const useChatScreen = () => {
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
 
-  // Compute active model from either local or remote source
-  const activeModelInfo = useMemo((): ActiveModelInfo => {
-    // Check for remote model first
-    if (activeServerId && activeRemoteTextModelId) {
-      const serverModels = discoveredModels[activeServerId] || [];
-      const remoteModel = serverModels.find(m => m.id === activeRemoteTextModelId);
-      if (remoteModel) {
-        return {
-          isRemote: true,
-          model: remoteModel,
-          modelId: remoteModel.id,
-          modelName: remoteModel.name,
-        };
-      }
-      logger.warn('[ChatScreen] Remote model not found:', activeServerId, activeRemoteTextModelId);
-    }
-    // Fall back to local model
-    const localModel = downloadedModels.find(m => m.id === activeModelId);
-    if (localModel) {
-      return {
-        isRemote: false,
-        model: localModel,
-        modelId: localModel.id,
-        modelName: localModel.name,
-      };
-    }
-    return { isRemote: false, model: null, modelId: null, modelName: 'Unknown' };
-  }, [activeServerId, activeRemoteTextModelId, discoveredModels, activeModelId, downloadedModels]);
+  // Which text model is active, from the ONE hook that answers it (remote preferred over local, local
+  // resolved by activeModelService). This screen used to re-derive it with its own copy of the rule,
+  // which is how it ended up refusing to send to a model the engine had loaded.
+  const activeModelInfo: ActiveModelInfo = useActiveTextModel();
 
   // activeModel is for LOCAL models only (for file path, memory checks, etc.)
   const activeModel = activeModelInfo.isRemote ? undefined : (activeModelInfo.model as DownloadedModel | undefined);
@@ -231,6 +214,7 @@ export const useChatScreen = () => {
     ensureModelLoaded: async (onLoadedResume?: () => void) => ensureModelLoadedFn(modelDeps, onLoadedResume),
     ensureTextModelForChat: () => ensureTextModelForChatFn({ setShowModelSelector, setLoadingModel, setIsModelLoading }),
     setPendingMessage: (text: string, attachments?: MediaAttachment[]) => { pendingMessageRef.current = { text, attachments }; },
+    updateMessageTurnKind,
     createConversation,
     pendingProjectId,
   };
@@ -296,7 +280,10 @@ export const useChatScreen = () => {
   useChatModelStateSync({ activeModelInfo, activeModelId, activeModel, modelDeps, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking });
 
   const isGeneratingForThisConversation = generatingConversationId != null && generatingConversationId === activeConversationId;
-  const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation, isModelLoading, loadingModelName: loadingModel?.name, isGeneratingForThisConversation });
+  // Replies generating on paired devices. Empty unless Pro's chat-stream service is running.
+  const remotePreviews = useRemoteChatStreamPreviews(activeConversationId);
+  const localDeviceId = useSyncIdentityStore(s => s.localDeviceId);
+  const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation, isModelLoading, loadingModelName: loadingModel?.name, isGeneratingForThisConversation, remotePreviews, localDeviceId });
 
   useEffect(() => {
     const prev = lastMessageCountRef.current, curr = displayMessages.length;
@@ -332,23 +319,26 @@ export const useChatScreen = () => {
     useAppStore.getState().updateSettings({ enabledTools: cur.includes(toolId) ? cur.filter((id: string) => id !== toolId) : [...cur, toolId] });
   };
   // Whether settings changed since the model was loaded (drives the reload banner).
-  const hasPendingSettings = computePendingSettings(activeModel?.engine, settings, loadedSettings);
+  //
+  // Gated on there BEING a local model to reload. loadedSettings is persisted, so it outlives the
+  // model: with nothing selected the banner still appeared, and its tap correctly refused
+  // ("[ModelReload] ignored: modelId=none"), which reads as a dead button. One predicate for the
+  // offer and the action, so they cannot disagree. Nothing else consults this flag.
+  const canReloadTextModel = Boolean(activeModelInfo.modelId) && !activeModelInfo.isRemote;
+  const hasPendingSettings =
+    canReloadTextModel && computePendingSettings(activeModel?.engine, settings, loadedSettings);
 
-  const handleReloadTextModel = useCallback(async () => {
-    if (!activeModelInfo.modelId || activeModelInfo.isRemote) return;
-    setShowModelSelector(true);
-    // Unload with keepSelection=true so a failed reload never clears activeModelId
-    // (the default unload cleared it, so an OOM stranded the chat: stuck banner +
-    // wedged send). The unload still nulls loadedTextModelId, so loadTextModel
-    // won't fast-path-skip. The memory gate — including the "Load Anyway" override
-    // — is owned by initiateModelLoad, so reload matches normal load exactly (no
-    // duplicated/stricter check in the view).
-    // activeModelService.unloadTextModel now unloads whichever engine is active (LiteRT or llama)
-    // and no-ops when nothing is loaded — so no engine branch here.
-    await activeModelService.unloadTextModel(true);
-    await initiateModelLoad(modelDeps, false);
+  const handleReloadTextModel = useCallback(
+    () =>
+      reloadTextModel({
+        modelDeps,
+        modelId: activeModelInfo.modelId,
+        isRemote: activeModelInfo.isRemote,
+        setAlertState,
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine]);
+    [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine],
+  );
 
   const handleSend = (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
     handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo });

@@ -140,12 +140,13 @@ jest.mock('../../../src/components/AnimatedEntry', () => ({
   AnimatedEntry: ({ children }: any) => children,
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  SafeAreaView: ({ children, ...props }: any) => {
-    const { View } = require('react-native');
-    return <View {...props}>{children}</View>;
-  },
-}));
+// The library's SHIPPED jest mock, not a hand-rolled SafeAreaView. This file's own stub exported only
+// that one component, so anything in the tree reaching for useSafeAreaInsets (a bottom sheet, for
+// instance) took the whole suite down with "is not a function" - the same trap jest.setup.ts already
+// documents for the navigation container.
+jest.mock('react-native-safe-area-context', () =>
+  require('react-native-safe-area-context/jest/mock').default,
+);
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');

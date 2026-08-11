@@ -25,10 +25,10 @@ describe('happy — delete a conversation via the real swipe gesture', () => {
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Here are some ideas\./)).not.toBeNull(); });
 
     // Go to Home (same store) — the chat shows in Recent, titled from its first message.
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { HomeScreen } = require('../../../src/screens/HomeScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     const home = h.rtl.render(React.createElement(HomeScreen, { navigation: { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} } }));
     await h.rtl.waitFor(() => { expect(home.queryByText('trip planning ideas')).not.toBeNull(); });
 

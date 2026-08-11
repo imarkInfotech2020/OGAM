@@ -12,10 +12,10 @@ import { installNativeBoundary } from '../../harness/nativeBoundary';
 describe('D1 — failed image extraction lost on relaunch (red-flow)', () => {
   it('keeps a failed/incomplete image model visible + retriable after relaunch', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
     const { useDownloadStore } = require('../../../src/stores/downloadStore');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // The image zip downloaded (native 'completed'); a partially-extracted dir sits on disk.
     boundary.download!.seedActive({ downloadId: 'dl-img', fileName: 'anythingv5.zip', modelId: 'anythingv5', modelType: 'image', status: 'completed', bytesDownloaded: 900 * 1024 * 1024, totalBytes: 900 * 1024 * 1024 });

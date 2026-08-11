@@ -6,13 +6,23 @@ import { generateId } from '../utils/generateId';
 import { ragService } from '../services/rag';
 import { useChatStore } from './chatStore';
 import logger from '../utils/logger';
+import {
+  CORE_SYNC_ENTITIES,
+  emitSyncMutation,
+  projectPutMutation,
+} from '../services/sync/mutation';
 
 interface ProjectState {
   projects: Project[];
 
   // Actions
-  createProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => Project;
-  updateProject: (id: string, updates: Partial<Omit<Project, 'id' | 'createdAt'>>) => void;
+  createProject: (
+    project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>,
+  ) => Project;
+  updateProject: (
+    id: string,
+    updates: Partial<Omit<Project, 'id' | 'createdAt'>>,
+  ) => void;
   deleteProject: (id: string) => void;
   getProject: (id: string) => Project | undefined;
   duplicateProject: (id: string) => Project | null;
@@ -24,7 +34,8 @@ const DEFAULT_PROJECTS: Project[] = [
     id: 'default-assistant',
     name: 'General Assistant',
     description: 'A helpful, concise AI assistant for everyday tasks',
-    systemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful. Focus on providing accurate information and solving the user\'s problems efficiently.',
+    systemPrompt:
+      "You are a helpful AI assistant running locally on the user's device. Be concise and helpful. Focus on providing accurate information and solving the user's problems efficiently.",
     icon: '#6366F1', // Indigo
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -88,7 +99,7 @@ export const useProjectStore = create<ProjectState>()(
     (set, get) => ({
       projects: DEFAULT_PROJECTS,
 
-      createProject: (projectData) => {
+      createProject: projectData => {
         const project: Project = {
           ...projectData,
           id: generateId(),
@@ -96,40 +107,58 @@ export const useProjectStore = create<ProjectState>()(
           updatedAt: new Date().toISOString(),
         };
 
-        set((state) => ({
+        set(state => ({
           projects: [...state.projects, project],
         }));
+        emitSyncMutation(projectPutMutation(project));
 
         return project;
       },
 
       updateProject: (id, updates) => {
-        set((state) => ({
-          projects: state.projects.map((project) =>
+        set(state => ({
+          projects: state.projects.map(project =>
             project.id === id
               ? { ...project, ...updates, updatedAt: new Date().toISOString() }
-              : project
+              : project,
           ),
         }));
+        const project = get().projects.find(candidate => candidate.id === id);
+        if (project) emitSyncMutation(projectPutMutation(project));
       },
 
-      deleteProject: (id) => {
-        ragService.deleteProjectDocuments(id).catch((err) => logger.error(`Failed to delete RAG documents for project ${id}`, err));
+      deleteProject: id => {
+        const projectExists = get().projects.some(project => project.id === id);
+        ragService
+          .deleteProjectDocuments(id)
+          .catch(err =>
+            logger.error(
+              `Failed to delete RAG documents for project ${id}`,
+              err,
+            ),
+          );
         // Cascade: unfile the project's chats so none is left pointing at a project that
         // no longer exists (a dangling projectId isn't re-filable and still tripped the
         // KB-tool injection). The project store owns "what happens on delete" (like RAG
         // cleanup above); chatStore owns the conversation mutation.
         useChatStore.getState().unfileConversationsForProject(id);
-        set((state) => ({
-          projects: state.projects.filter((project) => project.id !== id),
+        set(state => ({
+          projects: state.projects.filter(project => project.id !== id),
         }));
+        if (projectExists) {
+          emitSyncMutation({
+            entity: CORE_SYNC_ENTITIES.project,
+            entityId: id,
+            kind: 'delete',
+          });
+        }
       },
 
-      getProject: (id) => {
-        return get().projects.find((project) => project.id === id);
+      getProject: id => {
+        return get().projects.find(project => project.id === id);
       },
 
-      duplicateProject: (id) => {
+      duplicateProject: id => {
         const original = get().getProject(id);
         if (!original) return null;
 
@@ -141,9 +170,10 @@ export const useProjectStore = create<ProjectState>()(
           updatedAt: new Date().toISOString(),
         };
 
-        set((state) => ({
+        set(state => ({
           projects: [...state.projects, duplicate],
         }));
+        emitSyncMutation(projectPutMutation(duplicate));
 
         return duplicate;
       },
@@ -151,6 +181,6 @@ export const useProjectStore = create<ProjectState>()(
     {
       name: 'local-llm-project-storage',
       storage: createJSONStorage(() => AsyncStorage),
-    }
-  )
+    },
+  ),
 );

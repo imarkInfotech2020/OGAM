@@ -27,9 +27,30 @@ const PROVIDERS = [
   { port: 7878,  type: 'gateway' as const,  name: 'Off Grid AI Gateway',   probePath: '/v1/models' },
 ];
 
-const TIMEOUT_MS = 500;
-const BATCH_SIZE = 50;
-const BATCH_DELAY_MS = 50;
+/**
+ * How long a host gets to answer before we call it silent.
+ *
+ * 500ms was tighter than a real Wi-Fi round trip and the scan reported an empty network while
+ * the server was right there: an Off Grid AI Desktop on the same subnet answered /v1/models in
+ * 133, 285, 292, 454 and 676ms across five tries from a phone doing nothing else. Half of those
+ * lose to a 500ms deadline, and a sweep runs many probes at once, which only stretches them
+ * further. A dead address is refused immediately rather than waiting out the deadline, so the
+ * extra budget is spent almost entirely on hosts that are genuinely silent.
+ */
+const TIMEOUT_MS = 2000;
+
+/**
+ * How many probes may be in flight at once, across every provider and subnet.
+ *
+ * Android runs `fetch` on one shared OkHttp dispatcher, and that dispatcher runs 64 requests at a
+ * time. It does not refuse the rest; it QUEUES them. A queued probe is still counted against its
+ * own deadline, because the abort timer starts when we call fetch and not when the request leaves
+ * the phone. So asking for more than the dispatcher will run does not scan faster - it makes the
+ * extra probes expire in the queue and report a silent network.
+ *
+ * 48 keeps the whole sweep inside that limit with room for the app's own traffic.
+ */
+const MAX_IN_FLIGHT = 48;
 
 /** Probe a single host:port — resolves true if it responds with an HTTP status */
 async function probe(ip: string, port: number, path: string): Promise<boolean> {
@@ -43,17 +64,26 @@ async function probe(ip: string, port: number, path: string): Promise<boolean> {
   });
 }
 
-/** Run up to BATCH_SIZE probes concurrently with a small delay between batches */
-async function runBatch<T>(tasks: (() => Promise<T>)[]): Promise<T[]> {
-  const results: T[] = [];
-  for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
-    const batch = tasks.slice(i, i + BATCH_SIZE).map(t => t());
-    results.push(...await Promise.all(batch));
-    if (i + BATCH_SIZE < tasks.length) {
-      await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
-    }
-  }
-  return results;
+/**
+ * Run the probes with a fixed number in flight, starting the next one as soon as a slot frees.
+ *
+ * Fixed batches waited for the slowest probe in each group of 50 before starting any of the next
+ * 50, so one silent address held 49 free slots idle for the whole deadline. A pool of workers
+ * pulling from one queue keeps every slot busy, which is what pays for a deadline long enough to
+ * be correct.
+ */
+async function runPool(tasks: (() => Promise<void>)[]): Promise<void> {
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(MAX_IN_FLIGHT, tasks.length) },
+    async () => {
+      while (next < tasks.length) {
+        const task = tasks[next++];
+        if (task) await task();
+      }
+    },
+  );
+  await Promise.all(workers);
 }
 
 /** Parse subnet base from IPv4, e.g. "192.168.1.42" → "192.168.1". Returns null if not a private IPv4. */
@@ -171,7 +201,7 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
     subnetsToScan = [base];
   }
 
-  log(`Scanning ${subnetsToScan.length} subnet(s): ${subnetsToScan.map(s => `${s}.0/24`).join(', ')} | ${subnetsToScan.length * 254 * PROVIDERS.length} total probes | batch size: ${BATCH_SIZE} | timeout: ${TIMEOUT_MS}ms`);
+  log(`Scanning ${subnetsToScan.length} subnet(s): ${subnetsToScan.map(s => `${s}.0/24`).join(', ')} | ${subnetsToScan.length * 254 * PROVIDERS.length} total probes | in flight: ${MAX_IN_FLIGHT} | timeout: ${TIMEOUT_MS}ms`);
 
   try {
     const discovered: DiscoveredServer[] = [];
@@ -187,17 +217,26 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
       }
     };
 
-    await Promise.all(subnetsToScan.map(async (base) => {
-      for (const provider of PROVIDERS) {
-        log(`Probing ${base}.1-254 for ${provider.name} on port ${provider.port}...`);
-        const tasks = Array.from({ length: 254 }, (_, i) => {
+    // One queue for the whole scan, not one per provider. Three provider sweeps running at once
+    // put three times MAX_IN_FLIGHT probes on Android's shared dispatcher, and everything above
+    // its limit sat in a queue until its own deadline expired - a full network reported as empty.
+    // iOS hid this: it caps connections PER HOST, and every probe is a different host.
+    //
+    // Off Grid's own port goes first, so the server this app exists to find is the earliest thing
+    // reported rather than the last.
+    const ordered = [...PROVIDERS].sort(
+      (a, b) => Number(b.type === 'gateway') - Number(a.type === 'gateway'),
+    );
+    const tasks = subnetsToScan.flatMap((base) =>
+      ordered.flatMap((provider) =>
+        Array.from({ length: 254 }, (_, i) => {
           const target = `${base}.${i + 1}`;
-          return () => probe(target, provider.port, provider.probePath).then(recordIfFound(target, provider));
-        });
-        await runBatch(tasks);
-        log(`Done probing ${base}.x for ${provider.name}`);
-      }
-    }));
+          return () =>
+            probe(target, provider.port, provider.probePath).then(recordIfFound(target, provider));
+        }),
+      ),
+    );
+    await runPool(tasks);
 
     log(`Scan complete — found ${discovered.length} server(s)`);
     return discovered;

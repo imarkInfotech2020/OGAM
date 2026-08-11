@@ -9,7 +9,7 @@ import {
   contextCompactionService, ragService, retrievalService,
 } from '../../services';
 import { getToolExtensions } from '../../services/tools/extensions';
-import { invalidateActiveConversation, activeLocalTextCapabilities, wantsLeadingThinkToken, localModelAcceptsImages } from '../../services/engines';
+import { invalidateActiveConversation, activeLocalTextCapabilities, wantsLeadingThinkToken, localModelAcceptsImages, stopAllTextEngines } from '../../services/engines';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import { ensureDefaultClassifier } from '../../services/classifierProvisioning';
 import { abortPreload } from '../../services/modelPreloader';
@@ -70,6 +70,8 @@ export type GenerationDeps = {
   ensureTextModelForChat: () => Promise<boolean>;
   /** Stash a message to replay after the user picks a text model. */
   setPendingMessage?: (text: string, attachments?: MediaAttachment[]) => void;
+  /** Stamp the modality on an EXISTING user message (resend); a new send carries it on addMessage. */
+  updateMessageTurnKind?: (conversationId: string, messageId: string, kind: TurnKind) => void;
   createConversation: (modelId: string, title?: string, projectId?: string) => string;
   pendingProjectId?: string;
 };
@@ -126,15 +128,25 @@ export function messageHasImageOutput(message: Message | undefined | null): bool
   return !!message?.attachments?.some(a => a.type === 'image');
 }
 
-/** The recorded kind of the turn whose USER message is userMessageId — scanned across EVERY
- *  assistant reply in that turn (until the next user message), not just the first. An image turn
- *  emits an "Enhanced prompt" assistant message BEFORE the image-result message, so checking only
- *  the first reply misclassified it as text → resend loaded a text model instead of re-drawing
- *  (device-confirmed). If ANY reply in the turn produced an image, the turn is an image turn.
- *  undefined when the turn has no reply yet / the message is unknown → caller falls back to classify. */
+/** The recorded kind of the turn whose USER message is userMessageId.
+ *
+ *  The DISPATCHED modality, stamped on the user message by the router, is the record and wins: it
+ *  states what the turn IS, and no later event can rewrite it. Inferring from the replies instead
+ *  made the record a function of what survived — cancel an image generation mid-run and the turn
+ *  keeps only its "Enhanced prompt" reply with no image, so the next resend replayed it as TEXT and
+ *  never re-drew (device-confirmed on Android and iOS).
+ *
+ *  Turns recorded before the stamp existed have no field, so they still fall back to the reply scan:
+ *  ANY reply carrying an image makes it an image turn. That scan covers EVERY reply in the turn (an
+ *  image turn emits the "Enhanced prompt" reply BEFORE the image-result reply, so checking only the
+ *  first one misclassified it — also device-confirmed).
+ *
+ *  undefined when the turn has no stamp and no reply yet / the message is unknown → caller classifies. */
 export function recordedTurnKind(messages: Message[], userMessageId: string): TurnKind | undefined {
   const idx = messages.findIndex(m => m.id === userMessageId);
   if (idx === -1) return undefined;
+  const stamped = messages[idx].turnKind;
+  if (stamped) return stamped;
   let sawReply = false;
   for (let i = idx + 1; i < messages.length; i++) {
     const m = messages[i];
@@ -244,7 +256,9 @@ export async function handleImageGenerationFn(
   const { prompt, conversationId, skipUserMessage = false, attachments } = call;
   if (!deps.activeImageModel) { deps.setAlertState(showAlert('Error', 'No image model loaded.')); return; }
   // Keep attachments (e.g. a voice note) so the user message renders as a voice note.
-  if (!skipUserMessage) { deps.addMessage(conversationId, { role: 'user', content: prompt, attachments }); }
+  // turnKind stamps the turn as an image turn AT DISPATCH, so a resend re-draws even when this run
+  // is cancelled before it can produce the image that used to be the only evidence of the modality.
+  if (!skipUserMessage) { deps.addMessage(conversationId, { role: 'user', content: prompt, attachments, turnKind: 'image' }); }
   // Do NOT thread steps/guidanceScale from deps.settings — that is a React render snapshot, one
   // change stale (the off-by-one the user hit: change steps → next gen still used the old value).
   // The service reads imageSteps/imageGuidanceScale FRESH from useAppStore.getState() at gen time,
@@ -284,7 +298,11 @@ async function generateWithCompactionRetry(
   let turnInterrupted = false; // PER-TURN stop truth from the loop outcome (returned to the caller)
   try { const outcome = await gen(opts.messages); turnInterrupted = !!(outcome as { interrupted?: boolean } | void)?.interrupted; } catch (error: any) {
     if (!contextCompactionService.isContextFullError(error)) throw error;
-    await llmService.stopGeneration().catch(() => { });
+    // Engine-level stop across EVERY engine (registry, OCP) - not llmService, which is llama only, so a
+    // LiteRT turn used to compact while its native generation was still running. Deliberately NOT
+    // generationService.stopGeneration(): this is mid-turn, and the owner's stop persists the partial and
+    // resets state, which would end the turn the retry below is about to continue.
+    await stopAllTextEngines().catch(() => { });
     const conversation = useChatStore.getState().conversations.find(c => c.id === opts.id);
     const previousSummary = conversation?.compactionSummary;
     const compacted = await contextCompactionService.compact({ conversationId: opts.id, systemPrompt: opts.prompt, allMessages: opts.messages, previousSummary }).catch(async () => {
@@ -531,7 +549,7 @@ export async function dispatchGenerationFn(
     onTextModelUnavailable: () => { deps.setPendingMessage?.(text, attachments); },
   });
   if (result.handled) return;
-  deps.addMessage(conversationId, { role: 'user', content: text, attachments });
+  deps.addMessage(conversationId, { role: 'user', content: text, attachments, turnKind: kind });
   await startTextGeneration(conversationId, result.messageText);
 }
 export type SendCall = { text: string; attachments?: MediaAttachment[]; imageMode?: 'auto' | 'force' | 'disabled'; startGeneration: (convId: string, text: string) => Promise<void>; setDebugInfo: SetState<any> };
@@ -571,7 +589,9 @@ export async function executeDeleteConversationFn(
 ): Promise<void> {
   if (!deps.activeConversationId) return;
   deps.setAlertState(hideAlert());
-  if (deps.isStreaming) { await llmService.stopGeneration(); deps.clearStreamingMessage(); }
+  // Through the OWNER: llmService is llama only, so deleting a conversation mid-reply left a LiteRT or
+  // remote stream running - writing tokens into a conversation that no longer exists.
+  if (deps.isStreaming) { await generationService.stopGeneration(); deps.clearStreamingMessage(); }
   for (const id of deps.removeImagesByConversationId(deps.activeConversationId)) await onnxImageGeneratorService.deleteGeneratedImage(id);
   contextCompactionService.clearSummary(deps.activeConversationId);
   deps.deleteConversation(deps.activeConversationId);
@@ -590,6 +610,9 @@ export async function regenerateResponseFn(deps: GenerationDeps, call: Regenerat
   // verbatim — an image turn re-runs the image pipeline, NEVER re-classifies to text and fails to
   // load a text model (the 1★ resend bug). Only a legacy turn with no recorded kind classifies.
   const kind = await resolveTurnKind(deps, { text: messageTextForRoute, recordedKind });
+  // Persist the resolved kind on the turn. A legacy turn (no stamp) classified just now, and a
+  // cancelled run must not leave the next resend to re-derive the modality from the wreckage.
+  deps.updateMessageTurnKind?.(targetConversationId, userMessage.id, kind);
   // SAME post-decision dispatch seam as send: the image path is guarded on activeImageModel (so an
   // image turn resent with no image model FALLS BACK to text like send, instead of erroring), and the
   // text route provisions a text model on an image-only device (like send). skipUserMessage: the user

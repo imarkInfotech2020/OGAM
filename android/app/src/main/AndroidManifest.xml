@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Off Grid Sync: NSD/mDNS multicast for device discovery (react-native-zeroconf). -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <uses-permission android:name="com.android.vending.BILLING" tools:node="remove" />
 
@@ -18,6 +20,19 @@
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+
+    <!-- Automatic screenshot and download sharing read the media the system already indexed.
+         Android 11 stopped granting the Download folder through the file picker, so MediaStore
+         with a media permission is the only path left for it. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
+    <!-- A media permission only ever shows the media in Download, so a downloaded PDF or zip - most
+         of a real Downloads folder - stays invisible. This is the only remaining way to share those
+         files device to device, it is never requested on its own, and downloads sharing works without
+         it on media alone. Play requires the All files access declaration for this. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <!-- For silent companion file downloads (e.g. mmproj for vision models) -->
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
@@ -91,5 +106,15 @@
           android:name="androidx.work.impl.foreground.SystemForegroundService"
           android:foregroundServiceType="dataSync"
           tools:node="merge" />
+
+      <!-- Personal Mesh residency: holds mDNS discovery, the TCP listener and in-flight
+           transfers open while Off Grid is backgrounded. Without it Android suspends the
+           process and the peer keeps showing this device as connected. Not exported - only
+           this app may start it. -->
+      <service
+          android:name="ai.offgridmobile.sync.MeshResidencyService"
+          android:enabled="true"
+          android:exported="false"
+          android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

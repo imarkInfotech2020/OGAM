@@ -18,6 +18,8 @@ import { OverridableMemoryError } from '../../../src/services/modelLoadErrors';
 
 jest.mock('../../../src/services/activeModelService', () => ({
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     loadTextModel: jest.fn(),
     unloadTextModel: jest.fn(),
     checkMemoryForModel: jest.fn(),

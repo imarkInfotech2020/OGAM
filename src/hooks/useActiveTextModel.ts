@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useAppStore, useRemoteServerStore } from '../stores';
+import { activeModelService } from '../services/activeModelService';
 import { DownloadedModel, RemoteModel } from '../types';
 
 type ActiveTextModelResult = {
@@ -14,8 +15,12 @@ type ActiveTextModelResult = {
 };
 
 /**
- * Returns the currently active text model, preferring remote over local.
- * Use this anywhere you need to know if a text model is available.
+ * The active text model, preferring remote over local. THE answer to "is a text model available" -
+ * chat, the chat list and Home all read it here rather than each repeating the lookup.
+ *
+ * The local branch delegates to activeModelService, which tolerates a selected id whose entry was
+ * rebuilt under a different id (see resolveModel). Repeating `find(m => m.id === activeModelId)` in a
+ * view is what let the chat refuse to send to a model the engine had loaded.
  */
 export function useActiveTextModel(): ActiveTextModelResult {
   const downloadedModels = useAppStore((s) => s.downloadedModels);
@@ -39,8 +44,8 @@ export function useActiveTextModel(): ActiveTextModelResult {
         };
       }
     }
-    // Fall back to local
-    const localModel = downloadedModels.find((m) => m.id === activeModelId);
+    // Fall back to local. Resolved by the owning service, not by an id comparison here.
+    const localModel = activeModelService.resolveSelectedTextModel();
     if (localModel) {
       return {
         model: localModel,
@@ -50,5 +55,9 @@ export function useActiveTextModel(): ActiveTextModelResult {
       };
     }
     return { model: null, modelId: null, modelName: 'Unknown', isRemote: false };
+    // activeModelId and downloadedModels look unused now that the service resolves the local model,
+    // but they are exactly what makes this hook REACTIVE: the service reads them imperatively, so
+    // without them here a selection or a rescan would not re-render anything.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeServerId, activeRemoteTextModelId, discoveredModels, activeModelId, downloadedModels]);
 }

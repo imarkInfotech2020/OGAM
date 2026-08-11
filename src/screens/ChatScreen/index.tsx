@@ -1,21 +1,18 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Keyboard, InteractionManager, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { FlatList, Keyboard, Platform } from 'react-native';
 // Edge-to-edge-aware KeyboardAvoidingView. RN's own version leaves a residual
 // padding band on Android under edge-to-edge (adjustResize is a no-op there);
 // this one reconciles the keyboard frame against the navigation-bar inset.
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
-import { useSpotlightTour } from 'react-native-spotlight-tour';
 import { CustomAlert, hideAlert, showAlert, SharePromptSheet, ProAhaSheet } from '../../components';
 import { useEjectAllModels } from '../../hooks/useEjectAllModels';
-import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
 import { subscribeSharePrompt } from '../../utils/sharePrompt';
 import { subscribeProPrompt } from '../../services/proPrompt';
-import { VOICE_HINT_STEP_INDEX, IMAGE_SETTINGS_STEP_INDEX } from '../../components/onboarding/spotlightConfig';
 import { useAppStore } from '../../stores/appStore';
 import type { Conversation, Message } from '../../types';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -42,7 +39,6 @@ export const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const chat = useChatScreen();
-  const { goTo, current } = useSpotlightTour();
 
   // Collapsed Models control (shared with home): header "Models" → manager sheet.
   const [modelsManagerOpen, setModelsManagerOpen] = useState(false);
@@ -94,7 +90,6 @@ export const ChatScreen: React.FC = () => {
     pendingModelRowRef.current = type;
     setModelsManagerOpen(false);
   };
-  const pendingNextRef = useRef<number | null>(null);
 
   // Keyboard avoidance is handled by KeyboardAvoidingView behavior="padding"
   // (same as main, on both platforms). The custom androidKbPad mechanism that
@@ -116,68 +111,6 @@ export const ChatScreen: React.FC = () => {
     setProAhaVisible(true);
   }), []);
   // Only ONE AttachStep mounted at a time to avoid waypoint dots/lines.
-  // chatSpotlight controls which index is active (3, 12, 15, or 16).
-  const [chatSpotlight, setChatSpotlight] = useState<number | null>(null);
-  const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
-  const shownSpotlights = useAppStore(s => s.shownSpotlights);
-  const markSpotlightShown = useAppStore(s => s.markSpotlightShown);
-  const step3ShownRef = useRef(false);
-  // If user arrived here via onboarding spotlight flow, show input spotlight
-  useEffect(() => {
-    const pending = consumePendingSpotlight();
-    if (pending === 3) {
-      // Chain: step 3 (ChatInput) → step 12 (VoiceRecordButton)
-      pendingNextRef.current = VOICE_HINT_STEP_INDEX;
-      step3ShownRef.current = false;
-      const task = InteractionManager.runAfterInteractions(() => {
-        step3ShownRef.current = true;
-        goTo(3);
-      });
-      return () => task.cancel();
-    } else if (pending !== null) {
-      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
-      return () => task.cancel();
-    }
-  }, [goTo]);
-  const chainingRef = useRef(false);
-  // When the spotlight tour stops after step 3, fire the chained step 12
-  useEffect(() => {
-    if (current === undefined && step3ShownRef.current && pendingNextRef.current !== null) {
-      step3ShownRef.current = false;
-      chainingRef.current = true;
-      const next = pendingNextRef.current;
-      pendingNextRef.current = null;
-      // Switch AttachStep index — need time for new AttachStep to mount + measure layout
-      setChatSpotlight(next);
-      setTimeout(() => {
-        chainingRef.current = false;
-        goTo(next);
-      }, 800);
-    } else if (current === undefined && !chainingRef.current && !step3ShownRef.current && pendingNextRef.current === null) {
-      // Tour stopped and no chain pending — clear spotlight
-      setChatSpotlight(null);
-    }
-  }, [current, goTo]);
-  useFocusEffect(
-    useCallback(() => {
-      const pending = consumePendingSpotlight();
-      if (pending !== null) {
-        const task = InteractionManager.runAfterInteractions(() => goTo(pending));
-        return () => task.cancel();
-      }
-    }, [goTo]),
-  );
-  const generatedImages = useAppStore(s => s.generatedImages);
-  useEffect(() => {
-    if (
-      generatedImages.length > 0 &&
-      !shownSpotlights.imageSettings &&
-      onboardingChecklist.triedImageGen
-    ) {
-      markSpotlightShown('imageSettings');
-      InteractionManager.runAfterInteractions(() => goTo(IMAGE_SETTINGS_STEP_INDEX));
-    }
-  }, [generatedImages.length, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
 
   React.useEffect(() => {
     if (chat.activeConversation?.messages.length && isNearBottomRef.current) {
@@ -309,7 +242,6 @@ export const ChatScreen: React.FC = () => {
           colors={colors}
           handleScroll={handleScroll}
           renderItem={renderItem}
-          chatSpotlight={chatSpotlight}
         />
         <ChatModalSection
           styles={styles} colors={colors}

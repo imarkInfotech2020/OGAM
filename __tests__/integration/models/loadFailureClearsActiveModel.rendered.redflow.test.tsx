@@ -19,12 +19,12 @@ jest.mock('@react-navigation/native', () => ({
 describe('load failure clears the active model (rendered) — device 2026-07-14', () => {
   it('a text model that fails to load leaves activeModelId null and the selector showing no loaded model', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' }); // model 'm' loaded, active
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { llmService } = require('../../../src/services/llm');
     const { ModelSelectorModal } = require('../../../src/components/ModelSelectorModal');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // Pre-condition: 'm' is the active loaded model.
     expect(h.useAppStore.getState().activeModelId).toBe('m');

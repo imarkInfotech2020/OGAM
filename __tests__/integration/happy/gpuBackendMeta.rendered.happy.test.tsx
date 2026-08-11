@@ -39,7 +39,7 @@ function pressByWalkingUp(node: unknown): void {
  *  control Model Settings → Text → Advanced renders). Shares the app store with the mounted ChatScreen, so
  *  the change flips the "settings changed" reload banner. NOT updateSettings seeding. */
 function selectBackendViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>, backendId: string) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const { BackendSelector } = require('../../../src/components/settings/textGenAdvancedSections');
   const s = h.rtl.render(h.React.createElement(BackendSelector, {}));
   h.rtl.fireEvent.press(s.getByTestId(`backend-${backendId}-button`));
@@ -51,7 +51,7 @@ describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloa
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
     // Device boundary: an Adreno (Qualcomm) GPU — getOpenCLCapability keys off DeviceInfo.getHardware.
     // The seeded 'unknown' device would (correctly) refuse OpenCL, so seed the real device's SoC family.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const DeviceInfo = require('react-native-device-info');
     (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom');
 
@@ -82,7 +82,7 @@ describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloa
 
   it('falsify: CPU backend renders "CPU" with no offloaded layers', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const DeviceInfo = require('react-native-device-info');
     (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom');
     h.enableGenerationDetailsViaUI();

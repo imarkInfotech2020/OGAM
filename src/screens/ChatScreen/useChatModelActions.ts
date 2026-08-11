@@ -4,7 +4,7 @@ import {
   showAlert,
   hideAlert,
 } from '../../components';
-import { llmService, activeModelService, modelManager } from '../../services';
+import { llmService, activeModelService, modelManager, generationService } from '../../services';
 import { isModelReady, activeLocalTextCapabilities, activeTextCapabilities, backendFallbackNotice } from '../../services/engines';
 import { useAppStore } from '../../stores';
 import { DownloadedModel, RemoteModel, ONNXImageModel, isLiteRTModel } from '../../types';
@@ -193,15 +193,19 @@ export async function ensureTextModelForChatFn(deps: {
   setLoadingModel: (m: DownloadedModel | null) => void;
   setIsModelLoading: (v: boolean) => void;
 }): Promise<boolean> {
-  const { lastTextModelId, downloadedModels } = useAppStore.getState();
-  if (!lastTextModelId) {
+  // The SELECTION first, remembered choice second - from the service, which owns that order. Reading
+  // lastTextModelId alone loaded the previously-picked model and left the selected one on screen.
+  const modelId = activeModelService.selectedTextModelId();
+  if (!modelId) {
     deps.setShowModelSelector(true);
     return false;
   }
-  deps.setLoadingModel(downloadedModels.find(m => m.id === lastTextModelId) ?? null);
+  deps.setLoadingModel(
+    useAppStore.getState().downloadedModels.find(m => m.id === modelId) ?? null,
+  );
   deps.setIsModelLoading(true);
   try {
-    await activeModelService.loadTextModel(lastTextModelId);
+    await activeModelService.loadTextModel(modelId);
     return true;
   } catch {
     return false;
@@ -297,7 +301,11 @@ export async function handleModelSelectFn(
 export async function handleUnloadModelFn(deps: ModelActionDeps): Promise<void> {
   const { activeModel, isStreaming, clearStreamingMessage } = deps;
   if (isStreaming) {
-    await llmService.stopGeneration();
+    // Through the OWNER, not the llama engine. llmService is llama.cpp only, so unloading while a LiteRT or
+    // remote reply was streaming used to stop nothing while clearStreamingMessage wiped the screen — tokens
+    // kept arriving for a reply the user could no longer see. generationService stops every engine, aborts a
+    // remote request, and keeps whatever had already streamed (the same thing STOP does).
+    await generationService.stopGeneration();
     clearStreamingMessage();
   }
   const modelName = activeModel?.name;

@@ -1,0 +1,5 @@
+platform=ios
+journey=chat
+app_id=ai.offgridmobile.dev
+commit=8f448e7a1a86bc3cd8e476da86789fc710d51d38
+started_at=2026-07-17T13:23:56Z

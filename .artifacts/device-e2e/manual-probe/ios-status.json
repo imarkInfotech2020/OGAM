@@ -1,0 +1,23 @@
+{
+  "value" : {
+    "build" : {
+      "version" : "15.1.0",
+      "time" : "Jul 17 2026 17:57:13",
+      "productBundleIdentifier" : "com.facebook.WebDriverAgentRunner"
+    },
+    "os" : {
+      "testmanagerdVersion" : 65535,
+      "name" : "iOS",
+      "sdkVersion" : "26.4",
+      "version" : "26.5.2"
+    },
+    "device" : "iphone",
+    "ios" : {
+      "ip" : "192.168.1.54"
+    },
+    "message" : "WebDriverAgent is ready to accept commands",
+    "state" : "success",
+    "ready" : true
+  },
+  "sessionId" : null
+}

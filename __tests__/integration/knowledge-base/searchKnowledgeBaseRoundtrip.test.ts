@@ -14,12 +14,12 @@ const toVec = (text: string): number[] => KEYWORDS.map(k => (text.toLowerCase().
 describe('search_knowledge_base — real RAG round-trip (guard)', () => {
   it('returns the indexed document content when the model searches the knowledge base', async () => {
     installRealSqlite();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { ragService } = require('../../../src/services/rag');
     const { embeddingService } = require('../../../src/services/rag/embedding');
     const { documentService } = require('../../../src/services/documentService');
     const { executeToolCall } = require('../../../src/services/tools/handlers');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // Native doc extraction → a document with a distinctive fact + a distractor sentence.
     jest.spyOn(documentService, 'processDocumentFromPath').mockResolvedValue({

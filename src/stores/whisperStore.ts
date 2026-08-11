@@ -224,10 +224,8 @@ export const useWhisperStore = create<WhisperState>()(
       },
 
       refreshPresentModels: async () => {
-        const present: string[] = [];
-        for (const m of WHISPER_MODELS) {
-          if (await whisperService.isModelDownloaded(m.id)) present.push(m.id);
-        }
+        const present = (await whisperService.listDownloadedModels())
+          .map(model => model.modelId);
         // Reconcile the active pointer against disk too. Deleting from the
         // Download Manager goes through whisperService directly (bypassing this
         // store), so downloadedModelId can point at a model whose file is gone —

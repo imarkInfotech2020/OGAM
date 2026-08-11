@@ -6,23 +6,10 @@ import { AnimatedListItem } from '../../../components/AnimatedListItem';
 import { useTheme, useThemedStyles } from '../../../theme';
 import { createStyles } from '../styles';
 import { Conversation } from '../../../types';
+import { formatWhen } from '../../../utils/localTime';
+import { useConversationPreviewLine } from '../../../hooks/useConversationPreviewLine';
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-  if (diffDays === 1) {
-    return 'Yesterday';
-  }
-  if (diffDays < 7) {
-    return date.toLocaleDateString([], { weekday: 'short' });
-  }
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
+const formatDate = (dateStr: string): string => formatWhen(dateStr);
 
 type Props = {
   conversations: Conversation[];
@@ -44,6 +31,7 @@ export const RecentConversations: React.FC<Props> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const previewLine = useConversationPreviewLine();
 
   const renderRightActions = (conversation: Conversation) => (
     <TouchableOpacity
@@ -89,13 +77,13 @@ export const RecentConversations: React.FC<Props> = ({
                   {formatDate(conv.updatedAt)}
                 </Text>
               </View>
-              {conv.messages.length > 0 && (() => {
-                const lastMsg = conv.messages[conv.messages.length - 1];
-                return (
+              {(() => {
+                const preview = previewLine(conv.messages);
+                return preview ? (
                   <Text style={styles.conversationPreview} numberOfLines={1}>
-                    {lastMsg.role === 'user' ? 'You: ' : ''}{lastMsg.content}
+                    {preview}
                   </Text>
-                );
+                ) : null;
               })()}
             </View>
             <Icon name="chevron-right" size={14} color={colors.textMuted} />

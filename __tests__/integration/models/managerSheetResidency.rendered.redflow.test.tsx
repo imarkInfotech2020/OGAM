@@ -54,8 +54,7 @@ async function setupHome() {
   const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: 'llama', filePath: modelPath, fileName: 'ggml-small.gguf' });
   await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
   await hardwareService.refreshMemoryInfo();
-  require('../../../src/components/onboarding/spotlightState').setPendingSpotlight(null);
-  useAppStore.setState({ checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
+  useAppStore.setState({ checklistDismissed: true });
 
   const nav = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} };
   const view = rtl.render(React.createElement(
@@ -123,7 +122,7 @@ describe('manager sheet residency — RAM chip + per-row eject (agreed design 20
 
     // The surface that carried "In Memory": the chat's ModelSelectorModal (mounted the way the
     // sibling memory suite does — with a resident live, the section rendered here on HEAD).
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { ModelSelectorModal } = require('../../../src/components/ModelSelectorModal');
     const picker = rtl.render(React.createElement(ModelSelectorModal, {
       visible: true, onClose: () => {}, onSelectModel: () => {}, onUnloadModel: () => {}, isLoading: false,

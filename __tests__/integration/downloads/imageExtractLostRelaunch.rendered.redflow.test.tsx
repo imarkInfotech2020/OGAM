@@ -11,12 +11,12 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 describe('D1 (rendered) — failed image extraction lost on relaunch', () => {
   it('keeps a retriable image-download card on the DownloadManager after relaunch', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, waitFor } = requireRTL();
     const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
     const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // Image zip downloaded (native 'completed', needs JS extraction); partial dir on disk.
     boundary.download!.seedActive({ downloadId: 'dl-img', fileName: 'anythingv5.zip', modelId: 'anythingv5', modelType: 'image', status: 'completed', bytesDownloaded: 900 * 1024 * 1024, totalBytes: 900 * 1024 * 1024 });

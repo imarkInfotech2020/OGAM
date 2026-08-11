@@ -43,8 +43,9 @@ function isGenerationActive(): boolean {
 const toMB = (bytes: number) => Math.round(bytes / (1024 * 1024));
 
 async function preloadText(): Promise<void> {
-  const { activeModelId, lastTextModelId, downloadedModels } = useAppStore.getState();
-  const id = activeModelId ?? lastTextModelId;
+  const { downloadedModels } = useAppStore.getState();
+  // Same owner, same answer as chat and image generation.
+  const id = activeModelService.selectedTextModelId();
   if (!id || activeModelService.getActiveModels().text.isLoaded) return;
   const model = downloadedModels.find(m => m.id === id);
   if (!model) return;

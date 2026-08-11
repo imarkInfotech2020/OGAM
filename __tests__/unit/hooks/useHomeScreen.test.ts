@@ -16,6 +16,14 @@ import { renderHook, act } from '@testing-library/react-native';
 // ============================================================================
 // Service mocks
 // ============================================================================
+// useActiveTextModel imports the service module directly, so mocking only the barrel left the real
+// service reading the real store while this suite drove a mocked one.
+jest.mock('../../../src/services/activeModelService', () => ({
+  activeModelService: {
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
+  },
+}));
+
 jest.mock('../../../src/services', () => ({
   modelManager: {
     getDownloadedModels: jest.fn().mockResolvedValue([]),
@@ -26,6 +34,8 @@ jest.mock('../../../src/services', () => ({
     getDeviceInfo: jest.fn().mockResolvedValue({ deviceName: 'TestPhone' }),
   },
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     syncWithNativeState: jest.fn(),
     getResourceUsage: jest.fn().mockResolvedValue({ totalMemory: 8000, usedMemory: 2000, availableMemory: 6000 }),
     subscribe: jest.fn(() => jest.fn()),

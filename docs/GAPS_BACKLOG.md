@@ -8,7 +8,7 @@ This file only ever contains work that is still open.
 Verdict legend:
 - **delete-safe** - unreferenced / unreachable and provably unused; remove it.
 - **fix-the-guard** - the branch is SUPPOSED to fire but a condition prevents it; fix the condition (a latent bug, not litter).
-- **instrument-and-revisit** - uncertain trigger; add a `[*-SM]` trace + a Provit journey to observe it live before deciding.
+- **instrument-and-revisit** - uncertain trigger; add a `[*-SM]` trace + an on-device journey to observe it live before deciding.
 
 ---
 
@@ -393,3 +393,263 @@ model loaded text-only if loaded in the window before its mmProjPath is persiste
 reports vision failing right after a first download, instrument the load path: assert the model
 record's mmProjPath is set before the first load, and re-derive multimodal if a mmproj is linked after
 a text-only load.
+
+---
+
+## Personal Mesh (sync across macOS, iOS, Android) — 2026-07-30
+
+First entry for Personal Mesh in this doc. Found by auditing the shared state machines in
+`@offgrid/sync` against what the two apps actually wire, with Android in scope as a first-class
+target. The shared layer is largely complete; these are the app-side holes.
+
+**Closed in this pass (code + wired, NOT device-verified):**
+
+| ID | Gap | Status |
+|---|---|---|
+| PM1 | Public core minted a second device identity (`getOrCreateLocalDevice` persisted a random id), so op-log provenance and version vectors were keyed to an identity absent from every roster and membership. `stateSyncService` used it directly while pairing used the fingerprint. | Fixed: core exposes display facts only; `getCanonicalLocalSyncDevice` is the one place an id is attached; a one-time pure migration re-attributes persisted ops. Needs device verification (matrix rows 5-6). |
+| PM2 | Backgrounding Android suspended the process: mDNS, the TCP listener and in-flight transfers stopped while the peer still showed the device connected. Only WorkManager's download service was declared. | Fixed: `MeshResidencyService` dataSync foreground service + one TS contract both platforms satisfy, with the capability gap declared as data (iOS honestly reports `survivesBackground: false`). Needs device verification (matrix rows 18-21). |
+| PM3 | Dead `devHarness` was a second identity minter behind a permanently-false flag. | Deleted. |
+
+**Open:**
+
+| ID | Gap | Verdict |
+|---|---|---|
+| PM4 | ~~Android reinstall orphans a licensed seat.~~ **By design, not a gap.** Android wipes the Keystore on uninstall so a reinstall mints a new fingerprint and consumes a seat. This is the exact case auto-eviction of the least-active installation plus user-driven device management already answers: the dead entry is by definition least-active, so it is what gets replaced. Closed. |
+| PM5 | ~~No license-key revocation or rotation.~~ **Out of scope by product decision (2026-07-30).** We do not support revoking or rotating a key: if a key is compromised, that is the user's loss. Device eviction remains the only removal mechanism. Do not re-open this as a gap. |
+| PM6 | ~~Two shared projections have zero callers.~~ **Wrong - both are rendered** (`KnownDevicesSection.tsx:78`, `DevicesScreen.tsx:2348`); the original grep excluded `shared/`. The real defect was the COPY: the confirmation said eviction "removes the pairing from both devices", omitting that the seat is freed and what happens to the target's saved licence. Fixed in shared: the copy now splits on reachability, so an offline device is told cleanup stays queued rather than claimed already clean. Closed. |
+| PM7 | **Devices UI never audited against the brief's state table.** Both platforms consume `projectSyncControlCenter`, but nobody has checked all six credential x registered x paired x connected rows render distinctly, that capacity reads "N of 5 registered", or that roster freshness is shown rather than stale data presented as authoritative. | audit. Matrix rows 39-42. |
+| PM8 | **The four riskiest areas have zero verified coverage.** The iOS/macOS manual gate (`desktop/outputs/ios-macos-sync-manual-gate-20260729`) is 8/108 verified: pairing 0/9, discovery 0/9, membership 0/7, persistence 0/5. It also has no Android axis at all, and defers the five-device cap as needing real multi-device hardware. | superseded by `docs/PERSONAL_MESH_TEST_MATRIX.csv` (42 rows, macOS/iOS/Android columns). |
+
+| PM9 | ~~No receive-side consent.~~ **Out of scope by product decision (2026-07-30).** Same-owner devices auto-accept, which is what AirDrop does between devices on one Apple ID; Personal Mesh is same-owner-only by definition, so a prompt would be friction with no threat model behind it. The `admitIncoming` gate exists in shared but stays unwired, so behaviour is accept-everything. Do not re-open as a gap; if a shared/family mesh ever ships, that is when the gate gets a policy behind it. |
+
+| PM10 | **Android has no screenshot watcher, so automatic screenshot sharing cannot work.** `ScreenshotSyncSource` calls `nativeScreenshotBoundary.observe()` and swallows the failure with the comment "Android and older iOS builds do not expose this native watcher". iOS ships `ios/SyncScreenshotModule.swift`; there is no Kotlin counterpart (`android/.../ai/offgridmobile/` has clipboard, devicememory, directory, download, litert, localdream, pdf, sync - no screenshot). The UI therefore reports "automatic sharing is not available" on Android. This is the platform-parity rule violated exactly as rules.md describes it: a capability that exists on one platform and silently no-ops on the other. | real gap, user-reported 2026-07-30. Android CAN do this: a `ContentObserver` on `MediaStore.Images` filtered to the Screenshots bucket. Until then the gap must be declared capability DATA, not a swallowed throw. |
+| PM11 | **"For your safety, share another folder" when sharing Downloads on Android is the OS refusing, not our bug.** `SyncDirectorySourceModule.kt` uses the Storage Access Framework (`DocumentsContract` tree URIs), and Android 11+ refuses to grant SAF access to the `Download` directory (and `Android/data`, `Android/obb`) - that sentence is stock Android picker copy. So the app offers Downloads as a share target and the OS then declines it, which reads to the user as our failure. | real gap, user-reported 2026-07-30. Fix is not a permission: on Android, enumerate downloads through `MediaStore.Downloads` (API 29+), which needs no SAF grant, and stop routing that category through the folder picker. Do NOT retry SAF against Download - it cannot be granted. |
+
+**Verified as already correct (no code needed):**
+
+- **Android discovery and advertise.** `react-native-zeroconf` acquires a `MulticastLock` in both its NSD and rx2dnssd backends, `CHANGE_WIFI_MULTICAST_STATE` is declared, and Android supports `registerService`, so it advertises rather than only browsing. Android reports `['lan']` while the iOS-only proximity route surfaces as route data - the capability-as-data pattern, not a `Platform.OS` branch.
+- **Clipboard provenance.** Records carry immutable `provenance` plus a derived `isLocal`, so an Off Grid receipt is attributed to the sending device and an Apple Universal Clipboard pickup is recorded as a local pasteboard observation - never as an Off Grid transfer. Android has no Universal Clipboard, so that false-attribution risk does not exist there.
+
+### RESOLVED: Forget did nothing on a licensed device this phone never paired with
+
+Fixed. An eviction's local side may now be empty: `prepareCapacityReplacement` no longer refuses when
+there is no active pairing, and `finalizeMembershipEviction` owns the rule that an empty local side is a
+no-op (both the immediate and the restart-recovery path go through it). The failure is also no longer
+swallowed - `KnownDevicesSection` reports it on the same error surface disconnect and reconnect use.
+Covered by `licensedDevices.integration.test.tsx`, which asserts the seat comes back at the PROVIDER.
+
+Original report follows.
+
+**Symptom.** Sync lists a device that holds a seat on your licence but that this phone has never paired
+with - a phone you replaced, say. Its row offers Forget, the button is enabled, tapping it opens the usual
+confirmation sheet, and confirming "Evict device" does **nothing at all**: no error, no change, the seat
+stays occupied. At the device cap this leaves you unable to pair a new device with no explanation.
+
+**Mechanism.** `syncService.forgetDevice` -> `evictDevice` -> `PersonalMeshDeviceEvictionCoordinator.evict`
+-> `membership.prepareEviction` -> `pairingSecretStore.prepareCapacityReplacement`, which requires an
+active LOCAL pairing:
+
+    const active = activePairing(installation.syncDeviceId);
+    if (!active?.membershipId) throw new PersonalMeshEntitlementError('mapping_required');
+
+There is no local pairing for such a device, so it throws `mapping_required` ("The oldest licensed
+installation cannot be matched to a Sync device.") BEFORE `registry.deregisterInstallation` is reached.
+The seat is therefore never released. `SyncScreen/index.tsx` then calls
+`syncService.forgetDevice(deviceId).catch(() => undefined)`, so the failure never surfaces.
+
+Note the coordinator already has a path for exactly this shape - `revokeUnregistered`, used when the
+registry has no installation for the device - but it does not cover the mirror case: the registry HAS the
+installation and the local device has no pairing.
+
+**Two separable defects, worth deciding on separately:**
+1. The eviction cannot release a seat without a local pairing, when releasing the seat is the entire point.
+2. The failure is swallowed, so a broken action is indistinguishable from a working one. Even once (1) is
+   fixed, an eviction that fails for a real reason (offline, provider error) will still look like nothing
+   happened. This is the "dead button" class in the backlog: capability and handler should travel together
+   so a button that cannot act is not offered as if it can.
+
+Check whether desktop has the same hole: its own `prepareEviction` may impose the same requirement, and
+the ghost-row report there ("repair asks for a pairing code") is the same underlying situation.
+
+### WITHDRAWN (not a bug): "after a failed credential save, a device appears to pair and never does"
+
+Reported here earlier today and WRONG. The pairing did land; entitlement reconciliation then retired it,
+deliberately, because the peer held no installation on the licence. `personal-mesh-entitlement.ts` retires
+any device it finds locally trusted but absent from the authoritative roster - that is the rule that stops
+a device lingering in your mesh after it has been removed from your licence elsewhere.
+
+The test was at fault: its stand-in desktop never registered, which no real licensed Mac does. Registering
+it makes the whole journey pass, including the clean retry after a storage failure. The trust surviving
+reconciliation is now asserted, which is the part that matters - a pairing whose trust is withdrawn a
+moment later still reports success on its way past.
+
+Worth keeping in mind when reading a device log: "paired, then gone" is the signature of a device missing
+from the licence roster, not of a broken handshake.
+
+
+### Open bug: evicting an OFFLINE device may not leave the eviction outstanding
+
+Found by `__tests__/pro/sync/syncPersistence.integration.test.ts` ("keeps an offline eviction pending
+across restart and completes it on rediscovery"). Two of that suite's three journeys pass; this one does
+not. Held open. Not fixed.
+
+**What should happen.** Evicting a device that is not reachable releases the licence seat immediately and
+leaves a PENDING revocation, because the other device still holds trust that has to be withdrawn when it
+next appears. That pending record is what survives a restart and completes on rediscovery.
+
+**What happens.** No pending revocation is persisted, so there is nothing to restore after the restart.
+
+**Where to look.** `PersonalMeshDeviceEvictionCoordinator.evict()` announces the registry change BEFORE it
+finalises the transaction:
+
+    await this.options.onRegistryChanged?.(installation)
+    await this.options.membership.finalizeEviction(token)
+
+On mobile that announcement runs reconciliation, and reconciliation calls `resumeCommittedEvictions()`,
+which finalises every committed transaction - including the one the caller is holding. So the local trust
+is retired by the recovery path rather than by the caller, and which of them stages the peer's revocation
+depends on which got there first.
+
+That ordering also made eviction report `replacement_failed` after succeeding, because the caller then
+finalised a transaction that no longer existed. That half is fixed: finalising an already-finalised
+transaction is a no-op rather than an error (finishing twice is not a failure; finishing something never
+committed still is).
+
+**And it is not an occasional race - it is the normal flow.** Coverage over the sync suites shows the
+caller's finalize reaching only the already-finalised branch: the lines that actually retire the local
+trust and complete the transaction
+(`pairingEntitlementReplacementAdapter.ts` 66-75) are never executed at all, while the no-op branch
+above them always is. Every eviction is therefore completed by the recovery path, and the code that
+reads as the main path is dead in practice.
+
+So the answer to "should the announcement happen before the transaction closes" is no. Until it moves,
+the adapter's finalize is a formality and `resumeCommittedEvictions` is the real implementation - which
+is worth knowing before anyone edits either of them.
+
+## Deleting the mockist ChatScreen suite leaves real ChatScreen journeys uncovered
+
+`__tests__/rntl/screens/ChatScreen.test.tsx` was deleted: 155 tests that rendered ChatScreen with FOURTEEN
+of our own modules stood in for. Coverage it reported was not coverage of our behaviour - the stubs answered
+most of the questions the assertions asked - so the number was inflated rather than earned. Measured before
+deleting, over `src/screens/ChatScreen/**`:
+
+|                | mockist suite (155 tests) | rendered suites (227 tests) |
+|----------------|---------------------------|-----------------------------|
+| statements     | 70.72%                    | 62.93%                      |
+| branches       | 63.45%                    | 57.47%                      |
+| functions      | 69.17%                    | 58.56%                      |
+| lines          | 73.88%                    | 64.74%                      |
+
+The 8-point statement drop is the honest number, and it is concentrated. These are the journeys that now
+have NO real coverage, and each wants a rendered test through `harness/chatHarness` (real screen, native
+faked) rather than a re-mocked one:
+
+- `ChatModalSection.tsx` (70% -> 30%) - the modals reachable from a chat: which one opens from which
+  affordance, and that dismissing returns the user to the conversation rather than a blank screen.
+- `useChatMessageHandlers.ts` (80% -> 53%) - per-message actions: edit, retry, copy, delete, speak. A dead
+  action here is invisible until a user long-presses a message and nothing happens.
+- `useChatModelActions.ts` (66% -> 42%) - switching model mid-conversation, and what happens to a reply in
+  flight when the user does.
+- `ChatScreenComponents.tsx` (89% -> 58%), `modelReadiness.ts` (56% -> 48%), `index.tsx` (63% -> 54%).
+
+Policy this follows: a mockist suite is deleted, not repaired, and the coverage it was claiming is logged
+here as a gap instead of being carried as a green number. Lower and true beats higher and fake.
+
+## Image-generation journeys left uncovered by deleting imageGenerationFlow.test.ts
+
+`__tests__/integration/generation/imageGenerationFlow.test.ts` was deleted: 60 tests that stood in for
+`localDreamGenerator` (the image generator itself), `activeModelService`, `llm` and `litert`. Six of its case
+names end in a line number - "should call stopGeneration after successful enhancement (line 247)",
+"(lines 253-255)", "(lines 290-292)" - which is what a test written to move a coverage number looks like
+rather than one written to protect a user.
+
+Already covered properly by rendered suites, so not re-created: draw-prompt routing (`imageIntentRouting`),
+force/off image mode (`imageModeToggle`), the OOM card and Load Anyway (`imageOomCard`, `imageMemoryCard`),
+lightbox + save-to-gallery (`imageLightbox`), voice-mode image journeys, and the enhancement rules
+(`enhancementNoThinking`, `enhancementReasoningPrompt`, `enhancementStreamingProgress`).
+
+Rewritten for real in `imageGenerationInFlight.rendered.guard.test.tsx`: STOP reaching the native generator,
+progress moving on the card, and a second send not starting a second diffusion.
+
+STILL UNCOVERED, each a real user-visible journey wanting a rendered test:
+
+- **image backend metadata on the finished message.** The per-message details should name the backend that
+  actually rendered it (QNN / MNN / Core ML). Wrong or missing backend attribution is how a user concludes
+  the NPU is being used when it is not. (`gpuBackendMeta` covers the TEXT side only.)
+- **enhancement conversation context rules.** The enhancement request carries recent chat context, capped at
+  the last 10 messages, with system messages skipped and long messages truncated. Uncapped context is a
+  silent context-window overflow on a small model; including system prompts leaks instructions into the
+  rewritten image prompt.
+- **image model auto-load on demand**, and reload when the thread count changed. A user who generates,
+  changes threads in settings, then generates again must not silently keep the old context.
+- **generating with no conversation open** saves to the gallery without trying to add a chat message.
+
+Policy: the mockist file is gone rather than repaired, and what it was claiming is written down here instead
+of carried as a green number.
+
+## Two real-sqlite adapters for one boundary (harness DRY)
+
+`__tests__/harness/sqliteFake.ts` exposes `installRealSqlite` / `doMockRealSqlite`, backing the op-sqlite
+boundary with a real `node:sqlite` in-memory database. `__tests__/hardening/batch9-kb-roundtrip.test.ts`
+hand-rolls the SAME adapter inline (`makeInMemoryDb`, its own `toParam` blob conversion, its own
+transaction/DDL special-casing). Both are real sqlite and both are correct today, which is the problem: the
+next schema change (or the next blob column) has to be understood twice, and a divergence between them would
+show up as a knowledge-base test failing for reasons that have nothing to do with the knowledge base -
+exactly the failure mode batch9's own header describes from its previous hand-rolled matcher.
+
+Fix: batch9 requires `doMockRealSqlite` from the harness and deletes its private engine. Low risk (both
+already pass over real sqlite), and it makes the harness the single definition of that boundary.
+
+## Ejecting a model mid-reply unloads the engine WITHOUT stopping the generation
+
+**Verdict: fix-the-guard (live bug, observed in a rendered test).**
+
+In chat, the model chip opens `ModelsManagerSheet`, whose per-row eject (`models-row-text-eject`) calls
+`ejectResident` -> `modelResidencyManager.evictByKey`. That path never touches the generation owner.
+
+Observed with a LiteRT reply still streaming (rendered ChatScreen, native LiteRT faked, real everything else):
+
+| native call | times called |
+|---|---|
+| `unloadModel` | 1 |
+| `stopGeneration` | **0** |
+
+So the engine is torn down while a generation is still running against it. On a device that is a native
+generation pointed at a released context - a crash or a hang rather than a clean stop - and at best tokens
+arriving for a model that no longer exists.
+
+This is the same abstraction failure as the three `llmService.stopGeneration()` bypasses (fixed: two now go
+through `generationService.stopGeneration()`, the mid-turn compaction retry through `stopAllTextEngines()`),
+but in a fourth place and one layer lower. The residency manager evicts on its own authority - which is right
+for an idle sidecar and wrong for the model that is mid-reply.
+
+Likely fix: `evictByKey` (or its callers) must stop generation on the owner first when the key being evicted
+is the model currently generating - not eject-then-hope. Wants a device check too: eject mid-reply on a LiteRT
+model and watch for a native crash.
+
+Related, and why the fix above is not enough on its own: `handleUnloadModelFn` - the `ModelSelectorModal`
+"Unload" button - is no longer reachable from chat's model chip at all. Either that modal is dead surface
+from ChatScreen (it is still mounted, and still reachable from ChatsListScreen) or the sheet should route
+through it. Worth deciding which, because right now two unload affordances exist with different behaviour.
+
+## Revoking ambient sharing does not cancel a transfer already streaming
+
+**Verdict: fix-the-guard (needs a cancellation seam that does not exist).**
+
+Turning ambient sharing off now revokes the grant atomically with the policy write (mobile-pro f36bf909) and
+reconnect no longer resurrects it (ebdc8cd8). What is still true: a transfer whose bytes are already moving
+runs to completion, so that one file arrives after consent was withdrawn.
+
+There is no handle to cancel it with. `fileTransferService.cancel(deviceId, requestId)` exists, but the ambient
+delivery lifecycle exposes only `completed()` and `failed(error)` to the scheduler, and the send happens under
+an `activityId` (`sharedFileActivityId(deviceId, syncId)`) with no mapping back to the transfer's requestId.
+
+The fix is a dependency-surface change, not a patch: add `cancelDelivery(deviceId, syncId)` to
+`AmbientShareDependencies`, have `sharedFileSyncService` implement it by resolving the syncId to its in-flight
+requestId and calling `fileTransferService.cancel`, and call it from the revocation path. Three call sites
+supply those dependencies today (`sharedFileSyncService` plus two test harnesses), so the change is contained -
+it was deferred because it widens the sync core's contract and deserves review rather than an end-of-branch
+edit.
+
+Bounded until then: the exposure is one already-streaming file, not every reconnection from then on. Raised by
+Greptile on mobile-pro#47, where the thread is deliberately left open so the seam stays tracked.

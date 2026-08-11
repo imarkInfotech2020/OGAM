@@ -43,10 +43,9 @@ jest.mock('../../../src/components/AnimatedListItem', () => ({
   },
 }));
 
-// Mock package.json
-jest.mock('../../../package.json', () => ({ version: '1.0.0' }), {
-  virtual: true,
-});
+// The version on screen comes from the BUILD (Android versionName / iOS MARKETING_VERSION) via
+// react-native-device-info, which jest.setup fakes at that native boundary. package.json is the live
+// production version and is deliberately not what the app reads - see src/utils/appVersion.ts.
 
 const mockSetOnboardingComplete = jest.fn();
 const mockSetThemeMode = jest.fn();
@@ -113,7 +112,7 @@ describe('SettingsScreen', () => {
 
   it('renders version number', () => {
     const { getByText } = render(<SettingsScreen />);
-    expect(getByText(/Version 1\.0\.0/)).toBeTruthy();
+    expect(getByText(/Version 0\.0\.103/)).toBeTruthy();
   });
 
   it('renders navigation items', () => {

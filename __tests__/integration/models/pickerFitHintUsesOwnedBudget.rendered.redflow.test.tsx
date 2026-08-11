@@ -27,13 +27,13 @@ describe('Home picker fit hint — owned budget, not instantaneous free RAM (DR3
   it('a 2.89GB model on a 12GB phone shows NO "(may not fit)" even with RAM currently consumed', async () => {
     // Device boundary: the 01:24 screenshot state — 12GB phone, ~4.5GB currently free.
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 4.5 * GB } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const rtl = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { ModelPickerSheet } = require('../../../src/screens/HomeScreen/components/ModelPickerSheet');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     const docs = boundary.fs!.DocumentDirectoryPath;
     const seed = (id: string, fileName: string, size: number) => {

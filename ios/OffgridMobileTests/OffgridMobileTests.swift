@@ -20,6 +20,59 @@ private func makeTempDirectory() -> URL {
   return url
 }
 
+// MARK: - Sync Screenshot Tests
+
+final class SyncScreenshotFileWriterTests: XCTestCase {
+
+  func testPersistsAnAppOwnedCopyAndReturnsTheTransferDescriptor() throws {
+    let documents = makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: documents) }
+    let bytes = Data("screen bytes".utf8)
+    let syncId = UUID(uuidString: "11111111-1111-4111-8111-111111111111")!
+    let createdAt = Date(timeIntervalSince1970: 1_753_699_200)
+
+    let descriptor = try SyncScreenshotFileWriter.persist(
+      data: bytes,
+      typeIdentifier: "public.png",
+      createdAt: createdAt,
+      width: 1179,
+      height: 2556,
+      documentsURL: documents,
+      syncId: syncId
+    )
+
+    let filePath = try XCTUnwrap(descriptor["filePath"] as? String)
+    XCTAssertTrue(filePath.hasPrefix(documents.path))
+    XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: filePath)), bytes)
+    XCTAssertEqual(
+      descriptor["syncId"] as? String,
+      "11111111-1111-4111-8111-111111111111"
+    )
+    XCTAssertEqual(descriptor["mimeType"] as? String, "image/png")
+    XCTAssertEqual(descriptor["fileSize"] as? Int, bytes.count)
+    XCTAssertEqual(descriptor["width"] as? Int, 1179)
+    XCTAssertEqual(descriptor["height"] as? Int, 2556)
+  }
+
+  func testFailedAppOwnedCopyDoesNotProduceADescriptor() {
+    let regularFile = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString)
+    try! Data("not a directory".utf8).write(to: regularFile)
+    defer { try? FileManager.default.removeItem(at: regularFile) }
+
+    XCTAssertThrowsError(
+      try SyncScreenshotFileWriter.persist(
+        data: Data("screen bytes".utf8),
+        typeIdentifier: "public.png",
+        createdAt: Date(),
+        width: 1,
+        height: 1,
+        documentsURL: regularFile
+      )
+    )
+  }
+}
+
 // MARK: - PDFExtractorModule Tests
 
 final class PDFExtractorModuleTests: XCTestCase {
@@ -848,5 +901,103 @@ final class AppDelegateBackgroundSessionTests: XCTestCase {
       appDelegate is UIApplicationDelegate,
       "AppDelegate must conform to UIApplicationDelegate"
     )
+  }
+}
+
+// MARK: - Sync Clipboard Native Boundary Tests
+
+final class SyncClipboardObserverTests: XCTestCase {
+
+  func testDefaultTimestampUsesUnixMilliseconds() {
+    let pasteboardName = UIPasteboard.Name("ai.offgridmobile.tests.\(UUID().uuidString)")
+    guard let pasteboard = UIPasteboard(name: pasteboardName, create: true) else {
+      return XCTFail("Could not create a test pasteboard")
+    }
+    defer { UIPasteboard.remove(withName: pasteboardName) }
+
+    let notificationCenter = NotificationCenter()
+    var observedTimestamp: Double?
+    let observer = SyncClipboardObserver(
+      pasteboard: pasteboard,
+      notificationCenter: notificationCenter
+    ) { _, timestamp in
+      observedTimestamp = timestamp
+    }
+
+    observer.setEnabled(true)
+    pasteboard.string = "unix timestamp"
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+
+    let earliestReasonableUnixMilliseconds = Date(timeIntervalSince1970: 1_700_000_000)
+      .timeIntervalSince1970 * 1_000
+    XCTAssertGreaterThanOrEqual(
+      observedTimestamp ?? 0,
+      earliestReasonableUnixMilliseconds,
+      "Clipboard events must use Unix milliseconds like the shared clipboard protocol"
+    )
+  }
+
+  func testRejectsInvalidNativeClipboardTimestamps() {
+    let pasteboardName = UIPasteboard.Name("ai.offgridmobile.tests.\(UUID().uuidString)")
+    guard let pasteboard = UIPasteboard(name: pasteboardName, create: true) else {
+      return XCTFail("Could not create a test pasteboard")
+    }
+    defer { UIPasteboard.remove(withName: pasteboardName) }
+
+    let notificationCenter = NotificationCenter()
+    var observed: [String] = []
+    let observer = SyncClipboardObserver(
+      pasteboard: pasteboard,
+      notificationCenter: notificationCenter,
+      now: { -.infinity }
+    ) { text, _ in
+      observed.append(text)
+    }
+
+    observer.setEnabled(true)
+    pasteboard.string = "invalid timestamp"
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+
+    XCTAssertEqual(observed, [])
+  }
+
+  func testObservesAndWritesTheRealPasteboardOnlyWhileEnabled() {
+    let pasteboardName = UIPasteboard.Name("ai.offgridmobile.tests.\(UUID().uuidString)")
+    guard let pasteboard = UIPasteboard(name: pasteboardName, create: true) else {
+      return XCTFail("Could not create a test pasteboard")
+    }
+    defer { UIPasteboard.remove(withName: pasteboardName) }
+
+    let notificationCenter = NotificationCenter()
+    var observed: [(text: String, timestamp: Double)] = []
+    let observer = SyncClipboardObserver(
+      pasteboard: pasteboard,
+      notificationCenter: notificationCenter,
+      now: { 42 }
+    ) { text, timestamp in
+      observed.append((text, timestamp))
+    }
+
+    observer.setEnabled(true)
+    pasteboard.string = "copied locally"
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+
+    XCTAssertEqual(observed.count, 1)
+    XCTAssertEqual(observed.first?.text, "copied locally")
+    XCTAssertEqual(observed.first?.timestamp, 42_000)
+
+    observer.writeText("received from desktop")
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+    XCTAssertEqual(pasteboard.string, "received from desktop")
+    XCTAssertEqual(
+      observed.map(\.text),
+      ["copied locally"],
+      "A programmatic Sync write must not be attributed as a local copy"
+    )
+
+    observer.setEnabled(false)
+    pasteboard.string = "must stay local"
+    notificationCenter.post(name: UIPasteboard.changedNotification, object: pasteboard)
+    XCTAssertEqual(observed.count, 1)
   }
 }

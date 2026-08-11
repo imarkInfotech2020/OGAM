@@ -39,13 +39,13 @@ describe('detail Available Files fit hint matches the owned fileExceedsBudget ve
       },
     }));
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');
     const { fileExceedsBudget } = require('../../../src/services/memoryBudget');
     const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     await hardwareService.refreshMemoryInfo();
     const ramGB = hardwareService.getTotalMemoryGB();
@@ -84,9 +84,9 @@ describe('detail Available Files fit hint matches the owned fileExceedsBudget ve
     // exact-budget file to "fits" → this test goes red (mutant killed).
     installNativeBoundary({ download: true, fs: true, ram: { platform: 'android', totalBytes: 4 * GB, availBytes: 3 * GB } });
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { modelBudgetFraction } = require('../../../src/services/memoryBudget');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     const budgetBytes = 4 * modelBudgetFraction(4, 'android', 'balanced') * GB; // 4 × 0.50 × GB = exactly 2.0 GB (integer bytes)
     const atBudget = { name: 'model-atbudget.gguf', size: budgetBytes, quantization: 'Q5', downloadUrl: `https://hf.co/${MODEL_ID}/resolve/main/model-atbudget.gguf` };
     const underBudget = { name: 'model-under.gguf', size: budgetBytes - 1, quantization: 'Q4', downloadUrl: `https://hf.co/${MODEL_ID}/resolve/main/model-under.gguf` };
@@ -102,13 +102,13 @@ describe('detail Available Files fit hint matches the owned fileExceedsBudget ve
       },
     }));
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { hardwareService } = require('../../../src/services/hardware');
     const { fileExceedsBudget } = require('../../../src/services/memoryBudget');
     const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     await hardwareService.refreshMemoryInfo();
     const ramGB = hardwareService.getTotalMemoryGB();

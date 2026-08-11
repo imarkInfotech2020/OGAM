@@ -29,10 +29,10 @@ describe('T023b (rendered) — Eject All frees every resident, sidecars included
     const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true, modelFileSizeBytes: 4 * 1024 * 1024 * 1024 });
     h.render();
     await h.placeImageModel({ backend: 'mnn' });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { modelResidencyManager } = require('../../../src/services/modelResidency');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     await activeModelService.loadImageModel('sd');
     await h.setupWhisperModel();
 

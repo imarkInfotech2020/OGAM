@@ -10,6 +10,8 @@ import { AppSheet } from '../AppSheet';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import { useLoadedTextModelPath } from '../../hooks/useLoadedTextModelPath';
+import { useActiveModelStatus } from '../../hooks/useActiveModelStatus';
+import { loadingTextRowId } from './rowState';
 import { DownloadedModel, ONNXImageModel, RemoteModel } from '../../types';
 import { activeModelService, llmService, remoteServerManager } from '../../services';
 import { loadModelWithOverride } from '../../services/loadModelWithOverride';
@@ -64,7 +66,9 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // (the loaded path) is null and the switcher would show "Available Models" with
   // nothing marked active. Fall back to the SELECTED model so the user can see and
   // switch their active model before it's loaded.
-  const selectedModelPath = downloadedModels.find(m => m.id === activeModelId)?.filePath ?? null;
+  // Resolved by the owning service (activeModelService), so a selected id whose entry was rebuilt
+  // under a different id still marks its row instead of leaving the sheet looking empty.
+  const selectedModelPath = activeModelService.resolveSelectedTextModel()?.filePath ?? null;
   const {
     servers,
     discoveredModels,
@@ -80,15 +84,15 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   // activeImageModelId, which only flips to the new model on success. The row spinner keys off THIS,
   // else it shows on the previously-active model instead of the one that's loading (device 2026-07-14).
   const [loadingImageModelId, setLoadingImageModelId] = useState<string | null>(null);
-  // Same for text: the row the user tapped, so a switch (e.g. gemma llama → gemma litert) spins the NEW
-  // row, not the still-loaded old one. isLoading is the parent's signal; clear when it goes false.
-  const [loadingTextModelId, setLoadingTextModelId] = useState<string | null>(null);
-  useEffect(() => { if (!isLoading) setLoadingTextModelId(null); }, [isLoading]);
-  // Which text row shows the spinner: the row the user tapped, OR — when a load is in flight with no
-  // explicit tap — the active model being (re)loaded. The "model settings changed, reload" card opens
-  // this sheet and reloads the SAME active model (id unchanged), so without this fallback the sheet opens
-  // with a highlighted-but-idle row and no spinner, which reads as broken (device 2026-07-14).
-  const effectiveLoadingTextModelId = loadingTextModelId ?? (isLoading ? activeModelId : null);
+  // Which text row shows the spinner: the model the SERVICE is loading, and only while it is loading.
+  //
+  // This used to be the row the user tapped, cleared by an effect on the parent's isLoading. Tapping a
+  // row deliberately does not start a load (selecting only MARKS a model; the load is deferred to the
+  // first message), so isLoading never transitioned and the spinner ran forever - a row that claimed
+  // to be loading a model nothing was loading (device, 2026-07-31). Deriving it from the owner means
+  // the sheet cannot invent a load, and it still spins the right row for a reload of the active model.
+  const modelStatus = useActiveModelStatus();
+  const effectiveLoadingTextModelId = loadingTextRowId(modelStatus, isLoading, activeModelId);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const filteredDownloadedModels = useMemo(
@@ -178,10 +182,10 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
     }
   };
 
-  // Handle selecting a local model - clear remote selection
+  // Handle selecting a local model - clear remote selection. The tap records a SELECTION; the row
+  // reflects that as selected, and shows a spinner only once the service actually starts loading.
   const handleSelectLocalModel = (model: DownloadedModel) => {
     remoteServerManager.clearActiveRemoteModel();
-    setLoadingTextModelId(model.id); // spinner goes on THE ROW JUST TAPPED, not the old active one
     onSelectModel(model);
   };
 

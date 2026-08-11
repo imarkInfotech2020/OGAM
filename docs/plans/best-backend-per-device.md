@@ -61,12 +61,12 @@ Follows SOLID/DIP + platform-abstraction rules — no `Platform.OS`-mechanism br
   Auto-NPU requires bundling the SDK into the build + real per-SoC device testing. Until
   then the resolver must *exclude* htp via `compiledBackends`.
 - **Per-SoC verification** — auto-GPU can crash/OOM on a bad driver. Each SoC family the
-  default flips on should get an on-device Provit run; genuine gaps are modelled as
+  default flips on should get an on-device on-device run; genuine gaps are modelled as
   capability data, not scattered `if`s.
 
 ## Rollout
 1. **Phase 1 (safe win):** capability-as-data + resolver + Android auto-OpenCL when
-   supported. Own branch/PR, pure-function tested, Provit on 1–2 Adreno + 1 Mali device.
+   supported. Own branch/PR, pure-function tested, an on-device run on 1–2 Adreno + 1 Mali device.
    iOS unchanged.
 2. **Phase 2:** bundle Hexagon SDK, runtime `compiledBackends` gate, expose + auto-select
    HTP/NPU on flagship Qualcomm.

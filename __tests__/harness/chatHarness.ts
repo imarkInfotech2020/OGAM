@@ -105,8 +105,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // spotlight (step 12) fires and wraps the send button in an AttachStep, which intercepts the composer
   // gesture in tests. The tour is unrelated to any behavior under test, so mark it done up front.
    
-  require('../../src/components/onboarding/spotlightState').setPendingSpotlight(null);
-  useAppStore.setState({ checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
+  useAppStore.setState({ checklistDismissed: true });
 
   // Activate PRO (audio/voice mode header toggle, audio layout, TTS, MCP) via the real bootstrap BEFORE any
   // screen mounts, so pro slots render in Home + ChatScreen. Reusable seam (proHarness.installPro).
@@ -131,6 +130,20 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // deferInitialLoad leaves the model selected-but-not-loaded (the real lazy-on-select state) so a test
   // can assert nothing is eager-warmed; the first send then triggers the real lazy load.
   if (!opts.deferInitialLoad) await activeModelService.loadTextModel('m');
+
+  // Stop any generation this suite leaves in flight, on THIS module graph, before the next suite resets
+  // modules. Registered the same way requireRTL registers its unmount (a global jest.setup's afterEach
+  // calls), because jest.setup must not require these modules itself - doing so would instantiate them in
+  // the hundred suites that never touch generation. Without it, a suite that ends mid-reply leaves a 50ms
+  // token-flush timer that fires inside the NEXT suite and fails it, which is why exactly one rendered
+  // suite failed per run with a different name every time.
+  {
+
+    const { generationService } = require('../../src/services');
+    (globalThis as unknown as { __GEN_CLEANUP__?: () => void }).__GEN_CLEANUP__ = () => {
+      generationService.stopGeneration().catch(() => { });
+    };
+  }
 
   routeHolder.params = {}; // new chat — the first send() creates the conversation
 
@@ -215,6 +228,66 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     },
 
     /**
+     * The whole image-generation journey, through real gestures: place a downloaded image model, force image
+     * mode ON via the real toggle, and send a prompt.
+     *
+     * ONE definition of this journey. Two suites had grown near-identical private copies (imageLightbox's
+     * `generateImage` and an in-flight variant), differing only in whether they wait for the finished image -
+     * which is exactly how a third copy gets written with a subtly different idea of what "generated" means.
+     *
+     * `hold: true` parks the generation INSIDE native generateImage and returns while it is still in flight, so
+     * a test can exercise what the user can do during the many seconds diffusion really takes (press STOP,
+     * watch progress move, tap send again). Release it with `boundary.diffusion.releaseGeneration()` - or by
+     * cancelling, which is what native does.
+     */
+    async generateImageViaUI(
+      imgOpts: { prompt?: string; backend?: 'mnn' | 'qnn' | 'coreml'; hold?: boolean } = {},
+    ) {
+      const { prompt = 'a fox in the snow', backend = 'coreml', hold = false } = imgOpts;
+      if (!this.view) this.render();
+      await this.placeImageModel({ backend });
+      await this.cycleImageMode(); // auto -> ON(force); also activates the downloaded image model
+      await rtl.waitFor(() => {
+        expect(this.view!.queryByTestId('image-mode-force-badge')).not.toBeNull();
+      });
+
+      if (hold) boundary.diffusion.holdNextGeneration();
+      await this.tapSend(prompt);
+      // Native has been entered either way; only the waiting differs.
+      await rtl.waitFor(() => { expect(boundary.diffusion.calls.generateImage.length).toBe(1); });
+      if (hold) {
+        await rtl.waitFor(() => { expect(boundary.diffusion.generationHeld()).toBe(true); });
+        return;
+      }
+      await rtl.waitFor(() => { expect(this.view!.queryByTestId('generated-image')).not.toBeNull(); });
+    },
+
+    /**
+     * Press the stop control on the image progress card.
+     *
+     * That control has NO testID (ChatScreenComponents: a bare TouchableOpacity around an "x" icon), so it is
+     * reached structurally - the pressable ancestor of the card's "x". The count is asserted first, so if a
+     * second "x" control ever shares the screen this fails loudly instead of quietly pressing the wrong thing.
+     * A testID on that control would delete this helper.
+     */
+    async pressImageCardStop() {
+      type PressNode = { type?: unknown; props?: Record<string, unknown>; parent?: PressNode | null };
+      await rtl.act(async () => {
+        const xIcons = this.view!.root.findAll(
+          (n: PressNode) => n.type === 'Icon' && (n.props as { name?: string })?.name === 'x',
+        );
+        expect(xIcons).toHaveLength(1);
+        let node: PressNode | null = xIcons[0] as unknown as PressNode;
+        for (let depth = 0; node && depth < 12; depth++) {
+          const onPress = node.props?.onPress;
+          if (typeof onPress === 'function') { (onPress as () => void)(); return; }
+          node = node.parent ?? null;
+        }
+        throw new Error('the image progress card\'s "x" has no pressable ancestor - the stop control is dead');
+      });
+    },
+
+    /**
      * Gesture-only send: type into the real input + press the real send button, WITHOUT scripting a turn.
      * Use when the test scripts multi-turn native output itself (e.g. boundary.litert.scriptTurns([...]) for
      * a two-pass router). The gesture is identical to send() — only the scripting differs.
@@ -250,13 +323,18 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * returns an image, which the real useAttachments hook adds as a pending attachment. Requires a
      * vision-capable model (setupChatScreen({vision:true})), else the app alerts instead of attaching.
      */
-    async attachImageViaUI() {
+    async attachImageViaUI(source: 'library' | 'camera' = 'library') {
       const view = this.view!;
       rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('attach-button')));
       rtl.fireEvent.press(await rtl.waitFor(() => view.getByTestId('attach-photo')));
-      // Android: attach-photo opens a "Choose image source" alert — tap "Photo Library" (a real gesture),
-      // which (after a short delay) launches the faked picker and adds the attachment.
-      rtl.fireEvent.press(await rtl.waitFor(() => view.getByText('Photo Library')));
+      // Android: attach-photo opens a "Choose image source" alert — tap "Photo Library" or "Camera" (both
+      // real gestures), which (after a short delay) launches the faked picker and adds the attachment.
+      // The two sources matter for a MULTI-image turn: the faked library returns one fixed uri every time,
+      // so two library picks are indistinguishable from one image arriving twice. The camera returns a
+      // different uri, which is what makes "both images reached the engine" an assertion rather than a hope.
+      rtl.fireEvent.press(
+        await rtl.waitFor(() => view.getByText(source === 'camera' ? 'Camera' : 'Photo Library')),
+      );
       await this.settle(400); // the handler defers pickFromLibrary via setTimeout(300)
       await rtl.waitFor(() => { expect(view.queryByTestId('attachments-container')).not.toBeNull(); });
     },

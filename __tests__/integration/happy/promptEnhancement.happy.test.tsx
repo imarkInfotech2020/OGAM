@@ -12,14 +12,14 @@ import { createONNXImageModel, createDownloadedModel } from '../../utils/factori
 describe('happy — image prompt enhancement rewrites the prompt via the text engine', () => {
   it('sends the enhanced prompt (not the raw one) to the native image generator', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     requireRTL();
     const { llmService } = require('../../../src/services/llm');
     const { hardwareService } = require('../../../src/services/hardware');
     const { imageGenerationService } = require('../../../src/services/imageGenerationService');
     const { localDreamGeneratorService } = require('../../../src/services/localDreamGenerator');
     const { useAppStore, useChatStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // A llama.cpp text engine is active + loaded (it runs the enhancement via generateResponse).
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);

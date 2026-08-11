@@ -15,7 +15,7 @@ describe('deviceFingerprint', () => {
       setGenericPassword: jest.fn(async () => true),
       ACCESSIBLE: { AFTER_FIRST_UNLOCK: 'AfterFirstUnlock' },
     }));
-    const { getDeviceFingerprint } = require('../../../src/services/deviceFingerprint');
+    const { getDeviceFingerprint } = require('../../../pro/licensing/deviceFingerprint');
     const keychain = require('react-native-keychain');
 
     expect(await getDeviceFingerprint()).toBe('existing-fp');
@@ -29,7 +29,7 @@ describe('deviceFingerprint', () => {
       setGenericPassword: setSpy,
       ACCESSIBLE: { AFTER_FIRST_UNLOCK: 'AfterFirstUnlock' },
     }));
-    const { getDeviceFingerprint } = require('../../../src/services/deviceFingerprint');
+    const { getDeviceFingerprint } = require('../../../pro/licensing/deviceFingerprint');
 
     const fp = await getDeviceFingerprint();
     expect(typeof fp).toBe('string');
@@ -42,7 +42,7 @@ describe('deviceFingerprint', () => {
   it('maps the platform tag', () => {
     const rn = require('react-native');
     rn.Platform.OS = 'android';
-    const { getPlatformTag } = require('../../../src/services/deviceFingerprint');
+    const { getPlatformTag } = require('../../../pro/licensing/deviceFingerprint');
     expect(getPlatformTag()).toBe('android');
   });
 });

@@ -8,7 +8,7 @@
  * branches key off of. This file closes that gap by driving the real service and
  * asserting the exact values the preview screen consumes:
  *   - textContent === ''      → screen shows "Could not extract text" (empty-content, #19)
- *   - a thrown error message  → screen shows the message (#20 back-from-error is UI/Provit)
+ *   - a thrown error message  → screen shows the message (#20 back-from-error is UI/an on-device run)
  *   - JSON raw text preserved → screen renders it verbatim (#16)
  *   - file-not-found throw    → screen error state (#19-family)
  *

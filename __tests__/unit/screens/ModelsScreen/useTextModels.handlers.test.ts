@@ -87,6 +87,8 @@ jest.mock('../../../../src/services', () => ({
     getModelRecommendation: jest.fn(() => ({ maxParameters: 8 })),
   },
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../../utils/activeModelServiceStub').activeModelSelectionStub(),
     unloadTextModel: () => mockUnloadTextModel(),
   },
 }));

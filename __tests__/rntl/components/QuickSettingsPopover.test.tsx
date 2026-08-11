@@ -11,11 +11,11 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { QuickSettingsPopover } from '../../../src/components/ChatInput/Popovers';
+import { useAppStore } from '../../../src/stores';
+import { getTheme } from '../../../src/theme';
 
-const COLORS = {
-  text: '#000000', textMuted: '#999999', primary: '#00FF00',
-  background: '#FFFFFF', surface: '#F5F5F5', border: '#E0E0E0',
-};
+/** The palette the component is actually given, read from the real theme rather than invented here. */
+const COLORS = getTheme('light').colors;
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
@@ -25,25 +25,6 @@ jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => {
   const { Text } = require('react-native');
   return ({ name, color }: any) => <Text testID={`mci-${name}`} style={{ color }}>{name}</Text>;
 });
-
-jest.mock('../../../src/theme', () => ({
-  useTheme: () => ({ colors: COLORS }),
-}));
-
-jest.mock('../../../src/utils/haptics', () => ({ triggerHaptic: jest.fn() }));
-
-jest.mock('../../../src/bootstrap/slotRegistry', () => ({
-  getSlot: () => null,
-  SLOTS: { quickSettingsAudioRow: 'quickSettingsAudioRow' },
-}));
-
-jest.mock('../../../src/stores', () => ({
-  useAppStore: () => ({
-    settings: { thinkingEnabled: false },
-    updateSettings: jest.fn(),
-    toolCountHintDismissed: false,
-  }),
-}));
 
 const baseProps = {
   visible: true,
@@ -59,7 +40,11 @@ const baseProps = {
 };
 
 describe('QuickSettingsPopover', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Thinking off, through the store's own action - the state a user is in before they turn it on.
+    useAppStore.getState().updateSettings({ thinkingEnabled: false });
+  });
 
   it('keeps the Tools icon neutral (not green) even when tools are enabled', () => {
     const { getByTestId } = render(<QuickSettingsPopover {...baseProps} enabledToolCount={2} />);

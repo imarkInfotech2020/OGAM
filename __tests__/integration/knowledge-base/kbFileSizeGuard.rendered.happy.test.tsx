@@ -22,13 +22,13 @@ jest.mock('@react-navigation/native', () => ({
 
 async function mountKbWithPickedFile(sizeBytes: number) {
   const boundary = installNativeBoundary({ fs: true, ram: { platform: 'ios', totalBytes: 8 * 1024 * MB, availBytes: 6 * 1024 * MB } });
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const React = require('react');
   const rtl = requireRTL();
   const picker = require('@react-native-documents/picker');
   const { useProjectStore } = require('../../../src/stores/projectStore');
   const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
 
   // DEVICE BOUNDARY: the picked file on disk (memfs) at the exact size, and the picker returning it. iOS
   // 'import' path → resolvePickedFileUri strips file:// and returns the path directly (no keepLocalCopy).

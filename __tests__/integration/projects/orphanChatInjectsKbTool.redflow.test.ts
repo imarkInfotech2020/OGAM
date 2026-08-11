@@ -13,12 +13,12 @@ import { makeGenDeps } from '../../harness/genDeps';
 describe('Q9b — orphaned chat still injects the KB tool (red-flow)', () => {
   it('does not offer search_knowledge_base for a chat whose project was deleted', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { llmService } = require('../../../src/services/llm');
     const { hardwareService } = require('../../../src/services/hardware');
     const { startGenerationFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
     const { useProjectStore, useChatStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();

@@ -20,7 +20,7 @@ describe('app boot is not blocked by the download DB (rendered)', () => {
   it('clears the boot loader while getActiveDownloads never resolves (wedged download DB)', async () => {
     const boundary = installNativeBoundary();
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const rtl = requireRTL();
     const { NativeModules } = require('react-native');
@@ -31,7 +31,7 @@ describe('app boot is not blocked by the download DB (rendered)', () => {
       getActiveDownloads: jest.fn(() => new Promise(() => {})),
     };
     const App = require('../../../App').default;
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     const view = rtl.render(React.createElement(App));
 

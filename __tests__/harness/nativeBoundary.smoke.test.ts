@@ -12,7 +12,7 @@ describe('nativeBoundary harness — injection mechanism', () => {
 
     // Require the REAL service AFTER seeding — its module-scope `const { LiteRTModule } = NativeModules`
     // must capture our fake.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { liteRTService } = require('../../src/services/litert');
 
     expect(liteRTService.isAvailable()).toBe(true);
@@ -25,7 +25,7 @@ describe('nativeBoundary harness — injection mechanism', () => {
 
   it('scripts a tool-call turn: the REAL service dispatches the tool call and respondToToolCall, then completes empty', async () => {
     const boundary = installNativeBoundary();
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { liteRTService } = require('../../src/services/litert');
     await liteRTService.loadModel('/m', 'gpu', {});
 
@@ -47,7 +47,7 @@ describe('nativeBoundary harness — injection mechanism', () => {
     // Seed ABOVE the MIN_MODEL_FILE_SIZE (10MB) floor — listDownloadedModels drops sub-floor
     // (truncated) files (V2), so a listable model must exceed it.
     boundary.fs!.seedFile(`${boundary.fs!.DocumentDirectoryPath}/whisper-models/ggml-base.en.bin`, 20 * 1024 * 1024);
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { whisperService } = require('../../src/services/whisperService');
     const listed = await whisperService.listDownloadedModels();
     // Proves the stateful FS reached the service (the dumb global stub returns []).
@@ -57,7 +57,7 @@ describe('nativeBoundary harness — injection mechanism', () => {
 
   it('seeds the RAM leaf so DeviceMemoryModule reports the seeded free bytes', async () => {
     installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * 1024 ** 3, availBytes: 640 * 1024 * 1024 } });
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const RN = require('react-native');
     const info = await RN.NativeModules.DeviceMemoryModule.getMemoryInfo();
     expect(info.processAvailableBytes).toBe(640 * 1024 * 1024);

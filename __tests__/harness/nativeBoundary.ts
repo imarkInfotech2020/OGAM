@@ -436,17 +436,37 @@ export interface DiffusionFake {
   module: Record<string, jest.Mock>;
   /** Every generateImage nativeParams, for arg-level cross-checks if needed. */
   calls: { generateImage: Array<Record<string, unknown>> };
+  /** Hold the NEXT generateImage open (it stays in flight) until releaseGeneration(). Diffusion takes many
+   *  seconds on a device, and everything the user can do DURING it — press STOP, watch progress, tap send
+   *  again — is unreachable against a generate that resolves in the same tick. One-shot. */
+  holdNextGeneration(): void;
+  /** Release a generation held by holdNextGeneration(). No-op if nothing is held. */
+  releaseGeneration(): void;
+  /** True while a generation is parked inside native generateImage. */
+  generationHeld(): boolean;
+  /** How many times native cancelGeneration was asked for — the far side of the user's STOP. */
+  cancelCount(): number;
 }
 
 function makeDiffusionFake(seedFile?: (path: string, sizeBytes: number) => void): DiffusionFake {
   const calls: DiffusionFake['calls'] = { generateImage: [] };
   let seedCounter = 0;
+  let holdNext = false;
+  let held: (() => void) | null = null;
+  let cancels = 0;
   const module: Record<string, jest.Mock> = {
     isModelLoaded: jest.fn().mockResolvedValue(true),
     getLoadedModelPath: jest.fn().mockResolvedValue(null),
     loadModel: jest.fn().mockResolvedValue(true),
     unloadModel: jest.fn().mockResolvedValue(true),
-    cancelGeneration: jest.fn().mockResolvedValue(true),
+    // Faithful to native: cancel RELEASES an in-flight generation rather than rejecting it. The held
+    // promise then settles, which is how the app's own cancel path unwinds on a device.
+    cancelGeneration: jest.fn(() => {
+      cancels++;
+      held?.();
+      held = null;
+      return Promise.resolve(true);
+    }),
     getGeneratedImages: jest.fn().mockResolvedValue([]),
     deleteGeneratedImage: jest.fn().mockResolvedValue(true),
     hasOpenCLCache: jest.fn().mockResolvedValue(true),
@@ -455,8 +475,12 @@ function makeDiffusionFake(seedFile?: (path: string, sizeBytes: number) => void)
       DEFAULT_STEPS: 8, DEFAULT_GUIDANCE_SCALE: 7.5, DEFAULT_WIDTH: 512, DEFAULT_HEIGHT: 512,
       SUPPORTED_WIDTHS: [256, 512], SUPPORTED_HEIGHTS: [256, 512],
     }),
-    generateImage: jest.fn((nativeParams: Record<string, unknown>) => {
+    generateImage: jest.fn(async (nativeParams: Record<string, unknown>) => {
       calls.generateImage.push(nativeParams);
+      if (holdNext) {
+        holdNext = false;
+        await new Promise<void>((resolve) => { held = resolve; });
+      }
       seedCounter += 1;
       const imagePath = `/generated/img-${seedCounter}.png`;
       // The real native module writes the rendered PNG to disk — mirror that so the app's
@@ -474,7 +498,14 @@ function makeDiffusionFake(seedFile?: (path: string, sizeBytes: number) => void)
     addListener: jest.fn(),
     removeListeners: jest.fn(),
   };
-  return { module, calls };
+  return {
+    module,
+    calls,
+    holdNextGeneration: () => { holdNext = true; },
+    releaseGeneration: () => { held?.(); held = null; },
+    generationHeld: () => held !== null,
+    cancelCount: () => cancels,
+  };
 }
 
 // ---------------------------------------------------------------------------

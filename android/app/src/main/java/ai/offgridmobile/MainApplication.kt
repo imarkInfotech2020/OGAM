@@ -11,6 +11,12 @@ import ai.offgridmobile.localdream.LocalDreamPackage
 import ai.offgridmobile.pdf.PDFExtractorPackage
 import ai.offgridmobile.litert.LiteRTPackage
 import ai.offgridmobile.devicememory.DeviceMemoryPackage
+import ai.offgridmobile.clipboard.SyncClipboardPackage
+import ai.offgridmobile.directory.SyncDirectorySourcePackage
+import ai.offgridmobile.downloads.SyncDownloadsPackage
+import ai.offgridmobile.sync.BlobChannelPackage
+import ai.offgridmobile.screenshot.SyncScreenshotPackage
+import ai.offgridmobile.sync.MeshResidencyPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -25,6 +31,12 @@ class MainApplication : Application(), ReactApplication {
           add(PDFExtractorPackage())
           add(LiteRTPackage())
           add(DeviceMemoryPackage())
+          add(SyncClipboardPackage())
+          add(SyncDirectorySourcePackage())
+          add(MeshResidencyPackage())
+          add(SyncScreenshotPackage())
+          add(SyncDownloadsPackage())
+          add(BlobChannelPackage())
         },
     )
   }

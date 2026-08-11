@@ -1,32 +1,29 @@
 /**
  * ProManageSection
  *
- * Shown on the Pro screen when Pro is active. Surfaces subscription status from
- * the cached Keygen license (lifetime vs yearly + expiry) and the registered
- * devices (N of 5). The device list is read-only on purpose: the 5-device cap is
- * a hard limit and there is no self-service removal — letting users free slots
- * would let a single key cycle through unlimited devices and defeat the cap.
+ * Shown on the Pro screen when a protected credential is saved. Surfaces
+ * subscription status from the cached license (lifetime vs yearly + expiry).
+ * Active licensed
+ * devices are managed from the Pro-owned Sync screen, so there is one list and
+ * one action owner rather than a second read-only copy here.
  * For a recurring (yearly) license it explains how to cancel or update payment:
  * via the link RevenueCat emails with every purchase and renewal. There is no
  * in-app portal because RevenueCat authenticates Web Billing customers by email.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
+import { useHasRegisteredScreen } from '../../navigation/screenRegistry';
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 import {
   getProLicenseInfo,
-  listProDevices,
   PRO_TIER_META,
   type ProLicenseInfo,
 } from '../../services/proLicenseService';
-import { getDeviceFingerprint } from '../../services/deviceFingerprint';
-import type { KeygenMachine } from '../../services/keygenClient';
 import logger from '../../utils/logger';
-
-const MAX_DEVICES = 5;
 
 function formatDate(iso: string | null): string {
   if (!iso) return '';
@@ -38,19 +35,16 @@ function formatDate(iso: string | null): string {
 }
 
 export const ProManageSection: React.FC = () => {
+  const navigation = useNavigation<any>();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const hasSyncScreen = useHasRegisteredScreen('Sync');
   const [info, setInfo] = useState<ProLicenseInfo | null>(null);
-  const [devices, setDevices] = useState<KeygenMachine[]>([]);
-  const [thisFingerprint, setThisFingerprint] = useState('');
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
-      const [licenseInfo, fingerprint] = await Promise.all([getProLicenseInfo(), getDeviceFingerprint()]);
-      setInfo(licenseInfo);
-      setThisFingerprint(fingerprint);
-      setDevices(await listProDevices());
+      setInfo(await getProLicenseInfo());
     } catch (e) {
       logger.error('[ProManage] load failed:', e instanceof Error ? e.message : String(e));
     } finally {
@@ -79,41 +73,41 @@ export const ProManageSection: React.FC = () => {
     );
   }
 
+  const renewing = tierMeta?.renews === true;
+
   return (
     <View style={styles.card}>
-      <View style={styles.statusRow}>
+      <Text style={styles.cardTitle}>Your licence</Text>
+      <View style={[styles.row, hasSyncScreen || renewing ? null : styles.lastRow]}>
         <Icon name="check-circle" size={18} color={colors.primary} />
-        <Text style={styles.statusText}>{statusLine}</Text>
+        <Text style={styles.rowTitle}>{statusLine}</Text>
       </View>
 
-      <Text style={styles.sectionLabel}>Devices ({devices.length} of {MAX_DEVICES})</Text>
-      <Text style={styles.capHint}>
-        A license works on up to {MAX_DEVICES} devices. This limit is fixed.
-      </Text>
-      {devices.map((machine) => {
-        const isThisDevice = machine.fingerprint === thisFingerprint;
-        return (
-          <View key={machine.id} style={styles.deviceRow}>
-            <Icon name="smartphone" size={14} color={colors.textMuted} />
-            <View style={styles.deviceInfo}>
-              <Text style={styles.deviceName} numberOfLines={1}>
-                {machine.name || machine.platform || 'Device'}
-                {isThisDevice ? ' · This device' : ''}
-              </Text>
-              {machine.lastSeen ? <Text style={styles.deviceMeta}>Added {formatDate(machine.lastSeen)}</Text> : null}
-            </View>
+      {hasSyncScreen ? (
+        <TouchableOpacity
+          style={[styles.row, renewing ? null : styles.lastRow]}
+          activeOpacity={0.72}
+          onPress={() => navigation.navigate('Sync')}
+          accessibilityRole="button"
+          accessibilityLabel="Manage licensed devices in Sync"
+        >
+          <Icon name="monitor" size={18} color={colors.primary} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Licensed devices</Text>
+            <Text style={styles.rowDescription}>View or deactivate from Sync</Text>
           </View>
-        );
-      })}
+          <Icon name="chevron-right" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      ) : null}
 
-      {tierMeta?.renews ? (
-        <View style={styles.manageBlock}>
-          <Text style={styles.sectionLabel}>Manage subscription</Text>
-          <View style={styles.manageRow}>
-            <Icon name="mail" size={14} color={colors.textMuted} />
-            <Text style={styles.manageHint}>
-              To cancel or update your payment method, use the link in your Off Grid AI purchase or
-              renewal email. RevenueCat sends one with every payment.
+      {/* Web Billing authenticates by email, so the only real path to cancelling is that link. */}
+      {renewing ? (
+        <View style={[styles.row, styles.lastRow]}>
+          <Icon name="mail" size={18} color={colors.primary} />
+          <View style={styles.rowText}>
+            <Text style={styles.rowTitle}>Manage subscription</Text>
+            <Text style={styles.rowDescription}>
+              Use the link in your renewal email to cancel or change payment.
             </Text>
           </View>
         </View>
@@ -122,50 +116,37 @@ export const ProManageSection: React.FC = () => {
   );
 };
 
+// The same card as the rest of the app: one surface, an uppercase title, hairline-divided rows.
 const createStyles = (colors: ThemeColors, shadows: ThemeShadows) =>
   ({
     card: {
       backgroundColor: colors.surface,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: SPACING.lg,
+      borderRadius: 12,
+      paddingHorizontal: SPACING.md,
+      paddingVertical: SPACING.xs,
       marginHorizontal: SPACING.xl,
       marginBottom: SPACING.xl,
-      gap: SPACING.sm as number,
       ...shadows.small,
     },
-    statusRow: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      gap: SPACING.sm,
-    },
-    statusText: { ...TYPOGRAPHY.body, color: colors.text },
-    sectionLabel: {
+    cardTitle: {
       ...TYPOGRAPHY.label,
-      textTransform: 'uppercase' as const,
       color: colors.textMuted,
+      textTransform: 'uppercase' as const,
       letterSpacing: 0.3,
-      marginTop: SPACING.sm,
+      paddingTop: SPACING.md,
+      paddingBottom: SPACING.xs,
     },
-    capHint: { ...TYPOGRAPHY.meta, color: colors.textMuted },
-    deviceRow: {
+    row: {
+      minHeight: 44,
       flexDirection: 'row' as const,
       alignItems: 'center' as const,
       gap: SPACING.md,
-      paddingVertical: SPACING.sm,
+      paddingVertical: SPACING.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
     },
-    deviceInfo: { flex: 1, gap: 2 as number },
-    deviceName: { ...TYPOGRAPHY.bodySmall, color: colors.text },
-    deviceMeta: { ...TYPOGRAPHY.meta, color: colors.textMuted },
-    manageBlock: {
-      marginTop: SPACING.sm,
-      gap: SPACING.sm as number,
-    },
-    manageRow: {
-      flexDirection: 'row' as const,
-      alignItems: 'flex-start' as const,
-      gap: SPACING.md,
-    },
-    manageHint: { ...TYPOGRAPHY.meta, color: colors.textMuted, flex: 1 },
+    lastRow: { borderBottomWidth: 0 },
+    rowText: { flex: 1, gap: SPACING.xs },
+    rowTitle: { ...TYPOGRAPHY.bodySmall, color: colors.text, flex: 1 },
+    rowDescription: { ...TYPOGRAPHY.meta, color: colors.textMuted },
   });

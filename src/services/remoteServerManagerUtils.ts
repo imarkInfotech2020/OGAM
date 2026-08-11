@@ -7,6 +7,7 @@ import type { RemoteServer } from '../types';
 import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { createOpenAIProvider, OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
+import { capabilitiesUnknown } from '../stores/remoteModelCapabilities';
 import logger from '../utils/logger';
 
 const KEYCHAIN_SERVICE = 'ai.offgridmobile.servers';
@@ -99,8 +100,20 @@ export async function setActiveRemoteTextModelImpl(
   if (provider) {
     logger.log('[RemoteServerManager] Loading model on provider:', modelId);
     await provider.loadModel(modelId);
-    // Apply authoritative vision capability from discovery results
-    const discoveredModel = store.getModelById(serverId, modelId);
+    // Apply the discovered capabilities. A record that says the model can do NOTHING is the shape a
+    // failed probe leaves behind, and it is stored exactly like a real answer - so the thinking
+    // toggle stayed hidden and the kwarg was never sent, for the life of the install, because of one
+    // timeout at discovery. Ask again before believing a no.
+    let discoveredModel = store.getModelById(serverId, modelId);
+    if (!discoveredModel || capabilitiesUnknown(discoveredModel.capabilities)) {
+      logger.log('[RemoteServerManager] Capabilities unknown for', modelId, '— re-discovering');
+      try {
+        await store.discoverModels(serverId);
+        discoveredModel = store.getModelById(serverId, modelId);
+      } catch (e) {
+        logger.warn('[RemoteServerManager] Re-discovery failed, using what we have:', e);
+      }
+    }
     if (discoveredModel && provider instanceof OpenAICompatibleProvider) {
       provider.updateCapabilities({
         supportsVision: discoveredModel.capabilities.supportsVision,

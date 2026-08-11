@@ -26,14 +26,14 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 describe('T023 (rendered) — Eject All frees the whisper sidecar (DEV-B1, fixed)', () => {
   it('frees the whisper sidecar on ejectAll', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { TranscriptionModelsTab } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { useWhisperStore } = require('../../../src/stores/whisperStore');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     const ui = render(
       React.createElement(React.Fragment, null,

@@ -1,12 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Animated, StyleSheet, Platform, ActionSheetIOS } from 'react-native';
+import { View, TextInput, TouchableOpacity, Animated, Platform, ActionSheetIOS } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
 import { VoiceRecordButton } from '../VoiceRecordButton';
 import { RecordingHint } from './RecordingHint';
 import { ComposerIconsRow } from './ComposerIconsRow';
-import { AttachStep } from 'react-native-spotlight-tour';
 import { triggerHaptic } from '../../utils/haptics';
 import logger from '../../utils/logger';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../CustomAlert';
@@ -48,7 +47,6 @@ interface ChatInputProps {
   isRemote?: boolean;
   /** True when the active model IS a vision model but its projector isn't installed (repairable). */
   visionNeedsRepair?: boolean;
-  activeSpotlight?: number | null;
   showSettingsDot?: boolean;
   /** Opens the shared fullscreen image viewer when a pending (pre-send)
    * attachment thumbnail is tapped — the same handler in-message images use. */
@@ -132,7 +130,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onMcpPress,
   onRepairVision,
   isRemote = false,
-  activeSpotlight = null,
   showSettingsDot = false,
   onImagePress,
 }) => {
@@ -399,9 +396,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           )}
         </View>
 
-        {activeSpotlight === 12 ? (
-          <AttachStep index={12} style={spotlightStyles.centered}>{actionButton}</AttachStep>
-        ) : actionButton}
+        {actionButton}
       </View>
 
       {Platform.OS !== 'ios' && (
@@ -442,6 +437,3 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   );
 };
 
-const spotlightStyles = StyleSheet.create({
-  centered: { alignSelf: 'center' },
-});

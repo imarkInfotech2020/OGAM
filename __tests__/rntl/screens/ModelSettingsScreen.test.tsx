@@ -786,6 +786,7 @@ describe('ModelSettingsScreen', () => {
           contextLength: undefined as any,
           nThreads: undefined as any,
           nBatch: undefined as any,
+          speculativeDecoding: false,
           imageGenerationMode: undefined as any,
           autoDetectMethod: undefined as any,
           classifierModelId: null,

@@ -47,7 +47,7 @@ Format:
   red-for-the-wrong-reason) — the real fix is native, not JS. The load-path GPU/backend surfacing IS covered
   by T014 (GenerationMeta shows the backend/layers). If the product later adds an app-side guard (detect
   gemma+HTP → fall back to CPU, or warn), THAT guard becomes a real UI test. · Status: OPEN — native-only;
-  needs a device (Provit N/A) to verify, or an app-side guard to make it JS-testable. Not a false green.
+  needs a device (device N/A) to verify, or an app-side guard to make it JS-testable. Not a false green.
 - **[T019] litert context-clamp drops tools — DEFERRED (native-only, no JS seam)** —
   Expected (from `DEVICE_TEST_FINDINGS.md` B25): litert GPU clamps context 4096→880; a thinking+tools prompt
   then doesn't fire the tool (880 too small for the tool-augmented system prompt). · Observed (analysis): the

@@ -23,14 +23,14 @@ import { createONNXImageModel } from '../../utils/factories';
 
 async function generateWithSettings(settings: Record<string, unknown>) {
   const boundary = installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const React = require('react');
   const { render } = requireRTL();
   const { imageGenerationService } = require('../../../src/services/imageGenerationService');
   const { localDreamGeneratorService } = require('../../../src/services/localDreamGenerator');
   const { useAppStore, useChatStore } = require('../../../src/stores');
   const { ChatMessage } = require('../../../src/components/ChatMessage');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
 
   const model = createONNXImageModel({ id: 'sd', name: 'SD Test', modelPath: '/models/sd', backend: 'mnn' });
   useAppStore.setState({ downloadedImageModels: [model], activeImageModelId: 'sd' });

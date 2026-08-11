@@ -22,10 +22,10 @@ export interface GenDepsResult {
 }
 
 export function makeGenDeps(overrides: Record<string, any> = {}): GenDepsResult {
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const { useChatStore } = require('../../src/stores/chatStore');
   const { useProjectStore } = require('../../src/stores/projectStore');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
 
   const captured: Captured = { alerts: [], statuses: [], pendingMessages: [] };
   const chat = useChatStore.getState();

@@ -55,7 +55,10 @@ command -v bundle >/dev/null || error "bundler not installed (bundle install)"
 
 # ── compute the beta version ───────────────────────────────────────
 # A beta targets the NEXT version, not the live one (the live train is closed - see header).
-CURRENT_VERSION=$(node -p "require('./package.json').version")   # e.g. 0.0.102 (live)
+# EVERY uat build takes its OWN version, so the number on the GitHub release is the number the app
+# shows on both stores. package.json is bumped to it below and committed with the build, which is what
+# makes the next cut compute the next version rather than rebuilding 0.0.103 four times.
+CURRENT_VERSION=$(node -p "require('./package.json').version")   # e.g. 0.0.103 (last cut)
 TARGET_VERSION=$(node -e "const [a,b,c]=require('./package.json').version.split('.').map(Number); console.log(a+'.'+b+'.'+(c+1))")   # 0.0.103
 # --no-recurse-submodules: this fetch only needs CORE tags to pick the next beta number. Recursing
 # into the pro submodule made it try to fetch pro commits referenced by old tag history that are no
@@ -67,17 +70,21 @@ N=$(( ${LAST_N:-0} + 1 ))
 BETA_VERSION="${TARGET_VERSION}-beta.${N}"
 TAG="v${BETA_VERSION}"
 BUILD_NUMBER=$(date +%s)
-info "Beta build: ${BOLD}${BETA_VERSION}${NC} (build ${BUILD_NUMBER}) - pre-release of ${TARGET_VERSION} (current live: ${CURRENT_VERSION})"
+info "Beta build: ${BOLD}${BETA_VERSION}${NC} (build ${BUILD_NUMBER}) - the app will report ${TARGET_VERSION} on both stores (previous cut: ${CURRENT_VERSION})"
 
-# ── apply the build-number / beta-versionName bump (working tree; committed only on success) ──
+# ── apply the version / build-number bump (working tree; committed only on success) ──
+# package.json first, and for BOTH platforms: it is the base the next cut reads, so a cut that moved
+# only the native files would hand the same version to every later build. npm owns package-lock's
+# copy of the number, which is why this is `npm version` and not a sed.
+npm version "$TARGET_VERSION" --no-git-tag-version --allow-same-version >/dev/null || error "Could not set package.json to ${TARGET_VERSION}"
 if [ "$DO_ANDROID" = 1 ]; then
   sed -i '' "s/versionCode .*/versionCode $BUILD_NUMBER/" android/app/build.gradle
-  # versionName = the PRODUCTION version (no -beta suffix), matching iOS's MARKETING_VERSION
-  # below. versionName is frozen into the AAB and is user-visible, so a "-beta" suffix here
-  # would ride the exact tested bytes to production forever and block Play's promote-as-is
-  # (internal -> production, same AAB). Play orders builds by versionCode (the timestamp
-  # above), NOT versionName, so a non-incrementing versionName across betas is fine. The
-  # "-beta.N" label lives in the git tag, the GitHub prerelease, and the store release notes.
+  # versionName = this cut's own version, no "-beta" suffix, matching iOS's MARKETING_VERSION
+  # below. versionName is frozen into the AAB and is what the app displays, so a "-beta" suffix
+  # here would ride the exact tested bytes to production forever and block Play's promote-as-is
+  # (internal -> production, same AAB). Because every cut now takes the NEXT version, this number
+  # is unique per build on its own: the GitHub release, both stores and the app all read 0.0.104.
+  # The "-beta.N" label stays in the git tag, the GitHub prerelease, and the store release notes.
   sed -i '' "s/versionName .*/versionName \"$TARGET_VERSION\"/" android/app/build.gradle
 fi
 if [ "$DO_IOS" = 1 ]; then
@@ -87,7 +94,7 @@ if [ "$DO_IOS" = 1 ]; then
   sed -i '' "s/CURRENT_PROJECT_VERSION = .*/CURRENT_PROJECT_VERSION = $BUILD_NUMBER;/" ios/OffgridMobile.xcodeproj/project.pbxproj
 fi
 cleanup() {
-  git checkout -- android/app/build.gradle ios/OffgridMobile.xcodeproj/project.pbxproj 2>/dev/null || true
+  git checkout -- package.json package-lock.json android/app/build.gradle ios/OffgridMobile.xcodeproj/project.pbxproj 2>/dev/null || true
   rm -f "$NOTES_FILE" "${ANDROID_CHANGELOG:-}" 2>/dev/null || true
 }
 trap 'cleanup' EXIT
@@ -153,7 +160,11 @@ if [ "$DO_IOS" = 1 ];     then info "iOS → TestFlight…";              bundle
 
 # ── success → commit the bump, cut the PRERELEASE tag, GH prerelease ──
 trap - EXIT   # keep the bump now that the build shipped
-FILES=(); [ "$DO_ANDROID" = 1 ] && FILES+=(android/app/build.gradle)
+# package.json (and npm's copy of the number in the lock) always ride the commit: the version bump is
+# not platform-specific, and leaving it out would let the next cut read a stale base and reuse this
+# version. package-lock.json is optional only because a repo may not have one.
+FILES=(package.json); [ -f package-lock.json ] && FILES+=(package-lock.json)
+[ "$DO_ANDROID" = 1 ] && FILES+=(android/app/build.gradle)
 [ "$DO_IOS" = 1 ] && FILES+=(ios/OffgridMobile.xcodeproj/project.pbxproj)
 git add "${FILES[@]}"
 git commit -m "chore(beta): ${BETA_VERSION} (build ${BUILD_NUMBER}) [skip ci]"

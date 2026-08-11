@@ -103,6 +103,53 @@ The emotional arc for all content: **Recognition -> Return -> Freedom**. Name wh
 - If an existing component is close but not exact, extend it with a prop rather than forking a copy.
 - Only build new when nothing fits - and say so in the PR description.
 
+<!-- BEGIN GENERATED: shared/CLAUDE.md#debugging-source-of-truth -->
+> **Generated from `shared/CLAUDE.md` - do not edit this section here.**
+> Run `node scripts/mirror-doctrine.mjs` in `shared/` after changing the canonical copy.
+> `--check` fails the build when a mirror drifts, so these cannot silently disagree.
+
+## Debugging — start with the source of truth
+
+**Most bugs here are source-of-truth bugs, and the fix is almost always to collapse two sources into
+one.** So before reading a stack trace or reaching for a log, ask three questions in order:
+
+1. **What is the source of truth for this fact?** Not "where is the bug" - "who is entitled to answer
+   this question". A device's connection state, a model's identity, whether a transfer finished.
+2. **Is anything else answering the same question?** Two answers is the bug, even when both are
+   individually correct. Look for a value derived twice, a rule written in two layers, a state
+   hardcoded next to a state that is computed.
+3. **Can we refactor so there is ONE source, and would that fix it?** If yes, that is the fix. Patching
+   the wrong answer leaves the second source in place, and it will disagree again somewhere else.
+
+If the answer to 3 is no, say so explicitly and fix the symptom - but say WHY one source is not
+achievable, because that is usually a design constraint worth writing down.
+
+### Why this is the default heuristic (a session's worth of evidence)
+
+Every one of these presented as a different bug and was the same bug:
+
+| Symptom | The two sources | The one source |
+|---|---|---|
+| A connected device had no actions at all on macOS | two hand-written button lists, one per section | one component driven by `device.actions.*.visible` |
+| "4 of 5 licensed devices" over a list of one | count from the registry, list from `saved` (which excludes devices that are ON the network) | the whole mesh |
+| One model appeared 35 times | absolute path as identity, and iOS moves it every reinstall | `fileName`, unique within the dir |
+| Sender said "sent", receiver said "could not receive" | the send loop's "I pushed bytes" vs the receiver's verdict | one package-state rule (`modelPackagePhase`) |
+| Activity said COMPLETED for a half-sent model | per-FILE rows vs a package the user asked for | package state, files underneath |
+| A live mesh read as half-down | each flow reading device rows its own way | the surface layer owns reading |
+| "Needs repair" after a deliberate disconnect | a flag set by one path and clearable only by another | one lifecycle, cleared on the next success |
+
+The tell is almost always the same: **two things that must agree, kept in step by hand.** A comment
+saying "these must match" is a bug waiting for a witness; so is a hardcoded literal sitting next to a
+computed value (`status: 'completed'` beside a record that also has a status).
+
+### Durability and resilience are SSOT problems too
+
+A fact that is not persisted has no source of truth after a restart - it silently becomes whatever the
+UI last remembered. Failures were dropped on the floor (`if (status !== 'completed') return`), so a
+failed transfer stopped existing the moment the view reset, and the surface confidently showed success.
+When you fix durability, fix the READ at the same time: persisting a failure while the renderer still
+hardcodes `status: 'completed'` converts a lost record into a durable lie.
+<!-- END GENERATED: shared/CLAUDE.md#debugging-source-of-truth -->
 ## Architecture & Abstractions (SOLID)
 
 **Design to abstractions, not concrete implementations.** When there are multiple interchangeable implementations of a thing (TTS engines, model backends, providers, storage), the rest of the app must depend on a single interface/service layer - never branch on a concrete type.
@@ -166,11 +213,27 @@ pre-commit hook by design.
 
 ## Testing (lean — this is the whole doctrine)
 
+**Tests come LAST, and only when Mac asks.** Finish every source change first — typecheck clean, lint
+clean, running on the device. Mac verifies it by hand. THEN, when he explicitly says so, write the test.
+Writing one earlier is a defect even if the test is good: it spends the turn on the wrong thing and
+encodes behaviour nobody has confirmed yet.
+
 **One rendered integration test per fix. Nothing more.**
 
 - Mount the real screen, arrive via real gestures, assert what the user SEES. Fakes ONLY at the device boundary (`__tests__/harness/`); never mock our own code.
 - **While iterating, run ONLY that test's file.** Do NOT run `--findRelatedTests` or the whole suite per fix — the full suite runs once at pre-push (the gate is the safety net).
 - **No unit tests required. No coverage thresholds.** If a mockist test (mocks our own code, or asserts `toHaveBeenCalled`) fails, DELETE it — never repair it.
+- **NO MOCKS OF OUR OWN CODE. EVER.** Not a service, not a store, not a hook. The two ways this rule
+  gets broken by people who have read it:
+  - **The boundary drawn too high.** "Loading a model needs the native engine, so I'll fake
+    `activeModelService`" — wrong at the second step. `llama.rn` and `react-native-executorch` are the
+    native modules and `jest.setup.ts` already fakes both. Everything between the tap and them is ours
+    and runs real. If you are faking one of our services because "the native part can't run", find the
+    actual native import and fake THAT instead.
+  - **Reaching the precondition by writing state.** `store.setState({ field })` proves only that
+    something can read a field you set. `store.getState().action(value)` is better and is sometimes the
+    honest ceiling for a hook whose contract IS a derivation. The target is the real gesture: render the
+    screen, press the thing, let the code that sets the state set it.
 - "Show the red" (stash the fix, watch it fail) is optional: do it only for genuinely new behavior, skip it for a clear bug fix.
 - Confirm a device fix against the log FIRST — pull only the live-session tail (from the last `===== session start =====`), never the whole file.
 
@@ -218,7 +281,7 @@ The repo has three automated reviewers on every PR. After pushing, loop until al
 ## PR hygiene (lean)
 
 - One concern per PR, small diff. Ship the one rendered test that would fail without the change.
-- No Provit journey, no self-audit comment, no mandatory ceremony. Multi-agent fan-out is opt-in, only when asked.
+- No on-device journey, no self-audit comment, no mandatory ceremony. Multi-agent fan-out is opt-in, only when asked.
 
 ---
 
@@ -235,12 +298,11 @@ here: the vision fix worked on iOS yet needed separate Android verification. Ful
 3. `/hygiene` audit — pass.
 4. CI all green: lint, typecheck, test, architecture, android-build, SonarCloud, CodeRabbit.
 
-## Driving the devices yourself (no Provit journey engine)
+## Driving the devices yourself (no journey engine)
 - **iOS (physical):** drive **WebDriverAgent (WDA) directly over HTTP**. Bring the WDA server up with
-  `provit/src/ios/launchWda.ts` (`PROVIT_UDID=<hardware-udid>`) — that script is ONLY the WDA-server
+  `scripts/ios/launch-wda.mjs` (`WDA_UDID=<hardware-udid>`) — that script is ONLY the WDA-server
   recipe (build-for-testing `generic/platform=iOS`, install via `devicectl`, launch via
-  `xcodebuild test-without-building`; serves at `http://<device-LAN-IP>:8100`). Do NOT use the Provit
-  vision/journey engine. Then curl WDA: `POST /session` `{capabilities:{alwaysMatch:{bundleId}}}`,
+  `xcodebuild test-without-building`; serves at `http://<device-LAN-IP>:8100`). Then curl WDA: `POST /session` `{capabilities:{alwaysMatch:{bundleId}}}`,
   `GET /session/:id/screenshot` (base64 PNG), find by `POST /session/:id/element {using:"accessibility id"}`
   → `/click`, type via `/wda/keys` or element `/value`, `POST /session/:id/actions` for a W3C tap.
 - **Android (physical):** drive with **`adb` directly** — `adb shell input tap X Y | text | swipe`,

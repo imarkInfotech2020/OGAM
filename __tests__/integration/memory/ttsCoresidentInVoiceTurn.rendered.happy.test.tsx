@@ -23,10 +23,10 @@ describe('T120 (rendered) — TTS co-resides during a voice turn (In Memory UI)'
     const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true, pro: true });
     await h.setupWhisperModel();
     h.render();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // Enter voice mode (real gesture) — the TTS engine loads as a sidecar — then speak a voice turn.
     await h.enterVoiceMode();

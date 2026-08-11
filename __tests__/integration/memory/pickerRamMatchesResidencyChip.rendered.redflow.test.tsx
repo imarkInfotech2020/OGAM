@@ -89,8 +89,7 @@ describe('RAM display agreement — picker label matches the residency chip for 
     const model = createDownloadedModel({ id: 'm', name: 'Test Model', engine: 'llama', filePath: modelPath, fileName: 'ggml-small.gguf', fileSize: 2 * GB });
     await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([model]));
     await hardwareService.refreshMemoryInfo();
-    require('../../../src/components/onboarding/spotlightState').setPendingSpotlight(null);
-    useAppStore.setState({ checklistDismissed: true, shownSpotlights: { input: true, voiceHint: true, imageSettings: true } });
+    useAppStore.setState({ checklistDismissed: true });
 
     const nav = { navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} };
     const view = rtl.render(React.createElement(

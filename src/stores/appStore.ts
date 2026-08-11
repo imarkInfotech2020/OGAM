@@ -2,7 +2,13 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { RecordProvenance } from '@offgrid/sync';
 import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
+import {
+  emitChangedModelSettings,
+  mobileModelSettingPatch,
+} from '../services/sync/mutation';
+import { createProAccessSlice, type ProAccessSlice } from './proAccessSlice';
 
 function isUnknownLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
@@ -54,6 +60,9 @@ type AppSettings = {
   imageThreads: number; imageWidth: number; imageHeight: number;
   imageUseOpenCL: boolean; enhanceImagePrompts: boolean;
   enableGpu: boolean; gpuLayers: number; flashAttn: boolean;
+  /** MTP speculative decoding: the model drafts several tokens per step and verifies them in one
+   *  pass. Only models carrying MTP draft layers benefit; the engine ignores it on the rest. */
+  speculativeDecoding: boolean;
   /** Aggressive model loading: commit more RAM + a smaller reserve so large models
    *  load (with a "Load Anyway" override when the budget still blocks). Off by
    *  default (behaviour-neutral). Single source of truth read by both the Settings
@@ -85,7 +94,7 @@ type AppSettings = {
 
 type ThemeMode = 'system' | 'light' | 'dark';
 
-interface AppState {
+interface AppState extends ProAccessSlice {
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
   hasCompletedOnboarding: boolean;
@@ -128,7 +137,13 @@ interface AppState {
   modelMaxContext: number | null;
   setModelMaxContext: (ctx: number | null) => void;
   settings: AppSettings;
+  modelSettingProvenance: Record<string, RecordProvenance>;
   updateSettings: (settings: Partial<AppSettings>) => void;
+  applySyncedModelSetting: (
+    wireKey: string,
+    fields: Record<string, unknown>,
+    provenance?: RecordProvenance,
+  ) => void;
   resetSettings: () => void;
   downloadedImageModels: ONNXImageModel[];
   activeImageModelId: string | null;
@@ -149,9 +164,6 @@ interface AppState {
   removeGeneratedImage: (imageId: string) => void;
   removeImagesByConversationId: (conversationId: string) => string[];
   clearGeneratedImages: () => void;
-  shownSpotlights: Record<string, boolean>;
-  markSpotlightShown: (key: string) => void;
-  resetShownSpotlights: () => void;
   /** Image models that have completed at least one generation. The FIRST run for a
    *  model compiles/warms the backend (OpenCL kernels on Android, the CoreML model
    *  on iOS) and takes ~120s — this drives the one-time warm-up notice on BOTH
@@ -164,29 +176,6 @@ interface AppState {
   incrementImageGenerationCount: () => number;
   hasEngagedSharePrompt: boolean;
   setHasEngagedSharePrompt: (v: boolean) => void;
-  // PRO pre-order state
-  hasRegisteredPro: boolean;
-  setHasRegisteredPro: (v: boolean) => void;
-  /**
-   * Authoritative "Pro is unlocked right now" — the same signal loadProFeatures uses
-   * to activate paid features (keychain entitlement OR a __DEV__ unlock), set at boot.
-   * This is the ONE flag every upsell gate must read: hasRegisteredPro alone misses a
-   * keychain/dev-unlocked Pro user, so the upsell wrongly fired for them. Not persisted
-   * — recomputed authoritatively each launch.
-   */
-  isProActive: boolean;
-  setProActive: (v: boolean) => void;
-  /** DEV-only: when true, suppresses the __DEV__ Pro auto-unlock so the
-   *  free → Pro activation flow can be exercised in a debug build. No effect in
-   *  release (__DEV__ is false there). */
-  devProDisabled: boolean;
-  setDevProDisabled: (v: boolean) => void;
-  proBannerDismissed: boolean;
-  setProBannerDismissed: (v: boolean) => void;
-  desktopPromoDismissed: boolean;
-  setDesktopPromoDismissed: (v: boolean) => void;
-  proAhaTriggeredBy: 'image' | 'text' | null;
-  setProAhaTriggeredBy: (by: 'image' | 'text' | null) => void;
   toolCountHintDismissed: boolean;
   setToolCountHintDismissed: () => void;
   loadedSettings: Partial<AppSettings> | null;
@@ -207,6 +196,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   contextLength: 4096,
   nThreads: 0,
   nBatch: 512,
+  speculativeDecoding: false,
   imageGenerationMode: 'auto' as ImageGenerationMode,
   autoDetectMethod: 'pattern' as AutoDetectMethod,
   classifierModelId: null,
@@ -294,7 +284,28 @@ function migratePersistedState(persistedState: any, currentState: AppState): App
     !Object.values(merged.onboardingChecklist).every(Boolean)) merged.checklistDismissed = false;
   migrateEnabledTools(merged);
   migrateBoostedContext(merged);
+  migrateGeneratedImageTimestamps(merged);
   return merged as AppState;
+}
+
+/**
+ * Generated images stamped with epoch milliseconds as text, put right.
+ *
+ * The Android image module wrote `"1786317315833"`, which satisfies `createdAt: string` and is a date
+ * to nobody: the gallery showed it as invalid, and every sync peer refused the image because
+ * `Date.parse` answers NaN. The producers now write ISO-8601, but a phone that has generated images
+ * already holds the old value, and nothing else would ever rewrite it.
+ */
+function migrateGeneratedImageTimestamps(merged: any): void {
+  if (!Array.isArray(merged.generatedImages)) return;
+  merged.generatedImages = merged.generatedImages.map((image: any) => {
+    const epochMs = Number(image?.createdAt);
+    return typeof image?.createdAt === 'string' &&
+      /^\d+$/.test(image.createdAt) &&
+      Number.isFinite(epochMs)
+      ? { ...image, createdAt: new Date(epochMs).toISOString() }
+      : image;
+  });
 }
 
 export const selectIsLiteRT = (state: AppState): boolean =>
@@ -313,7 +324,7 @@ export const useAppStore = create<AppState>()(
       completeChecklistStep: (key) =>
         set((state) => ({ onboardingChecklist: { ...state.onboardingChecklist, [key]: true } })),
       dismissChecklist: () => set({ checklistDismissed: true }),
-      resetChecklist: () => set({ checklistDismissed: false, onboardingChecklist: { ...DEFAULT_CHECKLIST }, shownSpotlights: {} }),
+      resetChecklist: () => set({ checklistDismissed: false, onboardingChecklist: { ...DEFAULT_CHECKLIST } }),
       deviceInfo: null,
       modelRecommendation: null,
       setDeviceInfo: (info) => set({ deviceInfo: info }),
@@ -345,11 +356,34 @@ export const useAppStore = create<AppState>()(
       modelMaxContext: null,
       setModelMaxContext: (ctx) => set({ modelMaxContext: ctx }),
       settings: { ...DEFAULT_SETTINGS },
-      updateSettings: (newSettings) =>
-        set((state) => ({
-          settings: { ...state.settings, ...newSettings },
-        })),
-      resetSettings: () => set({ settings: { ...DEFAULT_SETTINGS } }),
+      modelSettingProvenance: {},
+      updateSettings: (newSettings) => {
+        const before = get().settings;
+        const after = { ...before, ...newSettings };
+        set({ settings: after });
+        emitChangedModelSettings(before, after);
+      },
+      applySyncedModelSetting: (wireKey, fields, provenance) => {
+        const patch = mobileModelSettingPatch(wireKey, fields);
+        if (patch) {
+          set((state) => ({
+            settings: { ...state.settings, ...(patch as Partial<AppSettings>) },
+            modelSettingProvenance: provenance
+              ? {
+                  ...state.modelSettingProvenance,
+                  [wireKey]:
+                    state.modelSettingProvenance[wireKey] ?? provenance,
+                }
+              : state.modelSettingProvenance,
+          }));
+        }
+      },
+      resetSettings: () => {
+        const before = get().settings;
+        const after = { ...DEFAULT_SETTINGS };
+        set({ settings: after });
+        emitChangedModelSettings(before, after);
+      },
       // Image models (ONNX-based)
       downloadedImageModels: [],
       activeImageModelId: null,
@@ -401,11 +435,6 @@ export const useAppStore = create<AppState>()(
       },
       clearGeneratedImages: () =>
         set({ generatedImages: [] }),
-      // Reactive spotlight tracking
-      shownSpotlights: {},
-      markSpotlightShown: (key) =>
-        set((state) => ({ shownSpotlights: { ...state.shownSpotlights, [key]: true } })),
-      resetShownSpotlights: () => set({ shownSpotlights: {} }),
       warmedImageModels: [],
       markImageModelWarmed: (modelId) =>
         set((state) => state.warmedImageModels.includes(modelId)
@@ -417,18 +446,7 @@ export const useAppStore = create<AppState>()(
       incrementImageGenerationCount: () => { const c = get().imageGenerationCount + 1; set({ imageGenerationCount: c }); return c; },
       hasEngagedSharePrompt: false,
       setHasEngagedSharePrompt: (v) => set({ hasEngagedSharePrompt: v }),
-      hasRegisteredPro: false,
-      setHasRegisteredPro: (v) => set({ hasRegisteredPro: v }),
-      isProActive: false,
-      setProActive: (v) => set({ isProActive: v }),
-      devProDisabled: false,
-      setDevProDisabled: (v) => set({ devProDisabled: v }),
-      proBannerDismissed: false,
-      setProBannerDismissed: (v) => set({ proBannerDismissed: v }),
-      desktopPromoDismissed: false,
-      setDesktopPromoDismissed: (v) => set({ desktopPromoDismissed: v }),
-      proAhaTriggeredBy: null,
-      setProAhaTriggeredBy: (by) => set({ proAhaTriggeredBy: by }),
+      ...createProAccessSlice((state) => set(state)),
       toolCountHintDismissed: false,
       setToolCountHintDismissed: () => set({ toolCountHintDismissed: true }),
       loadedSettings: null,
@@ -446,13 +464,17 @@ export const useAppStore = create<AppState>()(
         activeModelId: state.activeModelId,
         lastTextModelId: state.lastTextModelId,
         settings: state.settings,
+        modelSettingProvenance: state.modelSettingProvenance,
         activeImageModelId: state.activeImageModelId,
         generatedImages: state.generatedImages,
-        shownSpotlights: state.shownSpotlights,
         warmedImageModels: state.warmedImageModels,
         textGenerationCount: state.textGenerationCount, imageGenerationCount: state.imageGenerationCount,
         hasEngagedSharePrompt: state.hasEngagedSharePrompt,
         hasRegisteredPro: state.hasRegisteredPro,
+        // Persisted so an eviction STICKS. Without it every relaunch starts at 'unknown', which grants
+        // access, and a device the owner removed is Pro again for as long as the roster takes to answer -
+        // or forever, if it never does because the app is offline.
+        proDeviceAdmission: state.proDeviceAdmission,
         devProDisabled: state.devProDisabled,
         proBannerDismissed: state.proBannerDismissed,
         desktopPromoDismissed: state.desktopPromoDismissed,

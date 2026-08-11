@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CompositeNavigationProp } from '@react-navigation/native';
@@ -6,9 +6,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
 import Icon from 'react-native-vector-icons/Feather';
-import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
-import { IMAGE_NEW_CHAT_STEP_INDEX, IMAGE_DRAW_STEP_INDEX } from '../components/onboarding/spotlightConfig';
-import { setPendingSpotlight } from '../components/onboarding/spotlightState';
 import { Button } from '../components/Button';
 import { ModelSelectorModal } from '../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../components/CustomAlert';
@@ -24,12 +21,16 @@ import { onnxImageGeneratorService, activeModelService, llmService, remoteServer
 import { loadModelWithOverride } from '../services/loadModelWithOverride';
 import { Conversation } from '../types';
 import { RootStackParamList, MainTabParamList } from '../navigation/types';
+import { byRecentActivity } from '../utils/conversationOrdering';
+import { formatWhen } from '../utils/localTime';
+import { useConversationPreviewLine } from '../hooks/useConversationPreviewLine';
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'ChatsTab'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
 export const ChatsListScreen: React.FC = () => {
+  const previewLine = useConversationPreviewLine();
   const navigation = useNavigation<NavigationProp>();
   const focusTrigger = useFocusTrigger();
   const { colors } = useTheme();
@@ -38,28 +39,11 @@ export const ChatsListScreen: React.FC = () => {
   const { deleteConversation, setActiveConversation } = useChatStore.getState();
   const { getProject } = useProjectStore();
   const activeImageModelId = useAppStore(s => s.activeImageModelId);
-  const onboardingChecklist = useAppStore(s => s.onboardingChecklist);
-  const shownSpotlights = useAppStore(s => s.shownSpotlights);
-  const { removeImagesByConversationId, markSpotlightShown } = useAppStore.getState();
+  const { removeImagesByConversationId } = useAppStore.getState();
   const { modelId: activeTextModelId } = useActiveTextModel();
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(false);
-  const { goTo } = useSpotlightTour();
-
-  // Reactive: image model loaded → spotlight "New Chat" button (step 14)
-  useEffect(() => {
-    if (
-      activeImageModelId &&
-      !shownSpotlights.imageNewChat &&
-      !onboardingChecklist.triedImageGen
-    ) {
-      markSpotlightShown('imageNewChat');
-      // Queue step 15 so ChatScreen picks it up when "New Chat" is tapped
-      setPendingSpotlight(IMAGE_DRAW_STEP_INDEX);
-      setTimeout(() => goTo(IMAGE_NEW_CHAT_STEP_INDEX), 800);
-    }
-  }, [activeImageModelId, shownSpotlights, onboardingChecklist.triedImageGen, markSpotlightShown, goTo]);
 
   const hasModels = !!activeTextModelId || !!activeImageModelId;
 
@@ -145,21 +129,7 @@ export const ChatsListScreen: React.FC = () => {
     ));
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return 'Yesterday';
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: 'short' });
-    } 
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    
-  };
+  const formatDate = (dateString: string): string => formatWhen(dateString);
 
   const renderRightActions = (conversation: Conversation) => (
     <TouchableOpacity
@@ -172,7 +142,8 @@ export const ChatsListScreen: React.FC = () => {
 
   const renderChat = ({ item, index }: { item: Conversation; index: number }) => {
     const project = item.projectId ? getProject(item.projectId) : null;
-    const lastMessage = item.messages[item.messages.length - 1];
+    // The preview line comes from the shared rule, so this list and the Mac's read the same.
+    const preview = previewLine(item.messages);
 
     return (
       <Swipeable
@@ -194,11 +165,11 @@ export const ChatsListScreen: React.FC = () => {
               </Text>
               <Text style={styles.chatDate}>{formatDate(item.updatedAt)}</Text>
             </View>
-            {lastMessage && (
+            {preview ? (
               <Text style={styles.chatPreview} numberOfLines={1}>
-                {lastMessage.role === 'user' ? 'You: ' : ''}{lastMessage.content}
+                {preview}
               </Text>
-            )}
+            ) : null}
             {project && (
               <View style={styles.projectBadge}>
                 <Text style={styles.projectBadgeText}>{project.name}</Text>
@@ -211,16 +182,12 @@ export const ChatsListScreen: React.FC = () => {
     );
   };
 
-  // Sort conversations by updatedAt (most recent first)
-  const sortedConversations = [...conversations].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
+  const sortedConversations = byRecentActivity(conversations);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Chats</Text>
-        <AttachStep index={[2, 14]}>
           <Button
             title="New"
             variant="primary"
@@ -228,7 +195,6 @@ export const ChatsListScreen: React.FC = () => {
             onPress={handleNewChat}
             icon={<Icon name="plus" size={16} color={colors.primary} />}
           />
-        </AttachStep>
       </View>
 
       {sortedConversations.length === 0 ? (

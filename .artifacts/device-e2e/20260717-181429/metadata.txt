@@ -1,0 +1,4 @@
+platform=both
+app_id=ai.offgridmobile.dev
+commit=afe691490a8b32fbc4ad049618b72b2bdf933e12
+started_at=2026-07-17T12:44:29Z

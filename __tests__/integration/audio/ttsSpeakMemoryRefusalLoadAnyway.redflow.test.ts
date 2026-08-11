@@ -90,11 +90,11 @@ describe('TTS speak-path memory refusal is overridable (Load Anyway) — red-flo
     // failure store the speak refusal just populated) and assert the user SEES the "Load Anyway" button
     // on the tts failure card, not a silent bail. RED on HEAD: plain Error → no tts failure in the store
     // → the card renders nothing → the button is absent.
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render } = require('@testing-library/react-native');
     const { ModelFailureCard } = require('../../../src/components/ModelFailureCard');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
     const view = render(React.createElement(ModelFailureCard));
     expect(view.queryByTestId('model-failure-load-anyway-tts')).not.toBeNull();
     expect(view.queryByTestId('model-failure-tts')).not.toBeNull(); // the tts failure card itself is on screen

@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AttachStep } from 'react-native-spotlight-tour';
 import { ModelSelectorModal } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { createStyles } from './styles';
@@ -33,7 +32,12 @@ export const NoModelScreen: React.FC<{
   <SafeAreaView style={styles.container} edges={['top']}>
     <View style={styles.header}>
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerLeft}>
@@ -95,7 +99,12 @@ export const ChatHeader: React.FC<{
 }> = ({ styles, colors, activeConversation, activeProject, navigation, onOpenModels, setShowSettingsPanel, setShowProjectSelector, isRemote }) => (
   <View style={styles.header}>
     <View style={styles.headerRow}>
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+      >
         <Icon name="arrow-left" size={20} color={colors.text} />
       </TouchableOpacity>
       <View style={styles.headerLeft}>
@@ -126,11 +135,9 @@ export const ChatHeader: React.FC<{
         </View>
       </View>
       <View style={styles.headerActions}>
-        <AttachStep index={16}>
           <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettingsPanel(true)} testID="chat-settings-icon">
             <Icon name="sliders" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
-        </AttachStep>
       </View>
     </View>
   </View>

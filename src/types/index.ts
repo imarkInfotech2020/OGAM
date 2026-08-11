@@ -1,11 +1,17 @@
+import type { RecordProvenance, SyncedToolArtifact } from '@offgrid/sync';
+
 // Model source and credibility types
-export type ModelSource = 'lmstudio' | 'official' | 'verified-quantizer' | 'community';
+export type ModelSource =
+  | 'lmstudio'
+  | 'official'
+  | 'verified-quantizer'
+  | 'community';
 
 export interface ModelCredibility {
   source: ModelSource;
-  isOfficial: boolean;        // From the original model creator (Meta, Microsoft, etc.)
+  isOfficial: boolean; // From the original model creator (Meta, Microsoft, etc.)
   isVerifiedQuantizer: boolean; // From trusted quantization providers (LM Studio, TheBloke, etc.)
-  verifiedBy?: string;        // Who verified this (e.g., "LM Studio", "Original Author")
+  verifiedBy?: string; // Who verified this (e.g., "LM Studio", "Original Author")
 }
 // Model-related types
 export interface ModelInfo {
@@ -114,7 +120,13 @@ export interface DownloadProgress {
 }
 
 // SoC detection types
-export type SoCVendor = 'qualcomm' | 'mediatek' | 'exynos' | 'tensor' | 'apple' | 'unknown';
+export type SoCVendor =
+  | 'qualcomm'
+  | 'mediatek'
+  | 'exynos'
+  | 'tensor'
+  | 'apple'
+  | 'unknown';
 export interface SoCInfo {
   vendor: SoCVendor;
   hasNPU: boolean;
@@ -167,8 +179,14 @@ export interface MediaAttachment {
 
 // Generation metadata - details about how a message was generated
 export interface GenerationMeta {
-  /** Whether GPU was used for inference */
-  gpu: boolean;
+  /**
+   * Whether GPU was used for inference.
+   *
+   * Optional because a message SYNCED from another device carries the facts that travel (which tools
+   * it was offered) and none of the local ones - this device did not run that inference, so claiming
+   * gpu:false would be inventing a measurement.
+   */
+  gpu?: boolean;
   /** GPU backend name (e.g., 'Metal', 'CPU') */
   gpuBackend?: string;
   /** Number of GPU layers offloaded */
@@ -203,6 +221,13 @@ export interface GenerationMeta {
 // Chat-related types
 export interface Message {
   id: string;
+  /**
+   * Stable cross-device identity. Persisted messages always carry this; transient
+   * prompt-only messages may omit it because they never enter the sync log.
+   */
+  uuid?: string;
+  /** Immutable device attribution for portable Sync records. */
+  provenance?: RecordProvenance;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   /** Reasoning/thinking content parsed by llama.rn (separate from response content) */
@@ -210,6 +235,12 @@ export interface Message {
   timestamp: number;
   isStreaming?: boolean;
   isThinking?: boolean;
+  /** USER messages only: the modality this turn was DISPATCHED as, stamped when the router decides.
+   *  A resend replays this fact instead of re-deriving the turn's kind from whatever replies survived —
+   *  a cancelled image turn leaves only the "Enhanced prompt" reply and no image, and inferring from
+   *  that made the retry a TEXT turn (device-confirmed on Android and iOS). Absent on turns recorded
+   *  before this field existed; those still fall back to the reply scan. */
+  turnKind?: 'text' | 'image';
   /** Indicates this is a system info message (model loaded/unloaded, etc.) */
   isSystemInfo?: boolean;
   attachments?: MediaAttachment[];
@@ -221,6 +252,8 @@ export interface Message {
   toolCallId?: string;
   /** Tool calls made by the assistant */
   toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
+  /** Completed, display-only tool artifacts admitted from synced message context. */
+  toolArtifacts?: SyncedToolArtifact[];
   /** Tool name (for tool result messages) */
   toolName?: string;
   /** True when this assistant message was generated while interfaceMode === 'audio' */
@@ -237,6 +270,8 @@ export interface Message {
 
 export interface Conversation {
   id: string;
+  /** Immutable device attribution for portable Sync records. */
+  provenance?: RecordProvenance;
   title: string;
   modelId: string;
   messages: Message[];
@@ -246,7 +281,6 @@ export interface Conversation {
   compactionSummary?: string;
   compactionCutoffMessageId?: string;
 }
-
 
 // Hugging Face API types
 export interface HFModelSearchResult {
@@ -281,7 +315,6 @@ interface HFModelFile {
   };
 }
 
-
 export interface ONNXImageModel {
   id: string;
   name: string;
@@ -315,9 +348,21 @@ export type ImageModeState = 'auto' | 'force' | 'disabled';
 
 export interface GeneratedImage {
   id: string;
+  /** Immutable device attribution for portable Sync records. */
+  provenance?: RecordProvenance;
   prompt: string;
   negativePrompt?: string;
   imagePath: string;
+  /**
+   * The file's own name, as every device knows it. NEVER derived from `imagePath`.
+   *
+   * A received file is stored under `<syncId>-<name>` so two files with one name cannot collide, and
+   * that is a LOCAL convention. Taking the portable name from the local path let the convention onto
+   * the wire, so the name gained another syncId on every hop - `<id>-<id>-img.png` - until it would
+   * have passed what a filesystem accepts. Message attachments always carried this; generated images
+   * did not, which is why only they grew.
+   */
+  fileName?: string;
   width: number;
   height: number;
   steps: number;
@@ -344,6 +389,8 @@ export interface ImageGenerationProgress {
 }
 export interface Project {
   id: string;
+  /** Immutable device attribution for portable Sync records. */
+  provenance?: RecordProvenance;
   name: string;
   description: string;
   systemPrompt: string;
@@ -395,9 +442,14 @@ export interface DebugInfo {
   originalMessageCount: number;
   managedMessageCount: number;
   truncatedCount: number;
-  formattedPrompt: string; estimatedTokens: number;
-  maxContextLength: number; contextUsagePercent: number;
+  formattedPrompt: string;
+  estimatedTokens: number;
+  maxContextLength: number;
+  contextUsagePercent: number;
 }
 // Remote server types
-export type { RemoteServer, RemoteModel, ServerTestResult } from './remoteServer';
-;
+export type {
+  RemoteServer,
+  RemoteModel,
+  ServerTestResult,
+} from './remoteServer';

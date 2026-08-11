@@ -30,6 +30,9 @@ export function _clearHooksForTesting(): void {
 
 /** Known hook names, centralised so core and pro stay in sync. */
 export const HOOKS = {
+  /** () => readonly OnboardingSlide[] — optional feature-owned onboarding content. Core owns the
+   *  renderer and navigation; feature packages contribute data only. */
+  onboardingAdditionalSlides: 'onboarding.additionalSlides',
   /** () => boolean — whether a message can be spoken (TTS enabled + ready). */
   audioCanSpeak: 'audio.canSpeak',
   /** (text: string, messageId: string) => void — speak a message aloud. */
@@ -57,4 +60,10 @@ export const HOOKS = {
   /** () => Promise<void> — warm the active TTS engine at boot if its model is
    *  downloaded and fits the residency budget (no-op otherwise). */
   audioPreload: 'audio.preload',
+  /** (mutation: SyncMutation) => void — a core data owner committed a record
+   *  change. Pro records it in the state-sync op-log; free builds do nothing. */
+  syncRecordLocalMutation: 'sync.recordLocalMutation',
+  /** (mutation: KnowledgeDocumentMutation) => void — the RAG owner committed
+   *  a document lifecycle change. Pro transfers or reconciles it with peers. */
+  syncKnowledgeDocumentMutation: 'sync.knowledgeDocumentMutation',
 } as const;

@@ -16,13 +16,13 @@ describe('happy — model lifecycle (load / unload / delete)', () => {
   it('loads a text model (resident + ready), unloads it, and deletes it from the library', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
     requireRTL();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { modelResidencyManager } = require('../../../src/services/modelResidency');
     const { isModelReady } = require('../../../src/services/engines');
     const { hardwareService } = require('../../../src/services/hardware');
     const { useAppStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();

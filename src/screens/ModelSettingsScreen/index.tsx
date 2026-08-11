@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, InteractionManager } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
-import { AttachStep, useSpotlightTour } from 'react-native-spotlight-tour';
 import { useNavigation } from '@react-navigation/native';
 import { Button } from '../../components';
 import { CustomAlert, showAlert, hideAlert, AlertState, initialAlertState } from '../../components/CustomAlert';
-import { consumePendingSpotlight } from '../../components/onboarding/spotlightState';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { createStyles } from './styles';
@@ -22,7 +20,6 @@ export const ModelSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { goTo } = useSpotlightTour();
   const resetSettings = useAppStore((s) => s.resetSettings);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
@@ -39,15 +36,6 @@ export const ModelSettingsScreen: React.FC = () => {
   const sttModelId = useWhisperStore((s) => s.downloadedModelId);
   const sttModelName = WHISPER_MODELS.find((m) => m.id === sttModelId)?.name ?? null;
 
-  // If user arrived here via onboarding spotlight flow, show accordion spotlight
-  useEffect(() => {
-    const pending = consumePendingSpotlight();
-    if (pending !== null) {
-      const task = InteractionManager.runAfterInteractions(() => goTo(pending));
-      return () => task.cancel();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleReset = () => {
     setAlertState(showAlert(
@@ -67,13 +55,17 @@ export const ModelSettingsScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Model Settings</Text>
       </View>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-        <AttachStep index={6} fill>
           <TouchableOpacity
             style={styles.accordionHeader}
             onPress={() => setPromptOpen(!promptOpen)}
@@ -87,7 +79,6 @@ export const ModelSettingsScreen: React.FC = () => {
               color={colors.textMuted}
             />
           </TouchableOpacity>
-        </AttachStep>
         {promptOpen && <SystemPromptSection />}
 
         <TouchableOpacity

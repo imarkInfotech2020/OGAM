@@ -15,7 +15,7 @@ const MB = 1024 * 1024;
 
 async function listAfterSeeding(files: Array<{ id: string; sizeBytes: number }>): Promise<string[]> {
   const boundary = installNativeBoundary({ fs: true });
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const { whisperService } = require('../../../src/services/whisperService');
   const dir = `${boundary.fs!.DocumentDirectoryPath}/whisper-models`;
   files.forEach(f => boundary.fs!.seedFile(`${dir}/ggml-${f.id}.bin`, f.sizeBytes));

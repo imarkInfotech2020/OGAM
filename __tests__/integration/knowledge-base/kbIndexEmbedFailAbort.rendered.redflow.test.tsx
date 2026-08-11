@@ -37,14 +37,14 @@ describe('KB index embed-failure ABORT (rendered, red-flow)', () => {
   it('shows a clear error + a retry affordance and does NOT add the doc when embedding fails', async () => {
     const boundary = installNativeBoundary({ fs: true, llama: true, ram: { platform: 'ios', totalBytes: 8 * 1024 * MB, availBytes: 6 * 1024 * MB } });
     doMockRealSqlite();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const rtl = requireRTL();
     const RNFS = require('react-native-fs');
     const picker = require('@react-native-documents/picker');
     const { useProjectStore } = require('../../../src/stores/projectStore');
     const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // DEVICE BOUNDARY: the embedding model's native context. Load succeeds, but the native embedding call
     // rejects — exactly the on-device OOM the ABORT contract exists for. Everything above (embeddingService,
@@ -83,14 +83,14 @@ describe('KB index embed-failure ABORT (rendered, red-flow)', () => {
   it('(falsify) with embedding succeeding, the doc indexes and appears with NO error card / retry', async () => {
     const boundary = installNativeBoundary({ fs: true, llama: true, ram: { platform: 'ios', totalBytes: 8 * 1024 * MB, availBytes: 6 * 1024 * MB } });
     doMockRealSqlite();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const rtl = requireRTL();
     const RNFS = require('react-native-fs');
     const picker = require('@react-native-documents/picker');
     const { useProjectStore } = require('../../../src/stores/projectStore');
     const { KnowledgeBaseScreen } = require('../../../src/screens/KnowledgeBaseScreen');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     const docs = boundary.fs!.DocumentDirectoryPath;
     await RNFS.writeFile(`${docs}/all-MiniLM-L6-v2-Q8_0.gguf`, 'GGUF');

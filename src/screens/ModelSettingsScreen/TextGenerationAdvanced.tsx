@@ -14,6 +14,7 @@ import {
   BackendSelector,
   LiteRTBackendSelector,
   FlashAttentionToggle,
+  SpeculativeDecodingToggle,
   KvCacheTypeToggle,
   ModelLoadingModeSelector,
   CpuThreadsSlider,
@@ -47,6 +48,7 @@ export const TextGenerationAdvanced: React.FC = () => {
       <BatchSizeSlider />
       <BackendSelector />
       <FlashAttentionToggle />
+      <SpeculativeDecodingToggle />
       <KvCacheTypeToggle />
       <ModelLoadingModeSelector />
     </>

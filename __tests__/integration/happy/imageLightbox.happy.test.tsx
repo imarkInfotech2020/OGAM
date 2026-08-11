@@ -17,21 +17,10 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-async function generateImage(h: Awaited<ReturnType<typeof setupChatScreen>>) {
-  h.render();
-  await h.placeImageModel({ backend: 'coreml' }); // iOS Core ML — no integrity-file gate
-  await h.cycleImageMode(); // auto → ON(force); also activates the downloaded image model
-  await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('image-mode-force-badge')).not.toBeNull(); });
-  await h.tapSend('a fox in the snow');
-  // The image is produced through the real service + native generateImage and rendered in the chat.
-  await h.rtl.waitFor(() => { expect(h.boundary.diffusion.calls.generateImage.length).toBe(1); });
-  await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('generated-image')).not.toBeNull(); });
-}
-
 describe('happy — image lightbox (tap a generated image → viewer + controls)', () => {
   it('tapping the generated image opens the fullscreen viewer; Close dismisses it', async () => {
     const h = await setupChatScreen({ engine: 'litert', platform: 'ios' });
-    await generateImage(h);
+    await h.generateImageViaUI({ prompt: 'a fox in the snow' });
 
     // The viewer is not open yet — no Save/Close controls on screen.
     expect(h.view!.queryByText('Close')).toBeNull();
@@ -51,7 +40,7 @@ describe('happy — image lightbox (tap a generated image → viewer + controls)
 
   it('Save in the viewer writes the image to the gallery and confirms', async () => {
     const h = await setupChatScreen({ engine: 'litert', platform: 'ios' });
-    await generateImage(h);
+    await h.generateImageViaUI({ prompt: 'a fox in the snow' });
 
     h.rtl.fireEvent.press(h.view!.getByTestId('generated-image'));
     await h.rtl.waitFor(() => { expect(h.view!.queryByText('Save')).not.toBeNull(); });

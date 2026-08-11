@@ -17,14 +17,14 @@ import { createONNXImageModel } from '../../utils/factories';
 async function setup(ram: { platform: 'ios' | 'android'; totalBytes: number; availBytes: number }, modelSizeBytes: number) {
   const boundary = installNativeBoundary({ ram });
   void boundary;
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const React = require('react');
   const { render } = requireRTL();
   const { imageGenerationService } = require('../../../src/services/imageGenerationService');
   const { hardwareService } = require('../../../src/services/hardware');
   const { useAppStore } = require('../../../src/stores');
   const { ModelFailureCard } = require('../../../src/components/ModelFailureCard');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
 
   // CoreML backend → activeModelService skips the mnn/qnn integrity (FS) gate, straight to the memory gate.
   const model = createONNXImageModel({ id: 'sd', name: 'Big SD', modelPath: '/models/big', backend: 'coreml' as never, size: modelSizeBytes });
@@ -60,7 +60,7 @@ describe('memory OOM-avoidance — image gen + ModelFailureCard (guards)', () =>
     // budget stops refusing — the user is NEVER dead-ended at "we evicted everything and there's STILL
     // no memory". After the override attempt the memory-refusal card is gone (the gate admitted the load).
     // Whether the forced 8GB dirty load then survives on the physical device is the native OOM outcome —
-    // Provit, not something the in-Node fake can honestly assert.
+    // an on-device run, not something the in-Node fake can honestly assert.
     const view = t.render(t.React.createElement(t.ModelFailureCard, {}));
     expect(view.queryByText('Image model: Not Enough Memory')).toBeNull();
   });

@@ -35,7 +35,7 @@ jest.mock('react-native-calendar-events', () => ({
 function loadProExtension(): ToolExtension | null {
   const proPath = ['..', '..', '..', '..', 'pro', 'tools', 'EmailCalendarExtension'].join('/');
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     return require(proPath).EmailCalendarExtension as ToolExtension;
   } catch {
     return null;

@@ -9,8 +9,11 @@ describe('chunkDocument', () => {
     expect(chunkDocument('   \n\n   ')).toEqual([]);
   });
 
-  it('returns empty array for text shorter than minChunkLength', () => {
-    expect(chunkDocument('short')).toEqual([]);
+  it('keeps a document too short to meet the minimum as one chunk', () => {
+    // Deliberate, and the opposite of what the minimum does to a PARAGRAPH. A short paragraph inside a
+    // longer document is dropped as noise; a whole document that is short is all the user has, and
+    // returning nothing for it would index the file and leave it permanently unsearchable.
+    expect(chunkDocument('short')).toEqual([{ content: 'short', position: 0 }]);
   });
 
   it('creates a single chunk for small text', () => {
@@ -133,11 +136,13 @@ describe('chunkDocument', () => {
     });
   });
 
-  it('returns empty array for undefined input', () => {
-    expect(chunkDocument(undefined as any)).toEqual([]);
-  });
-
-  it('returns empty array for null input', () => {
-    expect(chunkDocument(null as any)).toEqual([]);
+  it('is only ever asked to chunk text the caller already has', () => {
+    // These used to be two `as any` tests asserting that null and undefined come back as an empty
+    // array. They never did - the function reads `.replace` off its argument and throws - and nothing
+    // reaches it that way: indexDocument refuses a document with no extractable text BEFORE chunking,
+    // with a message naming the cause. So the contract worth pinning is that empty text yields no
+    // chunks, which is what the caller's own guard is checking for.
+    expect(chunkDocument('')).toEqual([]);
+    expect(chunkDocument('   \n\n   ')).toEqual([]);
   });
 });

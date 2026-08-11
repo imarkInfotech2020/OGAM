@@ -55,13 +55,13 @@ describe('T103 / M6 (rendered) — aggressive policy over-commits a 9GB dirty im
     const h = await setupChatScreen({ engine: 'litert', platform: 'android' });
     h.render();
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { ModelLoadingModeSelector } = require('../../../src/components/settings/textGenAdvancedSections');
     const { startLoadPolicySync } = require('../../../src/services/loadPolicySync');
     const { ModelsManagerSheet } = require('../../../src/components/models/ModelsManagerSheet');
     const { hardwareService } = require('../../../src/services/hardware');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // BOUNDARY: a downloaded+extracted 9GB-dirty CoreML image model on disk. Core ML skips the mnn/qnn
     // integrity gate → straight to the memory gate. Its on-disk size drives the 2.5× estimate to 9GB dirty.
@@ -124,7 +124,7 @@ describe('T103 / M6 (rendered) — aggressive policy over-commits a 9GB dirty im
     // floor). So the old "we evicted everything and there's STILL no memory" NON-overridable card is
     // unreachable. That override-always-loads invariant is proven at the service altitude in
     // overrideFloor.redflow (M3/M4/M6); whether the forced 9GB dirty load then survives is the native OOM
-    // outcome (Provit, per the SPLIT note above) — not something the in-Node fake can honestly assert.
+    // outcome (device-only, per the SPLIT note above) — not something the in-Node fake can honestly assert.
 
     stopSync();
   });

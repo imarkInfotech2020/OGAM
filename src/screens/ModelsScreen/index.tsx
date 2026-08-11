@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
 import { MainTabParamList } from '../../navigation/types';
 import Icon from 'react-native-vector-icons/Feather';
-import { AttachStep } from 'react-native-spotlight-tour';
 import { CustomAlert, hideAlert } from '../../components/CustomAlert';
 import { RECOMMENDED_MODELS } from '../../constants';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -63,12 +62,11 @@ export const ModelsScreen: React.FC = () => {
     <SafeAreaView style={styles.container} edges={['top']} testID="models-screen">
       {/* Collapse header/import/tabs when showing model detail — detail has its own header.
            Use height:0 + overflow:hidden instead of unmounting so AttachStep components
-           stay registered with the SpotlightTourProvider (prevents broken spotlight overlays). */}
+           stay mounted and measured. */}
       <View style={isShowingDetail ? collapsedStyle.hidden : undefined}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Models</Text>
-          <AttachStep index={10}>
             <TouchableOpacity
               style={styles.downloadManagerButton}
               onPress={() => vm.navigation.navigate('DownloadManager')}
@@ -81,7 +79,6 @@ export const ModelsScreen: React.FC = () => {
                 </View>
               )}
             </TouchableOpacity>
-          </AttachStep>
         </View>
 
         {/* Import Local File */}
@@ -127,7 +124,6 @@ export const ModelsScreen: React.FC = () => {
             <Text style={[styles.tabText, vm.activeTab === 'text' && styles.tabTextActive]}>Text Models</Text>
             {vm.activeTab === 'text' && <View style={styles.tabIndicator} />}
           </TouchableOpacity>
-          <AttachStep index={4}>
             <TouchableOpacity
               style={styles.tabItem}
               onPress={() => {
@@ -140,7 +136,6 @@ export const ModelsScreen: React.FC = () => {
               <Text style={[styles.tabText, vm.activeTab === 'image' && styles.tabTextActive]}>Image Models</Text>
               {vm.activeTab === 'image' && <View style={styles.tabIndicator} />}
             </TouchableOpacity>
-          </AttachStep>
           <TouchableOpacity
             style={styles.tabItem}
             testID="voice-models-tab"

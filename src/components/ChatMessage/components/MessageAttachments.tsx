@@ -54,6 +54,18 @@ const fadeInImageStyles = StyleSheet.create({
   },
 });
 
+/**
+ * The shape to draw an image at, from the only thing that knows it.
+ *
+ * Square when the sender did not say: a wrong guess at least fills the space evenly, whereas a fixed
+ * height crops every picture that is not the shape the height assumed. The dimensions travel with a
+ * shared file, so an image from another device has them too.
+ */
+function imageAspectRatio(attachment: MediaAttachment): number {
+  const { width, height } = attachment;
+  return width && height && width > 0 && height > 0 ? width / height : 1;
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) { return `${bytes}B`; }
   if (bytes < 1024 * 1024) { return `${(bytes / 1024).toFixed(0)}KB`; }
@@ -166,7 +178,10 @@ export function MessageAttachments({
           <FadeInImage
             key={attachment.id}
             uri={attachment.uri}
-            imageStyle={styles.attachmentImage}
+            imageStyle={[
+              styles.attachmentImage,
+              { aspectRatio: imageAspectRatio(attachment) },
+            ]}
             wrapperTestID={isUser ? `message-attachment-${index}` : 'generated-image'}
             testID={isUser ? `message-image-${index}` : 'generated-image-content'}
             onPress={() => onImagePress?.(attachment.uri)}

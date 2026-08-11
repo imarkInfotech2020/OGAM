@@ -20,9 +20,9 @@ describe('formatBytes (canonical)', () => {
   });
 
   it('is a single implementation — the ModelsScreen + DownloadManager re-exports match it', () => {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const modelsUtils = require('../../../src/screens/ModelsScreen/utils');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const dmItems = require('../../../src/screens/DownloadManagerScreen/items');
     expect(modelsUtils.formatBytes).toBe(formatBytes);
     expect(dmItems.formatBytes).toBe(formatBytes);

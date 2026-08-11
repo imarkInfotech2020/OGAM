@@ -26,12 +26,12 @@ describe('policy change ejects every resident (device 2026-07-14) — Lean with 
     const h = await setupChatScreen({ engine: 'litert', platform: 'android', whisper: true });
     h.render();
     await h.placeImageModel({ backend: 'mnn' });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { activeModelService } = require('../../../src/services/activeModelService');
     const { modelResidencyManager } = require('../../../src/services/modelResidency');
     const { startLoadPolicySync } = require('../../../src/services/loadPolicySync');
     const { useAppStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // Start the projection (singleton; App starts it at boot). Its initial seed reads the current
     // mode (balanced) and MUST NOT eject — only a subsequent change does.

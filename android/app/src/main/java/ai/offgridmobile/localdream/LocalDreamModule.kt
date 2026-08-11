@@ -14,6 +14,7 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -905,7 +906,13 @@ class LocalDreamModule(reactContext: ReactApplicationContext) :
                     putString("id", file.nameWithoutExtension)
                     putString("imagePath", file.absolutePath)
                     putDouble("size", file.length().toDouble())
-                    putString("createdAt", file.lastModified().toString())
+                    // ISO-8601, matching iOS and the screenshot watcher. Epoch milliseconds as text
+                    // satisfies the TypeScript `string` and nothing else: every sync peer reads this
+                    // with Date.parse, which answers NaN, and refuses the file.
+                    putString(
+                        "createdAt",
+                        Instant.ofEpochMilli(file.lastModified()).toString(),
+                    )
                 }
                 images.pushMap(imageMap)
             }

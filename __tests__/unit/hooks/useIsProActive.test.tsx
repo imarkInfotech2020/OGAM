@@ -7,6 +7,7 @@ import {
   _clearScreensForTesting,
   useHasRegisteredScreen,
 } from '../../../src/navigation/screenRegistry';
+import { useAppStore } from '../../../src/stores';
 
 const FakeScreen = () => null;
 
@@ -18,9 +19,19 @@ const Probe = () => {
 describe('useIsProActive / useHasRegisteredScreen', () => {
   beforeEach(() => {
     _clearScreensForTesting();
+    // Registration alone no longer means Pro: the device must still be entitled, or a device the owner
+    // removed from the licence would keep every Pro entry point until the app restarted.
+    useAppStore.setState({
+      hasSavedProCredential: true,
+      proDeviceAdmission: 'active',
+    });
   });
   afterEach(() => {
     _clearScreensForTesting();
+    useAppStore.setState({
+      hasSavedProCredential: false,
+      proDeviceAdmission: 'unknown',
+    });
   });
 
   it('reports free when the Pro Tools screen is not registered', () => {

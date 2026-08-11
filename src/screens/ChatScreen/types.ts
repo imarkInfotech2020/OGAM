@@ -1,4 +1,6 @@
+import type { ChatStreamPreviewRow } from '@offgrid/sync';
 import { Message } from '../../types';
+import { visibleMessages } from '../../utils/visibleMessages';
 export type ChatMessageItem = {
   id: string;
   role: 'assistant';
@@ -9,6 +11,14 @@ export type ChatMessageItem = {
   isStreaming?: boolean;
 };
 
+/**
+ * A reply generating on another device, mirrored into this conversation while it happens.
+ *
+ * Shaped by shared sync (`chatStreamPreviewRows`) rather than here, so the phone and the Mac append
+ * the same rows in the same order under the same ids.
+ */
+export type RemoteStreamItem = ChatStreamPreviewRow;
+
 export type StreamingState = {
   isThinking: boolean;
   streamingMessage: string;
@@ -17,10 +27,55 @@ export type StreamingState = {
   isModelLoading?: boolean;
   loadingModelName?: string;
   isGeneratingForThisConversation?: boolean;
+  /** Live previews from paired devices. Empty in free builds and when nothing is generating. */
+  remotePreviews?: readonly RemoteStreamItem[];
+  /** This device's mesh id, so a peer's runtime notices can be told apart from its own. */
+  localDeviceId?: string | null;
 };
+
+/**
+ * Append the replies other devices are generating right now.
+ *
+ * They render through the SAME synthetic-streaming-message path as the local reply, so there is one
+ * bubble implementation rather than a second renderer that would drift from it. Ids are namespaced
+ * per generation so the list keeps one row per in-flight reply and never collides with the local
+ * 'streaming' row - a device can be generating locally while a peer generates too.
+ */
+function withRemotePreviews(
+  base: (Message | ChatMessageItem)[],
+  remotePreviews: readonly RemoteStreamItem[] | undefined,
+): (Message | ChatMessageItem)[] {
+  if (!remotePreviews || remotePreviews.length === 0) return base;
+  return [
+    ...base,
+    ...remotePreviews.map(preview => ({
+      // The id comes from the shared projection, so it is stable across frames.
+      id: preview.id,
+      role: 'assistant' as const,
+      content: preview.content,
+      reasoningContent: preview.reasoning || undefined,
+      timestamp: Date.now(),
+      isStreaming: true,
+    })),
+  ];
+}
 
 let _lastDisplayBranch = '';
 export function getDisplayMessages(
+  allMessages: Message[],
+  streaming: StreamingState,
+): (Message | ChatMessageItem)[] {
+  return withRemotePreviews(
+    localDisplayMessages(
+      // The same rule the list rows use, so the thread and its preview never disagree.
+      [...visibleMessages(allMessages, streaming.localDeviceId)],
+      streaming,
+    ),
+    streaming.remotePreviews,
+  );
+}
+
+function localDisplayMessages(
   allMessages: Message[],
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {

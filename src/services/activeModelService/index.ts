@@ -11,6 +11,12 @@ import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
 import { textOverheadMultiplier } from './types';
+import {
+  createSelectedTextModelResolver,
+  selectedTextModelIdOf,
+} from './selectedTextModel';
+import { activeModelSnapshot } from './snapshot';
+import type { DownloadedModel } from '../../types';
 import type {
   ActiveModelInfo,
   ResourceUsage,
@@ -36,6 +42,14 @@ class ActiveModelService {
   private loadedImageModelId: string | null = null;
   private loadedImageModelThreads: number | null = null;
   private textLoadPromise: Promise<void> | null = null;
+  /** Resolves the selection against the downloaded list, tolerating a rebuilt id (see resolveModel). */
+  private readonly selectedTextModel = createSelectedTextModelResolver({
+    read: () => {
+      const store = useAppStore.getState();
+      return { models: store.downloadedModels, selectedId: store.activeModelId };
+    },
+    warn: message => logger.warn(message),
+  });
   private imageLoadPromise: Promise<void> | null = null;
   /** The SINGLE writer for the loaded-text-model id: keeps the private field and the reactive store
    *  projection (loadedTextModelId) in lockstep, so every surface reads one truth for "currently loaded". */
@@ -43,30 +57,34 @@ class ActiveModelService {
     this.loadedTextModelId = id;
     useAppStore.getState().setLoadedTextModelId(id);
   }
-  getActiveModels(): ActiveModelInfo {
-    const store = useAppStore.getState();
-    const textModel =
-      store.downloadedModels.find(m => m.id === store.activeModelId) ?? null;
-    const imageModel =
-      store.downloadedImageModels.find(
-        m => m.id === store.activeImageModelId,
-      ) ?? null;
-    return {
-      text: {
-        model: textModel,
-        // Engine-aware: a text model lives in llmService (GGUF) or liteRTService
-        // (LiteRT). Checking only llmService reported a loaded LiteRT model as
-        // not-loaded, which made the preloader and UI treat it as absent.
-        isLoaded: llmService.isModelLoaded() || liteRTService.isModelLoaded(),
-        isLoading: this.loadingState.text,
-      },
-      image: {
-        model: imageModel,
-        isLoaded: this.loadedImageModelId != null,
-        isLoading: this.loadingState.image,
-      },
-    };
+  /**
+   * The selected text model, resolved. The ONE answer to "which text model is chosen", so no surface
+   * repeats the lookup and none of them can disagree about it.
+   */
+  resolveSelectedTextModel(): DownloadedModel | null {
+    return this.selectedTextModel();
   }
+
+  /** The id to load for a turn (see selectedTextModelIdOf for why the order matters). */
+  selectedTextModelId(): string | null {
+    return selectedTextModelIdOf(useAppStore.getState());
+  }
+
+  getActiveModels(): ActiveModelInfo {
+    return activeModelSnapshot({
+      textModel: this.resolveSelectedTextModel(),
+      imageModel:
+        useAppStore
+          .getState()
+          .downloadedImageModels.find(
+            m => m.id === useAppStore.getState().activeImageModelId,
+          ) ?? null,
+      textIsLoaded: llmService.isModelLoaded() || liteRTService.isModelLoaded(),
+      imageIsLoaded: this.loadedImageModelId != null,
+      loading: this.loadingState,
+    });
+  }
+
   hasAnyModelLoaded(): boolean {
     const info = this.getActiveModels();
     return info.text.isLoaded || info.image.isLoaded;

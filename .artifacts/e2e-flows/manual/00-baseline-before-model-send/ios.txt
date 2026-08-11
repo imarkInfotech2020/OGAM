@@ -1,0 +1,68 @@
+Off Grid AI Debug
+Back
+Sync
+PERSONAL MESH
+Rename this device
+sync-rename-this-device
+17 pro max
+sync-this-device
+This device
+Discoverable to new devices
+sync-toggle-discoverable
+1
+4 of 5 devices saved
+3 connected
+PAIRING CODE
+Enter this code on the device you are pairing.
+Generate new code
+sync-rotate-pairing-code
+6SE8-MAGZ
+sync-pairing-code-value
+Rescan
+sync-rescan
+DEVICES
+AVAILABLE
+sync-paired-6e1c3b7150fb1f088b52a4c2e99eda78
+
+OnePlus Nord 5
+Rename OnePlus Nord 5
+sync-rename-6e1c3b7150fb1f088b52a4c2e99eda78
+Disconnect OnePlus Nord 5
+sync-disconnect-6e1c3b7150fb1f088b52a4c2e99eda78
+Send a model to OnePlus Nord 5
+sync-send-model-6e1c3b7150fb1f088b52a4c2e99eda78
+Forget OnePlus Nord 5
+sync-forget-6e1c3b7150fb1f088b52a4c2e99eda78
+android - Connected · LAN
+sync-paired-e54de3b2c0df6739efd534e75ad5f856
+OGAD x.x.x.25 (MacOS)
+Rename OGAD x.x.x.25 (MacOS)
+sync-rename-e54de3b2c0df6739efd534e75ad5f856
+Disconnect OGAD x.x.x.25 (MacOS)
+sync-disconnect-e54de3b2c0df6739efd534e75ad5f856
+Send a model to OGAD x.x.x.25 (MacOS)
+sync-send-model-e54de3b2c0df6739efd534e75ad5f856
+Forget OGAD x.x.x.25 (MacOS)
+sync-forget-e54de3b2c0df6739efd534e75ad5f856
+macos - Connected · Nearby
+sync-paired-fa4d14a6a71272a2dc5c0c7a054c4f7d
+Rename OGAD x.x.x.26 (Win)
+sync-rename-fa4d14a6a71272a2dc5c0c7a054c4f7d
+Disconnect OGAD x.x.x.26 (Win)
+sync-disconnect-fa4d14a6a71272a2dc5c0c7a054c4f7d
+Send a model to OGAD x.x.x.26 (Win)
+sync-send-model-fa4d14a6a71272a2dc5c0c7a054c4f7d
+Forget OGAD x.x.x.26 (Win)
+sync-forget-fa4d14a6a71272a2dc5c0c7a054c4f7d
+OGAD x.x.x.26 (Win)
+windows - Connected · LAN
+MANAGE
+, Sharing, Choose chats, projects, clipboard, screenshots, downloads, and attachments., 
+sync-open-sharing
+, Activity, See queued, active, completed, and failed transfers., 
+sync-open-activity
+, Files, Open screenshots, downloads, generated media, and attachments shared by your devices., 
+sync-open-files
+Vertical scroll bar, 2 pages
+0%
+Horizontal scroll bar, 1 page

@@ -121,6 +121,8 @@ jest.mock('../../../src/services', () => ({
     getQueuedItems: jest.fn(() => []),
   },
   activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(),
     unloadTextModel: jest.fn(),
     unloadImageModel: jest.fn(() => Promise.resolve()),
   },

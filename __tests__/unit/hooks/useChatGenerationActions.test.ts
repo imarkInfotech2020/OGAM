@@ -39,7 +39,9 @@ jest.mock('../../../src/services/backgroundDownloadService', () => ({
   backgroundDownloadService: { isAvailable: jest.fn(() => false), excludeFromBackup: jest.fn(() => Promise.resolve(true)) },
 }));
 jest.mock('../../../src/services/activeModelService/index', () => ({
-  activeModelService: { loadTextModel: jest.fn(), unloadTextModel: jest.fn() },
+  activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../../utils/activeModelServiceStub').activeModelSelectionStub(), loadTextModel: jest.fn(), unloadTextModel: jest.fn() },
 }));
 jest.mock('../../../src/services/intentClassifier', () => ({
   intentClassifier: { classifyIntent: jest.fn() },
@@ -426,7 +428,12 @@ describe('executeDeleteConversationFn', () => {
   it('stops streaming before deleting when isStreaming=true', async () => {
     const deps = makeGenerationDeps({ isStreaming: true });
     await executeDeleteConversationFn(deps);
-    expect(mockStopLlmGeneration).toHaveBeenCalled();
+    // The OWNER, not the llama engine. This assertion used to name llmService.stopGeneration, which encoded the
+    // bug: llmService is llama.cpp only, so deleting a conversation mid-reply left a LiteRT or remote stream
+    // running. The engine-level proof now lives in
+    // __tests__/integration/generation/stopReachesEveryEngine.rendered.guard.test.tsx, which asserts at the
+    // native LiteRT module rather than at a jest.fn.
+    expect(mockStopGenerationService).toHaveBeenCalled();
     expect(deps.clearStreamingMessage).toHaveBeenCalled();
     expect(deps.deleteConversation).toHaveBeenCalledWith('conv-1');
     expect(deps.navigation.goBack).toHaveBeenCalled();

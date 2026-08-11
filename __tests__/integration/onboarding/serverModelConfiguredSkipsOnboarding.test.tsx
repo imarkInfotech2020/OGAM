@@ -15,8 +15,8 @@
  *  - Mount the REAL AppNavigator inside a REAL NavigationContainer. With onboarding already completed but
  *    NO downloaded on-device model, the initial route is 'ModelDownload' — i.e. the remaining onboarding
  *    step the user still sees.
- *  - Add a server the real way: tap "Add Server", type a name + endpoint into the real modal, tap "Test
- *    Connection" (the real probe runs over the faked /v1/models), then tap the modal's "Add Server" save.
+ *  - Add a server the real way: tap "Add manually", type a name + endpoint into the real modal, tap "Test
+ *    Connection" (the real probe runs over the faked /v1/models), then tap the modal's "Add manually" save.
  *  - Back on the onboarding screen the real health check marks the server reachable and renders its
  *    "Connect" button. Tap Connect → the real handleConnectServer runs testConnection + sets the active
  *    remote text model, then shows the "Connected!" sheet with a "Continue" button.
@@ -74,6 +74,7 @@ function installFetch(reachable: boolean) {
 /** Arrive-via-UI on the ModelDownload onboarding step, then add + connect a server through the real modal. */
 async function addAndConnectServerViaUI(ui: ReturnType<typeof render>) {
   // Real gesture: open the Add Server modal from the onboarding screen.
+  // The onboarding screen's own button, which is not the Remote Servers screen's one.
   fireEvent.press(await waitFor(() => ui.getByText('Add Server')));
 
   // Fill the real modal (targeted by placeholders, like the RemoteServersScreen flow).
@@ -82,12 +83,11 @@ async function addAndConnectServerViaUI(ui: ReturnType<typeof render>) {
 
   // Test Connection first — the real probe runs over the faked /v1/models. Save stays disabled until it
   // succeeds, so this is a required real step (mirrors the real add-server UX).
-  fireEvent.press(ui.getByText('Test Connection'));
+  fireEvent.press(ui.getByTestId('test-connection'));
   await waitFor(() => { expect(ui.queryByText(/Connected \(/)).not.toBeNull(); }, { timeout: 4000 });
 
-  // Save the server (the modal's "Add Server", the last such text).
-  const addButtons = ui.getAllByText('Add Server');
-  fireEvent.press(addButtons[addButtons.length - 1]);
+  // Save the server (the modal's "Add manually", the last such text).
+  fireEvent.press(ui.getByTestId('save-server'));
 
   // The onboarding screen's real health check now marks the server reachable → its Connect button renders.
   const connect = await waitFor(() => ui.getByTestId(/^discovered-server-.*-connect$/), { timeout: 4000 });

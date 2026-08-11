@@ -7,7 +7,7 @@
  * validation / extension / size / decode logic runs for real — deleting the
  * implementation would fail these tests.
  *
- * Provit plan cases covered here (see provit/docs/mobile-test-plan.md, Batch 3):
+ * On-device test-plan cases covered here (see the on-device test plan, Batch 3):
  *  - #2  supported .txt accepted            (COVERED-REAL in existing suite; asserted end-to-end here for the accept-set)
  *  - #12 unsupported binary (.docx) rejected with a visible error
  *  - #13 file > 5MB rejected with a visible error
@@ -17,7 +17,7 @@
  *  - #34/#35 multiple document attachments queue as distinct attachments
  *
  * The accepted-extension set explicitly includes .csv and code files (.py/.ts),
- * which the Provit "supported types" line enumerates but the existing unit suite
+ * which the on-device plan's "supported types" line enumerates but the existing unit suite
  * does not exhaustively assert.
  */
 
@@ -113,7 +113,7 @@ describe('Batch3 · document attach validation (real documentService)', () => {
   // for display (src/services/documentService.ts:156,190). It decodeURIComponent()s
   // only the file PATH inside resolveContentUri, never the display name. So a name
   // like 'my%20notes.txt' is surfaced to the attachment chip un-decoded, contrary
-  // to Provit case #17 ("shows the human-readable decoded filename, not the raw
+  // to device case #17 ("shows the human-readable decoded filename, not the raw
   // encoded string"). On device the picker usually hands back an already-decoded
   // name, which is why the E2E may still pass — but the service seam does not
   // guarantee it. Fixing this belongs in src (decode the display name once in the
@@ -126,7 +126,7 @@ describe('Batch3 · document attach validation (real documentService)', () => {
         '/docs/my%20notes.txt',
         'my%20notes.txt',
       );
-      // Desired behavior per Provit #17: the chip shows the decoded, human-readable name.
+      // Desired behavior per device case #17: the chip shows the decoded, human-readable name.
       expect(att!.fileName).toBe('my notes.txt');
     });
 

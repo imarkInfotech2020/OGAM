@@ -1,12 +1,11 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { View, FlatList, Text, Keyboard, ActivityIndicator, Platform, StyleSheet } from 'react-native';
+import { View, FlatList, Text, Keyboard, Platform, StyleSheet } from 'react-native';
 import { useUiModeStore } from '../../stores/uiModeStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
 import Icon from 'react-native-vector-icons/Feather';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { AttachStep } from 'react-native-spotlight-tour';
-import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard } from '../../components';
+import { ChatInput, ThinkingIndicator, ModelFailureCard, ImageGenAdviceCard, MtpAdviceCard } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { generationService } from '../../services';
 import { EmptyChat, ImageProgressIndicator } from './ChatScreenComponents';
@@ -31,7 +30,6 @@ export type ChatMessageAreaProps = {
   colors: ReturnType<typeof useTheme>['colors'];
   handleScroll: (event: any) => void;
   renderItem: (info: { item: any; index: number }) => React.JSX.Element;
-  chatSpotlight: number | null;
 };
 
 // The bottom gap below the input controls should visually MATCH the top gap
@@ -89,22 +87,28 @@ const ModelEvictedBar: React.FC<{ visible: boolean; onPress: () => void; styles:
 
 // Small status bar above the input: classifying takes precedence over the
 // background model-load indicator.
-const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelName?: string; styles: any; colors: any }> = ({
-  loading, classifying, modelName, styles, colors,
+const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelName?: string; styles: any }> = ({
+  loading, classifying, modelName, styles,
 }) => {
+  // The app's OWN "working" indicator, not the platform ActivityIndicator. On Android that renders a
+  // Material arc whose tapered end reads as a static rotate glyph — the bar looked like it was
+  // offering a retry button rather than telling you a model was loading (device-confirmed). The
+  // pulsing dots are the same thing the reply bubble uses while the model works, so "working" looks
+  // the same everywhere and can never be mistaken for something to press.
   if (classifying) {
     return (
       <View style={styles.classifyingBar}>
-        <ActivityIndicator size="small" color={colors.primary} />
-        <Text style={styles.classifyingText}>Understanding your request...</Text>
+        <ThinkingIndicator text="Understanding your request..." textStyle={styles.classifyingText} />
       </View>
     );
   }
   if (loading) {
     return (
       <View style={styles.classifyingBar}>
-        <ActivityIndicator size="small" color={colors.primary} />
-        <Text style={styles.classifyingText}>{modelName ? `Loading ${modelName}...` : 'Loading model...'}</Text>
+        <ThinkingIndicator
+          text={modelName ? `Loading ${modelName}...` : 'Loading model...'}
+          textStyle={styles.classifyingText}
+        />
       </View>
     );
   }
@@ -112,7 +116,7 @@ const ModelStatusBar: React.FC<{ loading: boolean; classifying: boolean; modelNa
 };
 
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
-  flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem, chatSpotlight,
+  flatListRef, isNearBottomRef, chat, styles, colors, handleScroll, renderItem,
 }) => {
   // Hide FlatList until initial layout + scroll is complete to prevent visible scroll jump
   const [isListReady, setIsListReady] = useState(false);
@@ -246,13 +250,25 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         classifying={chat.isClassifying}
         modelName={chat.loadingModel?.name}
         styles={styles}
-        colors={colors}
       />
       {chat.isCompacting && (
         <Animated.View entering={FadeIn.duration(200)} style={styles.classifyingBar}>
           <ThinkingIndicator text="Compacting your conversation..." />
         </Animated.View>
       )}
+      {/* Everything between the list and the composer is one stack, ordered by SHAPE, not by
+          when it was added: rounded cards first, then the flat full-bleed bars directly above
+          the composer. A flat bar carries a top border edge-to-edge, so putting one above a
+          rounded card draws a hard rule across the card's top corners and the card reads as
+          clipped. Cards on top, bars at the bottom, and each group keeps its own order. */}
+      {/* Single dismissible surface for every model failure (text/image/tts/stt/
+          embedding). Reads modelFailureStore itself — no props. */}
+      <ModelFailureCard />
+      {/* GPU-path (no-NPU) image tips — shown in chat (not buried in settings) so a user
+          hitting slow/garbled generations sees the fix. Self-hides at good settings. */}
+      <ImageGenAdviceCard />
+      {/* Reload through the SAME seam the reload banner uses — one owner of "reload the text model". */}
+      <MtpAdviceCard onEnable={chat.handleReloadTextModel} />
       {chat.hasPendingSettings && !chat.isCompacting && !chat.activeModelInfo?.isRemote && (
         <Animated.View entering={FadeIn.duration(200)}>
           <AnimatedPressable testID="reload-model-banner" style={styles.pendingSettingsBar} onPress={chat.handleReloadTextModel}>
@@ -264,29 +280,19 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           </AnimatedPressable>
         </Animated.View>
       )}
-      {/* Single dismissible surface for every model failure (text/image/tts/stt/
-          embedding). Reads modelFailureStore itself — no props. Rendered ABOVE the
-          evicted snackbar so the rounded failure card is never capped by a flat bar. */}
-      <ModelFailureCard />
-      {/* GPU-path (no-NPU) image tips — shown in chat (not buried in settings) so a user
-          hitting slow/garbled generations sees the fix. Self-hides at good settings. */}
-      <ImageGenAdviceCard />
       {/* Text model evicted to free RAM (e.g. voice-mode image/TTS load) but still
           selected — reload it on demand, even a large model. This flat "tap to continue"
-          snackbar sits directly above the composer, BELOW the rounded failure card. */}
+          snackbar sits directly above the composer, BELOW the rounded cards. */}
       <ModelEvictedBar
         visible={shouldShowEvictedBar(chat)}
         onPress={chat.handleReloadTextModel}
         styles={styles}
         colors={colors}
       />
-      {/* Steps 3/15 share the same AttachStep wrapping ChatInput (multi-index).
-         Steps 12/16 are handled inside ChatInput via activeSpotlight prop. */}
       <View
         onLayout={(e) => setInputHeight(e.nativeEvent.layout.height)}
         style={{ backgroundColor: colors.background, paddingBottom: footerPaddingBottom }}
       >
-        <AttachStep index={[3, 15]} fill>
           <ChatInput
             onSend={chat.handleSend}
             onStop={chat.handleStop}
@@ -315,10 +321,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
             supportsThinking={chat.supportsThinking}
             onRepairVision={handleRepairVision}
             isRemote={chat.activeModelInfo.isRemote}
-            activeSpotlight={chatSpotlight === 12 ? chatSpotlight : null}
             onImagePress={chat.handleImagePress}
           />
-        </AttachStep>
       </View>
     </>
   );

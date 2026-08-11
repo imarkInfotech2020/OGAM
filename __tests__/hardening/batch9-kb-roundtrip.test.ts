@@ -1,7 +1,7 @@
 /**
  * BATCH 9 — Knowledge Base add → indexed → searchable round-trip (REAL sqlite semantics).
  *
- * Provit plan lines 1409-1549 (Knowledge Base cases 11-30). The existing RAG suites
+ * on-device test-plan lines 1409-1549 (Knowledge Base cases 11-30). The existing RAG suites
  * (__tests__/unit/services/rag/*, __tests__/integration/rag/ragFlow.test.ts) mock
  * `db.executeSync` by feeding canned rows back per SQL string — the DB never actually
  * stores anything, so retrieval "finds" whatever the mock was told to return. That is a
@@ -30,176 +30,81 @@
  * are NOT duplicated here.
  */
 
-// ── In-memory SQL engine standing in for op-sqlite ─────────────────────────────
-// It executes only the statements RagDatabase issues. Column order in the stored rows
-// mirrors the CREATE TABLE + SELECT projections in src/services/rag/database.ts.
-type Row = Record<string, unknown>;
+// ── Real SQLite standing in for op-sqlite ─────────────────────────────────────
+//
+// This used to be a hand-rolled engine that pattern-matched the exact statements RagDatabase issued and
+// threw on anything else. It did store real rows, which was the point - but it had to be taught every
+// statement, and the moment the schema gained a `sync_id` column with a pragma_table_info migration
+// behind it, seven tests failed on `unhandled SQL` rather than on anything about the knowledge base.
+//
+// Node ships a real SQLite. Adapting it to op-sqlite's tiny surface is less code than the matcher was,
+// it cannot fall behind the schema, and it makes this file's own promise - REAL sqlite semantics - true
+// rather than aspirational: autoincrement, foreign keys, JOINs, ORDER BY, blob round-trips and the
+// migrations are all the database's own behaviour now.
+import { DatabaseSync } from 'node:sqlite';
+
+type OpSqliteResult = { rows: Record<string, unknown>[]; insertId: number; rowsAffected: number };
 
 function makeInMemoryDb() {
-  const tables: Record<string, Row[]> = {
-    rag_documents: [],
-    rag_chunks: [],
-    rag_embeddings: [],
+  const db = new DatabaseSync(':memory:');
+
+  /** op-sqlite hands blobs to the app as something with a .buffer; SQLite gives back a Uint8Array. */
+  const toParam = (value: unknown): unknown => {
+    // Embeddings travel as a Float32Array's ArrayBuffer. SQLite binds a byte view, so the float data is
+    // reinterpreted as bytes here and read back the same way - the round trip is the real one, which is
+    // what makes the cosine ordering assertions mean anything.
+    if (ArrayBuffer.isView(value)) {
+      const view = value as ArrayBufferView;
+      return new Uint8Array(view.buffer as ArrayBuffer, view.byteOffset, view.byteLength);
+    }
+    if (Object.prototype.toString.call(value) === '[object ArrayBuffer]') {
+      return new Uint8Array(value as ArrayBuffer);
+    }
+    if (typeof value === 'boolean') return value ? 1 : 0;
+    if (value === undefined) return null;
+    return value;
   };
-  const autoInc: Record<string, number> = {
-    rag_documents: 0,
-    rag_chunks: 0,
-    rag_embeddings: 0,
-  };
-  let inTx = false;
 
-  const executeSync = (sql: string, params: unknown[] = []) => {
-    const s = sql.trim();
-
-    // Transaction control (insertChunks / insertEmbeddingsBatch wrap in BEGIN/COMMIT).
-    if (/^BEGIN/i.test(s)) { inTx = true; return { rows: [], insertId: 0, rowsAffected: 0 }; }
-    if (/^COMMIT/i.test(s)) { inTx = false; return { rows: [], insertId: 0, rowsAffected: 0 }; }
-    if (/^ROLLBACK/i.test(s)) { inTx = false; return { rows: [], insertId: 0, rowsAffected: 0 }; }
-    if (/^CREATE TABLE/i.test(s)) return { rows: [], insertId: 0, rowsAffected: 0 };
-
-    // INSERT INTO rag_documents (project_id, name, path, size, created_at)
-    if (/INSERT INTO rag_documents/i.test(s)) {
-      const id = ++autoInc.rag_documents;
-      tables.rag_documents.push({
-        id, project_id: params[0], name: params[1], path: params[2],
-        size: params[3], created_at: params[4], enabled: 1,
-      });
-      return { rows: [], insertId: id, rowsAffected: 1 };
-    }
-
-    // INSERT INTO rag_chunks (content, doc_id, position)
-    if (/INSERT INTO rag_chunks/i.test(s)) {
-      const id = ++autoInc.rag_chunks;
-      tables.rag_chunks.push({ id, content: params[0], doc_id: params[1], position: params[2] });
-      return { rows: [], insertId: id, rowsAffected: 1 };
-    }
-
-    // INSERT INTO rag_embeddings (chunk_rowid, doc_id, embedding)
-    if (/INSERT INTO rag_embeddings/i.test(s)) {
-      const id = ++autoInc.rag_embeddings;
-      // embedding arrives as ArrayBuffer (Float32Array.buffer) — store as-is so the
-      // real blobToEmbedding round-trips it.
-      tables.rag_embeddings.push({ id, chunk_rowid: params[0], doc_id: params[1], embedding: params[2] });
-      return { rows: [], insertId: id, rowsAffected: 1 };
-    }
-
-    // SELECT ... FROM rag_embeddings e JOIN rag_chunks c JOIN rag_documents d
-    //   WHERE d.project_id = ? AND d.enabled = 1   (getEmbeddingsByProject)
-    if (/FROM rag_embeddings e/i.test(s)) {
-      const projectId = params[0];
-      const rows = tables.rag_embeddings
-        .map(e => {
-          const chunk = tables.rag_chunks.find(c => c.id === e.chunk_rowid);
-          const doc = tables.rag_documents.find(d => d.id === e.doc_id);
-          if (!chunk || !doc) return null;
-          if (doc.project_id !== projectId || doc.enabled !== 1) return null;
-          return {
-            chunk_rowid: e.chunk_rowid, doc_id: e.doc_id, name: doc.name,
-            content: chunk.content, position: chunk.position, embedding: e.embedding,
-          };
-        })
-        .filter(Boolean) as Row[];
-      return { rows, insertId: 0, rowsAffected: 0 };
-    }
-
-    // SELECT COUNT(*) as count FROM rag_embeddings WHERE doc_id = ?  (hasEmbeddingsForDocument)
-    if (/SELECT COUNT\(\*\) as count FROM rag_embeddings/i.test(s)) {
-      const docId = params[0];
-      const count = tables.rag_embeddings.filter(e => e.doc_id === docId).length;
-      return { rows: [{ count }], insertId: 0, rowsAffected: 0 };
-    }
-
-    // SELECT id, content, position FROM rag_chunks WHERE doc_id = ? ORDER BY position
-    if (/SELECT id, content, position FROM rag_chunks/i.test(s)) {
-      const docId = params[0];
-      const rows = tables.rag_chunks
-        .filter(c => c.doc_id === docId)
-        .sort((a, b) => (a.position as number) - (b.position as number))
-        .map(c => ({ id: c.id, content: c.content, position: c.position }));
-      return { rows, insertId: 0, rowsAffected: 0 };
-    }
-
-    // SELECT ... FROM rag_documents WHERE project_id = ? ORDER BY created_at DESC
-    if (/FROM rag_documents WHERE project_id/i.test(s) && /^SELECT/i.test(s)) {
-      const projectId = params[0];
-      const rows = tables.rag_documents
-        .filter(d => d.project_id === projectId)
-        .slice()
-        .reverse() // newest first (created_at DESC); insertion order is chronological
-        .map(d => ({ ...d }));
-      return { rows, insertId: 0, rowsAffected: 0 };
-    }
-
-    // getChunksByProject fallback: SELECT c.doc_id, d.name, c.content, c.position, 0 as score
-    //   FROM rag_chunks c JOIN rag_documents d WHERE d.project_id = ? AND d.enabled = 1
-    if (/FROM rag_chunks c JOIN rag_documents d/i.test(s)) {
-      const projectId = params[0];
-      const topK = params[1] as number;
-      const rows = tables.rag_chunks
-        .map(c => {
-          const doc = tables.rag_documents.find(d => d.id === c.doc_id);
-          if (!doc || doc.project_id !== projectId || doc.enabled !== 1) return null;
-          return { doc_id: c.doc_id, name: doc.name, content: c.content, position: c.position, score: 0 };
-        })
-        .filter(Boolean) as Row[];
-      rows.sort((a, b) => (a.position as number) - (b.position as number));
-      return { rows: rows.slice(0, topK), insertId: 0, rowsAffected: 0 };
-    }
-
-    // UPDATE rag_documents SET enabled = ? WHERE id = ?  (toggleEnabled)
-    if (/UPDATE rag_documents SET enabled/i.test(s)) {
-      const enabled = params[0];
-      const docId = params[1];
-      const doc = tables.rag_documents.find(d => d.id === docId);
-      if (doc) doc.enabled = enabled;
-      return { rows: [], insertId: 0, rowsAffected: doc ? 1 : 0 };
-    }
-
-    // DELETE FROM rag_embeddings|rag_chunks WHERE doc_id = ?  (deleteDocument)
-    if (/DELETE FROM rag_embeddings WHERE doc_id = \?/i.test(s)) {
-      const before = tables.rag_embeddings.length;
-      tables.rag_embeddings = tables.rag_embeddings.filter(e => e.doc_id !== params[0]);
-      return { rows: [], insertId: 0, rowsAffected: before - tables.rag_embeddings.length };
-    }
-    if (/DELETE FROM rag_chunks WHERE doc_id = \?/i.test(s)) {
-      const before = tables.rag_chunks.length;
-      tables.rag_chunks = tables.rag_chunks.filter(c => c.doc_id !== params[0]);
-      return { rows: [], insertId: 0, rowsAffected: before - tables.rag_chunks.length };
-    }
-    if (/DELETE FROM rag_documents WHERE id = \?/i.test(s)) {
-      const before = tables.rag_documents.length;
-      tables.rag_documents = tables.rag_documents.filter(d => d.id !== params[0]);
-      return { rows: [], insertId: 0, rowsAffected: before - tables.rag_documents.length };
-    }
-
-    // deleteDocumentsByProject subqueries
-    if (/DELETE FROM rag_embeddings WHERE doc_id IN/i.test(s)) {
-      const projectId = params[0];
-      const docIds = tables.rag_documents.filter(d => d.project_id === projectId).map(d => d.id);
-      tables.rag_embeddings = tables.rag_embeddings.filter(e => !docIds.includes(e.doc_id));
+  const executeSync = (sql: string, params: unknown[] = []): OpSqliteResult => {
+    const bound = params.map(toParam);
+    const statement = sql.trim();
+    // Transaction control and schema changes take no parameters and return no rows, and SQLite's
+    // prepare/run path refuses some of them - insertChunks and insertEmbeddingsBatch both wrap their
+    // work in BEGIN/COMMIT, so this is the ordinary path and not an edge case.
+    if (/^(begin|commit|rollback|create|alter|drop)\b/i.test(statement)) {
+      db.exec(statement);
       return { rows: [], insertId: 0, rowsAffected: 0 };
     }
-    if (/DELETE FROM rag_chunks WHERE doc_id IN/i.test(s)) {
-      const projectId = params[0];
-      const docIds = tables.rag_documents.filter(d => d.project_id === projectId).map(d => d.id);
-      tables.rag_chunks = tables.rag_chunks.filter(c => !docIds.includes(c.doc_id));
-      return { rows: [], insertId: 0, rowsAffected: 0 };
+    // A statement that answers with rows is read; everything else is written. PRAGMA is included
+    // because the schema migration reads pragma_table_info to decide whether to add a column.
+    if (/^(select|pragma|with)\b/i.test(statement)) {
+      const rows = db.prepare(statement).all(...(bound as never[])) as Record<string, unknown>[];
+      return { rows: rows.map(row => ({ ...row })), insertId: 0, rowsAffected: 0 };
     }
-    if (/DELETE FROM rag_documents WHERE project_id = \?/i.test(s)) {
-      const projectId = params[0];
-      tables.rag_documents = tables.rag_documents.filter(d => d.project_id !== projectId);
-      return { rows: [], insertId: 0, rowsAffected: 0 };
+    let result;
+    try {
+      result = db.prepare(statement).run(...(bound as never[]));
+    } catch (cause) {
+      // Surface the database's own words. The service above catches and rethrows as "Embedding
+      // generation failed", which says nothing about a constraint or a missing column.
+      throw new Error(
+        `sqlite refused: ${cause instanceof Error ? cause.message : String(cause)}\n${statement}`,
+      );
     }
-
-    throw new Error(`in-memory db: unhandled SQL: ${s}`);
+    return {
+      rows: [],
+      insertId: Number(result.lastInsertRowid ?? 0),
+      rowsAffected: Number(result.changes ?? 0),
+    };
   };
 
   return {
-    _tables: tables,
-    _inTx: () => inTx,
+    /** Read the tables directly, so a test can assert what was actually stored. */
+    _rows: (table: string): Record<string, unknown>[] =>
+      db.prepare(`SELECT * FROM ${table}`).all() as Record<string, unknown>[],
     executeSync: jest.fn(executeSync),
-    execute: jest.fn(() => Promise.resolve({ rows: [], insertId: 0, rowsAffected: 0 })),
-    close: jest.fn(),
+    execute: jest.fn(async (sql: string, params: unknown[] = []) => executeSync(sql, params)),
+    close: jest.fn(() => db.close()),
     delete: jest.fn(),
   };
 }
@@ -284,10 +189,10 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
     });
 
     // Real rows actually landed in the in-memory tables (not just SQL asserted).
-    expect(mockMemDb._tables.rag_documents).toHaveLength(1);
-    expect(mockMemDb._tables.rag_documents[0]).toMatchObject({ id: docId, project_id: PROJECT, name: 'solar.txt', size: 4200, enabled: 1 });
-    expect(mockMemDb._tables.rag_chunks.length).toBeGreaterThan(0);
-    expect(mockMemDb._tables.rag_embeddings.length).toBe(mockMemDb._tables.rag_chunks.length);
+    expect(mockMemDb._rows('rag_documents')).toHaveLength(1);
+    expect(mockMemDb._rows('rag_documents')[0]).toMatchObject({ id: docId, project_id: PROJECT, name: 'solar.txt', size: 4200, enabled: 1 });
+    expect(mockMemDb._rows('rag_chunks').length).toBeGreaterThan(0);
+    expect(mockMemDb._rows('rag_embeddings').length).toBe(mockMemDb._rows('rag_chunks').length);
     expect(stages).toEqual(['extracting', 'chunking', 'indexing', 'embedding', 'done']);
 
     // Case 15/16: the real filename + size come back from the list query.
@@ -304,7 +209,7 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
   // is the behaviour a KB search depends on. The op-sqlite BLOB→Float32Array decode
   // (RagDatabase.blobToEmbedding) relies on `instanceof ArrayBuffer`, which the RN jest
   // environment breaks across module realms (a jest-only artifact — on device there is
-  // one JS realm, so it decodes fine; the real device path is proven by the Provit
+  // one JS realm, so it decodes fine; the real device path is proven by the on-device
   // journey). So we substitute ONLY that decode boundary with the already-decoded
   // number[] embeddings a real device returns, and let the REAL retrieval rank them.
   it('retrieval ranks the closer doc first by real cosine similarity (case 14)', async () => {
@@ -337,12 +242,12 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
 
     // Disabled → excluded (the WHERE d.enabled = 1 clause is exercised for real).
     await ragService.toggleDocument(docId, false);
-    expect(mockMemDb._tables.rag_documents[0].enabled).toBe(0);
+    expect(mockMemDb._rows('rag_documents')[0].enabled).toBe(0);
     expect((await ragService.searchProject(PROJECT, 'solar')).chunks).toHaveLength(0);
 
     // Re-enabled → found again.
     await ragService.toggleDocument(docId, true);
-    expect(mockMemDb._tables.rag_documents[0].enabled).toBe(1);
+    expect(mockMemDb._rows('rag_documents')[0].enabled).toBe(1);
     expect((await ragService.searchProject(PROJECT, 'solar')).chunks.length).toBeGreaterThan(0);
   });
 
@@ -353,15 +258,15 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
       id: '1', type: 'document', uri: '/a', fileName: 'solar.txt', textContent: SOLAR_DOC, fileSize: 100,
     });
     const docId = await ragService.indexDocument({ projectId: PROJECT, filePath: '/a', fileName: 'solar.txt', fileSize: 100 });
-    expect(mockMemDb._tables.rag_chunks.length).toBeGreaterThan(0);
-    expect(mockMemDb._tables.rag_embeddings.length).toBeGreaterThan(0);
+    expect(mockMemDb._rows('rag_chunks').length).toBeGreaterThan(0);
+    expect(mockMemDb._rows('rag_embeddings').length).toBeGreaterThan(0);
 
     await ragService.deleteDocument(docId);
 
     // All three tables cleared for that doc — nothing orphaned.
-    expect(mockMemDb._tables.rag_documents.filter(d => d.id === docId)).toHaveLength(0);
-    expect(mockMemDb._tables.rag_chunks.filter(c => c.doc_id === docId)).toHaveLength(0);
-    expect(mockMemDb._tables.rag_embeddings.filter(e => e.doc_id === docId)).toHaveLength(0);
+    expect(mockMemDb._rows('rag_documents').filter(d => d.id === docId)).toHaveLength(0);
+    expect(mockMemDb._rows('rag_chunks').filter(c => c.doc_id === docId)).toHaveLength(0);
+    expect(mockMemDb._rows('rag_embeddings').filter(e => e.doc_id === docId)).toHaveLength(0);
 
     // Case 26: empty state — list is empty and search returns nothing.
     expect(await ragService.getDocumentsByProject(PROJECT)).toHaveLength(0);
@@ -417,7 +322,7 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
       ragService.indexDocument({ projectId: PROJECT, filePath: '/a', fileName: 'dup.txt', fileSize: 100 }),
     ).rejects.toThrow('already in the knowledge base');
     // No second row was created.
-    expect(mockMemDb._tables.rag_documents).toHaveLength(1);
+    expect(mockMemDb._rows('rag_documents')).toHaveLength(1);
   });
 
   // Case 13-adjacent: a doc that extracts no text is rejected and nothing is persisted.
@@ -426,7 +331,7 @@ describe('BATCH 9 — KB add → indexed → searchable round-trip (real sqlite 
     await expect(
       ragService.indexDocument({ projectId: PROJECT, filePath: '/x', fileName: 'empty.bin', fileSize: 0 }),
     ).rejects.toThrow('Could not extract text');
-    expect(mockMemDb._tables.rag_documents).toHaveLength(0);
+    expect(mockMemDb._rows('rag_documents')).toHaveLength(0);
   });
 });
 

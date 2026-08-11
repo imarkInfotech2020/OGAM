@@ -19,12 +19,12 @@ import { createProject } from '../../utils/factories';
 describe('project chat does NOT auto-inject search_knowledge_base (red-flow)', () => {
   it('with tools toggled OFF, a chat in a real project sends NO tools to the model', async () => {
     const boundary = installNativeBoundary({ llama: true, fs: true, ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { llmService } = require('../../../src/services/llm');
     const { hardwareService } = require('../../../src/services/hardware');
     const { startGenerationFn } = require('../../../src/screens/ChatScreen/useChatGenerationActions');
     const { useProjectStore, useChatStore } = require('../../../src/stores');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     boundary.fs!.seedFile('/models/small.gguf', 500 * 1024 * 1024);
     await hardwareService.refreshMemoryInfo();

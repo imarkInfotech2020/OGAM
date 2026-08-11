@@ -1,7 +1,7 @@
 /**
  * BATCH 4 (Image Generation) — hardening.
  *
- * Provit cases 17, 18, 20, 22, 26 assert the OBSERVABLE image-generation
+ * device cases 17, 18, 20, 22, 26 assert the OBSERVABLE image-generation
  * lifecycle: the in-progress card appears, its status transitions from an
  * enhancing phase to a generating phase, a second in-flight request is silently
  * ignored, cancel mid-flight tears the card down, and generation with
@@ -104,6 +104,11 @@ describe('image-gen phase state machine — ordered transitions (cases 17, 18, 2
       activeModelId: 'text-1',
       settings: { ...useAppStore.getState().settings, enhanceImagePrompts: true } as any,
     });
+    // WHICH text model to enhance with is asked of activeModelService, which is the one owner of that
+    // question so image generation cannot pick a different model than chat does. This suite mocks that
+    // service, so setting activeModelId in the store is no longer enough on its own - the mock has to
+    // answer, or the service finds no text model and skips enhancement entirely.
+    mockActive.selectedTextModelId.mockReturnValue('text-1');
     // Text model loads on demand then reports loaded.
     mockLlm.isModelLoaded.mockReturnValueOnce(false).mockReturnValue(true);
     mockLlm.generateResponse.mockResolvedValue('an enhanced red apple, studio lighting');

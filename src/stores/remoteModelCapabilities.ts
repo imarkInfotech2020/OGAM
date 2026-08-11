@@ -383,6 +383,28 @@ function parsePropsCapabilities(data: unknown): RemoteModelInfo | null {
   };
 }
 
+/**
+ * Does this stored record actually KNOW anything about the model?
+ *
+ * A probe that timed out or could not be parsed falls back to "4096 context and nothing else", which
+ * is indistinguishable from a real model with no features. Stored, it becomes a permanent no: the
+ * thinking toggle never appears, the kwarg is never sent, and nothing ever asks the server again.
+ * A record shaped like a failed probe is treated as UNKNOWN, not as an answer.
+ */
+export function capabilitiesUnknown(caps: {
+  supportsVision?: boolean;
+  supportsToolCalling?: boolean;
+  supportsThinking?: boolean;
+  contextLength?: number;
+}): boolean {
+  return !hasRealData({
+    contextLength: caps.contextLength ?? 4096,
+    supportsVision: caps.supportsVision === true,
+    supportsToolCalling: caps.supportsToolCalling,
+    supportsThinking: caps.supportsThinking,
+  });
+}
+
 function hasRealData(info: RemoteModelInfo): boolean {
   return info.supportsVision || info.contextLength !== 4096 || info.supportsToolCalling === true || info.supportsThinking === true;
 }

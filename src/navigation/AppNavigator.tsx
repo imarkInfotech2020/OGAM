@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, StyleSheet } from 'react-native';
@@ -9,12 +9,10 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
-import { SpotlightTourProvider } from 'react-native-spotlight-tour';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { triggerHaptic } from '../utils/haptics';
 import { useAppStore } from '../stores';
-import { createSpotlightSteps } from '../components/onboarding/spotlightConfig';
 import {
   OnboardingScreen,
   ModelDownloadScreen,
@@ -185,13 +183,10 @@ const MainTabs: React.FC = () => {
   );
 };
 
-// Root Navigator — SpotlightTourProvider wraps entire stack so all screens
-// (both tab screens and RootStack screens) can use useSpotlightTour()
 export const AppNavigator: React.FC = () => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const hasCompletedOnboarding = useAppStore((s) => s.hasCompletedOnboarding);
   const downloadedModels = useAppStore((s) => s.downloadedModels);
-  const steps = useMemo(() => createSpotlightSteps(), []);
   // Reactive: screens registered at runtime (Pro activation re-runs loadProFeatures)
   // mount as real routes live, so navigate('McpServers') works without an app restart.
   const registeredScreens = useRegisteredScreens();
@@ -203,14 +198,6 @@ export const AppNavigator: React.FC = () => {
   }
 
   return (
-    <SpotlightTourProvider
-      steps={steps}
-      overlayColor="black"
-      overlayOpacity={isDark ? 0.78 : 0.62}
-      onBackdropPress="stop"
-      motion="fade"
-      shape={{ type: 'rectangle', padding: 8 }}
-    >
       <RootStack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{
@@ -262,6 +249,5 @@ export const AppNavigator: React.FC = () => {
           <RootStack.Screen key={s.name} name={s.name as any} component={s.component} />
         ))}
       </RootStack.Navigator>
-    </SpotlightTourProvider>
   );
 };

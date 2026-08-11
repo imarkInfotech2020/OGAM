@@ -142,6 +142,9 @@ jest.mock('llama.rn', () => ({
       embedding: new Array(384).fill(0).map((_, i) => Math.sin(i + text.length * 0.1)),
     })),
   })),
+  // GGUF header read (no model load). Per-test control: the MTP probe reads what a model declares
+  // about itself, so a test serves real metadata rather than a hand-authored guess.
+  loadLlamaModelInfo: jest.fn(() => Promise.resolve({})),
   releaseContext: jest.fn(() => Promise.resolve()),
   completion: jest.fn(() => Promise.resolve({
     text: 'Test completion response',
@@ -338,6 +341,10 @@ jest.mock('react-native-device-info', () => ({
   getModel: jest.fn(() => 'Test Device'),
   getSystemName: jest.fn(() => 'Android'),
   getSystemVersion: jest.fn(() => '13'),
+  // The build's own identity, which is what the UI and a feedback report read (src/utils/appVersion).
+  // Synchronous in the real package too - these are native build constants, not a lookup.
+  getVersion: jest.fn(() => '0.0.103'),
+  getBuildNumber: jest.fn(() => '1784144537'),
   isEmulator: jest.fn(() => Promise.resolve(false)),
   getDeviceId: jest.fn(() => 'test-device-id'),
   getHardware: jest.fn(() => Promise.resolve('unknown')),
@@ -370,6 +377,7 @@ jest.mock('react-native-keychain', () => ({
   setGenericPassword: jest.fn(() => Promise.resolve(true)),
   getGenericPassword: jest.fn(() => Promise.resolve(false)),
   resetGenericPassword: jest.fn(() => Promise.resolve(true)),
+  ACCESSIBLE: { AFTER_FIRST_UNLOCK: 'AfterFirstUnlock' },
 }));
 
 
@@ -539,23 +547,6 @@ jest.mock('react-native-zip-archive', () => ({
 // Mock react-native-vector-icons
 jest.mock('react-native-vector-icons/Feather', () => 'Icon');
 
-// react-native-spotlight-tour mock
-jest.mock('react-native-spotlight-tour', () => ({
-  SpotlightTourProvider: ({ children }: { children: React.ReactNode }) => children,
-  AttachStep: ({ children }: { children: React.ReactNode }) => children,
-  useSpotlightTour: () => ({
-    start: jest.fn(),
-    stop: jest.fn(),
-    next: jest.fn(),
-    previous: jest.fn(),
-    goTo: jest.fn(),
-    current: 0,
-    status: 'idle',
-    pause: jest.fn(),
-    resume: jest.fn(),
-  }),
-}));
-
 // react-native-screens mock — the native Screen/ScreenStack components are undefined in jest, which
 // crashes @react-navigation/native-stack ($$typeof undefined). Map them to plain Views so a REAL
 // NavigationContainer + navigator mounts and real cross-screen navigation can be driven in tests.
@@ -649,8 +640,15 @@ beforeEach(() => {
 afterEach(() => {
   // Only unmount when a test actually rendered via requireRTL (which stashed its own cleanup here). Do NOT
   // require RTL fresh — after a test's resetModules that pulls a new module graph and breaks the next test.
-  const g = globalThis as unknown as { __RTL_CLEANUP__?: () => void };
+  const g = globalThis as unknown as { __RTL_CLEANUP__?: () => void; __GEN_CLEANUP__?: () => void };
   if (g.__RTL_CLEANUP__) { try { g.__RTL_CLEANUP__(); } catch { /* already torn down */ } g.__RTL_CLEANUP__ = undefined; }
+  // A generation left IN FLIGHT outlives its test. generationServiceHelpers schedules a 50ms token-buffer
+  // flush; when a suite ends mid-reply that timer fires during the NEXT suite, which has since called
+  // jest.resetModules(), so the chatStore the callback closed over is gone and it throws
+  // "Cannot read properties of undefined (reading 'getState')" — failing whichever suite happened to be
+  // running. That is why exactly one rendered suite failed per run, with a different name each time, and why
+  // it always passed in isolation. Whoever started a generation registers the stop here.
+  if (g.__GEN_CLEANUP__) { try { g.__GEN_CLEANUP__(); } catch { /* already torn down */ } g.__GEN_CLEANUP__ = undefined; }
 });
 
 // Global timeout for async operations

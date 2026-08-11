@@ -38,10 +38,10 @@ describe('B30/Q8 — prompt enhancement runs on the remote text model (red-flow)
     // Reach the precondition the real way: connect + select a remote (LM Studio) text model, no local loaded.
     await installRemoteModel({ name: 'LM Studio', caps: { supportsToolCalling: false, supportsThinking: false } });
 
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const { useAppStore } = require('../../../src/stores');
     const { imageGenerationService } = require('../../../src/services/imageGenerationService');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // Enhancement is opt-in — turn it on the way the user does via settings.
     useAppStore.getState().updateSettings({ enhanceImagePrompts: true });

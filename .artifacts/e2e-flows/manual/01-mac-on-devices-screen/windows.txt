@@ -1,0 +1,66 @@
+Off Grid AI
+Back
+Search
+Day
+Replay
+Reflect
+Meetings
+Actions
+Entities
+Projects
+Chat
+Voice
+Vault
+Clipboard
+Devices
+Integrations
+Models
+Gateway
+Notifications
+Model stopped
+Theme: System
+Settings
+Mobile app
+Devices
+
+Sync workspaces, models, copied text and media over your local network or directly to a nearby Apple device. Traffic is encrypted between paired devices.
+
+Discoverable
+LAN: ready
+4 nearby
+3 connected
+24 tracked
+4/5 licensed devices
+This device: OGAD x.x.x.26 (Win)
+Devices
+Sync sharing
+Activity
+Files
+PAIRING CODE
+AF68-EKZZ
+
+Enter this code on the device you are pairing.
+
+Generate new code
+SAVED
+4 used
+No saved devices are away right now.
+AVAILABLE
+4
+Rescan network
+17 pro max
+iOS · Unknown
+Connected now
+OnePlus Nord 5
+Android · Unknown
+Connected now
+OGAD x.x.x.25 (MacOS)
+macOS · Unknown
+Connected now
+Off Grid AI Desktop
+macOS · Unknown
+Not paired
+Pair
+Set up your local AI
+Pick a model yourself, or let Off Grid configure one for your device.
+Configure

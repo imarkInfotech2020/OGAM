@@ -1,9 +1,9 @@
 /**
  * BATCH 4 (Image Generation) — hardening.
  *
- * Provit case 37: confirming the delete removes the model from the downloaded
+ * device case 37: confirming the delete removes the model from the downloaded
  * list. The delete-confirmation ALERT (cases 35/36) is a thin on-device UI
- * interaction (Provit-owned), but the removal CHAIN that fires on confirm is
+ * interaction (device-owned), but the removal CHAIN that fires on confirm is
  * real, testable logic and was NOT covered by the existing imageProvider suite
  * (its docstring claims "remove" but no test drives it).
  *
@@ -19,7 +19,9 @@ jest.mock('../../src/services/modelManager', () => ({
   modelManager: { deleteImageModel: jest.fn(async () => {}) },
 }));
 jest.mock('../../src/services/activeModelService', () => ({
-  activeModelService: { unloadImageModel: jest.fn(async () => {}) },
+  activeModelService: {
+    // The model-selection seam, from the one place it is defined.
+    ...require('../utils/activeModelServiceStub').activeModelSelectionStub(), unloadImageModel: jest.fn(async () => {}) },
 }));
 jest.mock('../../src/services/backgroundDownloadService', () => ({
   backgroundDownloadService: {

@@ -1,0 +1,509 @@
+import React from 'react';
+import {
+  NativeEventEmitter,
+  NativeModules,
+  type EmitterSubscription,
+} from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import {
+  fireEvent,
+  render,
+  waitFor,
+  within,
+  type RenderAPI,
+} from '@testing-library/react-native';
+import type { ReactTestInstance } from 'react-test-renderer';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Keychain from 'react-native-keychain';
+import TcpSocket from 'react-native-tcp-socket';
+import {
+  FileTransferManager,
+  OpLog,
+  SHARED_FILE_ENTITY,
+  SHARED_FILE_MIME,
+  StateSync,
+  sharedFileActivityId,
+  type DeviceInfo,
+  type FileRequestMessage,
+  type StateMsg,
+  type TransferFileSink,
+} from '@offgrid/sync';
+import type { RnTcpModule } from '@offgrid/sync/rn';
+import { AppNavigator } from '../../../src/navigation/AppNavigator';
+import {
+  _clearScreensForTesting,
+  registerScreen,
+} from '../../../src/navigation/screenRegistry';
+import { _clearSectionsForTesting } from '../../../src/components/settings/sectionRegistry';
+import {
+  _clearSlotsForTesting,
+  registerSlot,
+  SLOTS,
+} from '../../../src/bootstrap/slotRegistry';
+import { SyncNotificationsScreen } from '../../../pro/ui/SyncNotificationsScreen';
+import { HomeNotificationsButton } from '../../../pro/ui/HomeNotificationsButton';
+import { SyncHomeCard } from '../../../pro/ui/SyncHomeCard';
+import { useAppStore } from '../../../src/stores/appStore';
+import { buildSyncEngine } from '../../../src/services/sync/engine';
+import { stateSyncService } from '../../../pro/sync/stateSyncService';
+import { sharedFileSyncService } from '../../../pro/sync/sharedFileSyncService';
+import { syncService } from '../../../pro/sync/syncService';
+import { useSyncStore } from '../../../pro/sync/syncStore';
+import { ambientShareService } from '../../../pro/sync/ambientShareService';
+import { SyncScreen } from '../../../pro/ui/SyncScreen';
+import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
+import { SyncActivityScreen } from '../../../pro/ui/SyncScreen/SyncActivityScreen';
+import { SyncFilesScreen } from '../../../pro/ui/SyncScreen/SyncFilesScreen';
+import { ProRoot } from '../../../pro/ui/ProRoot';
+import {
+  getDiscoveryBoundaries,
+  resetDiscoveryBoundaries,
+} from '../../utils/nativeSyncBoundaries';
+import { modelTransferFsBoundary } from '../../utils/modelTransferFsBoundary';
+import { pairingCodeOnScreen } from '../../utils/pairFromPeer';
+import { createDownloadedModel } from '../../utils/factories';
+import {
+  createLicensedMesh,
+  installLicensedPhone,
+} from '../../harness/licensedMesh';
+
+/**
+ * The approval row asking a given question, found by walking up from the question itself.
+ *
+ * Rows are `sync-approval-<id>` and the id is minted per approval, so a test cannot name it up front.
+ * The row's own buttons are `sync-approval-approve-<id>` and `-reject-<id>`, which share the prefix -
+ * hence naming them out, or the walk stops on a button whose subtree holds no question.
+ */
+function approvalRow(ui: RenderAPI, question: RegExp): ReactTestInstance {
+  const heading = ui.getByText(question);
+  for (let node = heading.parent; node; node = node.parent) {
+    const testID = node.props?.testID;
+    if (
+      typeof testID === 'string' &&
+      testID.startsWith('sync-approval-') &&
+      !/^sync-approval-(approve|reject)-/.test(testID)
+    ) {
+      return node;
+    }
+  }
+  throw new Error(`no approval row asks ${question}`);
+}
+
+/** The approval id carried by a row, for addressing its buttons. */
+function approvalId(row: ReactTestInstance): string {
+  return String(row.props.testID).replace('sync-approval-', '');
+}
+
+/** This phone's fingerprint, which is also the sync device id its installation registers under. */
+const PHONE_FINGERPRINT = 'fp-this-phone';
+
+jest.unmock('@react-navigation/native');
+
+jest.mock('react-native-tcp-socket', () => {
+  const {
+    createNativeTcpBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeTcpBoundary() };
+});
+
+jest.mock('react-native-zeroconf', () => {
+  const {
+    createNativeDiscoveryBoundary,
+  } = require('../../utils/nativeSyncBoundaries');
+  return { __esModule: true, default: createNativeDiscoveryBoundary() };
+});
+
+jest.mock('react-native-fs', () => {
+  const {
+    modelTransferFsBoundary: boundary,
+  } = require('../../utils/modelTransferFsBoundary');
+  return {
+    __esModule: true,
+    default: boundary.module,
+    ...boundary.module,
+  };
+});
+
+interface ScreenshotEvent {
+  syncId: string;
+  name: string;
+  mimeType: string;
+  filePath: string;
+  fileSize: number;
+  createdAt: string;
+  width: number;
+  height: number;
+}
+
+const desktopDevice: DeviceInfo = {
+  id: 'desktop-ambient-peer',
+  name: 'Off Grid AI Desktop',
+  platform: 'macos',
+  version: '1',
+  host: '127.0.0.1',
+  port: 0,
+};
+
+/** Two devices that can pair: an in-memory licence provider, and a licensed peer to pair with. */
+const mesh = createLicensedMesh();
+
+describe('mobile ambient sharing journey', () => {
+  let remote: ReturnType<typeof buildSyncEngine> | undefined;
+  let ui: ReturnType<typeof render> | undefined;
+  let screenshotListener: ((event: ScreenshotEvent) => void) | undefined;
+
+  beforeEach(async () => {
+    mesh.reset();
+    modelTransferFsBoundary.reset();
+    resetDiscoveryBoundaries();
+    await AsyncStorage.clear();
+    _clearScreensForTesting();
+    _clearSectionsForTesting();
+    registerScreen({ name: 'Sync', component: SyncScreen });
+    registerScreen({
+      name: 'SyncSharingSettings',
+      component: SyncSharingSettingsScreen,
+    });
+    registerScreen({ name: 'SyncActivity', component: SyncActivityScreen });
+    registerScreen({ name: 'SyncFiles', component: SyncFilesScreen });
+    // An ambient share waits for an answer on the Notifications screen, reached from the bell on Home -
+    // so both have to be registered, the way pro/index.ts registers them when the app starts.
+    registerScreen({
+      name: 'Notifications',
+      component: SyncNotificationsScreen,
+    });
+    _clearSlotsForTesting();
+    registerSlot(SLOTS.homeNotificationsButton, HomeNotificationsButton);
+    registerSlot(SLOTS.homeSyncCard, SyncHomeCard);
+    useAppStore.getState().setOnboardingComplete(true);
+    // Pro is an entitlement the app is told about, so it is seeded like any other outside fact.
+    useAppStore.getState().setProActive(true);
+    useAppStore
+      .getState()
+      .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
+    useSyncStore.getState().reset();
+    // A licensed phone with its own machine activated: the saved-device list is built from the licence
+    // roster, so without both the desktop pairs and appears nowhere.
+    installLicensedPhone(mesh, { fingerprint: PHONE_FINGERPRINT });
+    mesh.register({
+      id: PHONE_FINGERPRINT,
+      name: 'This phone',
+      platform: 'ios',
+    });
+    (Keychain.setGenericPassword as jest.Mock).mockResolvedValue(true);
+
+    NativeModules.SyncScreenshotModule = {
+      setEnabled: jest.fn(),
+      addListener: jest.fn(),
+      removeListeners: jest.fn(),
+    };
+    jest
+      .spyOn(NativeEventEmitter.prototype, 'addListener')
+      .mockImplementation((eventName, listener) => {
+        if (eventName === 'SyncScreenshotCaptured') {
+          screenshotListener = listener as (event: ScreenshotEvent) => void;
+        }
+        return { remove: jest.fn() } as unknown as EmitterSubscription;
+      });
+  });
+
+  afterEach(async () => {
+    mesh.restore();
+    await ambientShareService.setRule({
+      source: 'screenshot',
+      destinationId: desktopDevice.id,
+      mode: 'off',
+    });
+    ui?.unmount();
+    await remote?.engine.stop();
+    await stateSyncService.stop();
+    await syncService.stop();
+    _clearScreensForTesting();
+    _clearSectionsForTesting();
+    jest.restoreAllMocks();
+  });
+
+  it('asks before sending, survives a refusal, and lets the user retry successfully', async () => {
+    const remoteRecords = new Map<string, Record<string, unknown>>();
+    const receivedFiles: Array<{ name: string; bytes: Buffer }> = [];
+    let rejectTransfers = false;
+    let remoteState: StateSync;
+    let remoteTransfers: FileTransferManager;
+
+    const remoteLog = new OpLog({
+      deviceId: desktopDevice.id,
+      materializer: {
+        put: (
+          entity: string,
+          entityId: string,
+          fields: Record<string, unknown>,
+        ) => remoteRecords.set(`${entity}:${entityId}`, fields),
+        remove: (entity: string, entityId: string) =>
+          remoteRecords.delete(`${entity}:${entityId}`),
+      },
+      uuid: (() => {
+        let index = 0;
+        return () => `desktop-ambient-op-${++index}`;
+      })(),
+      now: () => Date.now(),
+    });
+
+    remote = buildSyncEngine({
+      pairingEntitlement: mesh.joiner({
+        name: desktopDevice.name,
+        platform: desktopDevice.platform,
+      }),
+      localDevice: desktopDevice,
+      tcpModule: TcpSocket as unknown as RnTcpModule,
+      onMessage: (deviceId, message) => {
+        remoteTransfers.handleMessage(deviceId, message);
+      },
+      onAppMessage: (deviceId, channel, data) => {
+        if (channel === 'state') {
+          remoteState.onMessage(deviceId, data as StateMsg);
+        }
+      },
+    });
+    remoteState = new StateSync({
+      oplog: remoteLog,
+      send: (deviceId, message) => {
+        remote?.engine.sendApp(deviceId, 'state', message);
+      },
+    });
+    remoteTransfers = new FileTransferManager({
+      send: (deviceId, message) => remote!.engine.send(deviceId, message),
+      createSink: async (
+        _deviceId: string,
+        request: FileRequestMessage,
+      ): Promise<TransferFileSink | null> => {
+        if (rejectTransfers || request.payload.mimeType !== SHARED_FILE_MIME) {
+          return null;
+        }
+        const bytes = Buffer.alloc(request.payload.fileSize);
+        return {
+          prepare: async () => 0,
+          write: async (offset, data) => {
+            Buffer.from(data).copy(bytes, offset);
+          },
+          finalize: async () => {
+            receivedFiles.push({
+              name: request.payload.fileName,
+              bytes,
+            });
+            return true;
+          },
+          abort: async () => undefined,
+        };
+      },
+    });
+
+    await remote.engine.start(0);
+    desktopDevice.port = remote.transport.boundPort ?? 0;
+    await sharedFileSyncService.start({
+      recordStateMutation: mutation =>
+        stateSyncService.recordMutation(mutation),
+      requestStateSync: deviceId => stateSyncService.requestSync(deviceId),
+      // Wired as the app wires it. Without this the control record is never published and every send
+      // throws "This shared file is not ready to send" - which reads as a transfer failure and is
+      // actually a half-built service.
+      publishControl: (deviceId, syncId) =>
+        stateSyncService.sendSharedFileRecord(deviceId, syncId),
+    });
+    await stateSyncService.start();
+    await syncService.start();
+
+    ui = render(
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </>,
+    );
+    fireEvent.press(ui.getByTestId('settings-tab'));
+    fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
+
+    const mobile = useSyncStore.getState().thisDevice;
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!mobile || !discovery?.publishedPort) {
+      throw new Error('Sync did not publish the mobile device');
+    }
+    const pairing = remote.engine.pair(
+      {
+        ...mobile,
+        host: '127.0.0.1',
+        port: discovery.publishedPort,
+      },
+      await pairingCodeOnScreen(ui),
+    );
+    // Waited on the outcome below rather than the progress sheet, which is gone in a couple of
+    // milliseconds over an in-memory transport.
+    await pairing;
+    await waitFor(() =>
+      expect(
+        within(ui!.getByTestId(`sync-paired-${desktopDevice.id}`)).getByText(
+          /Connected/,
+        ),
+      ).toBeTruthy(),
+    );
+
+    fireEvent.press(ui.getByTestId('sync-open-sharing'));
+    // Ambient sharing is behind an accordion on that screen, so it has to be opened before any of its
+    // controls exist - the same two taps a user makes.
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('sync-ambient-accordion')),
+    );
+    fireEvent.press(
+      await waitFor(() =>
+        ui!.getByTestId(`ambient-destination-${desktopDevice.id}`),
+      ),
+    );
+    fireEvent.press(ui.getByTestId('ambient-screenshot-ask'));
+    await waitFor(() => expect(screenshotListener).toBeDefined());
+
+    const rejectedScreenshot = await captureScreenshot({
+      syncId: '11111111-1111-4111-8111-111111111111',
+      name: 'Screenshot-rejected.png',
+      contents: 'not approved',
+    });
+    // An approval waits on the Notifications screen now, not in a sheet over whatever you were doing.
+    // The question names the file and the device, so it can be answered without guessing what it is
+    // about - and it is matched loosely because the two names are separate text children.
+    // Sharing sits two screens deep, so Home is two Backs away. Each step waits for the screen it lands
+    // on: a screen navigated away from stays MOUNTED but hidden, and a query skips hidden elements - so
+    // pressing on before the transition settles finds nothing while the tree still shows everything.
+    // The bell lives on Home, and this journey opened Sync from the SETTINGS tab - so backing out lands
+    // on Settings, not Home. Out of the pushed screen first, then across by the tab bar, which is only
+    // on screen once nothing is pushed over it.
+    fireEvent.press(ui.getByLabelText('Back'));
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-open-sharing')).toBeTruthy(),
+    );
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(await waitFor(() => ui!.getByTestId('home-tab')));
+    fireEvent.press(await waitFor(() => ui!.getByTestId('home-notifications')));
+    const rejectedRow = await waitFor(() =>
+      approvalRow(ui!, /Share Screenshot-rejected\.png with/),
+    );
+    expect(
+      remoteRecords.has(`${SHARED_FILE_ENTITY}:${rejectedScreenshot.syncId}`),
+    ).toBe(false);
+    expect(receivedFiles).toHaveLength(0);
+    fireEvent.press(
+      within(rejectedRow).getByTestId(
+        `sync-approval-reject-${approvalId(rejectedRow)}`,
+      ),
+    );
+    await waitFor(() =>
+      expect(ui!.queryByText(/Share Screenshot-rejected\.png with/)).toBeNull(),
+    );
+    expect(receivedFiles).toHaveLength(0);
+
+    rejectTransfers = true;
+    const retriedScreenshot = await captureScreenshot({
+      syncId: '22222222-2222-4222-8222-222222222222',
+      name: 'Screenshot-retry.png',
+      contents: 'share after recovery',
+    });
+    const retryRow = await waitFor(() =>
+      approvalRow(ui!, /Share Screenshot-retry\.png with/),
+    );
+    fireEvent.press(
+      within(retryRow).getByTestId(
+        `sync-approval-approve-${approvalId(retryRow)}`,
+      ),
+    );
+    // Back out of Notifications to Home, then into Sync from the card there. Activity is where the
+    // outcome of an approved share is recorded, so that is where the rest of this journey happens.
+    fireEvent.press(ui.getByLabelText('Back'));
+    await waitFor(() => expect(ui!.getByTestId('home-screen')).toBeTruthy());
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('open-sync-from-home')),
+    );
+    fireEvent.press(await waitFor(() => ui!.getByTestId('sync-open-activity')));
+
+    const activityId = sharedFileActivityId(
+      desktopDevice.id,
+      retriedScreenshot.syncId,
+    );
+    await waitFor(() => {
+      const failedActivity = ui!.getByTestId(`sync-activity-${activityId}`);
+      // Matched loosely: an activity row's status carries its progress in the same node, as
+      // "Could not send - 0%".
+      expect(within(failedActivity).getByText(/Could not send/)).toBeTruthy();
+      expect(
+        within(failedActivity).getByText(retriedScreenshot.name),
+      ).toBeTruthy();
+    });
+    expect(receivedFiles).toHaveLength(0);
+
+    rejectTransfers = false;
+    fireEvent.press(ui.getByTestId(`sync-activity-retry-${activityId}`));
+    await waitFor(() => expect(receivedFiles).toHaveLength(1));
+    expect(receivedFiles[0]).toEqual({
+      name: retriedScreenshot.name,
+      bytes: Buffer.from('share after recovery'),
+    });
+    await waitFor(() =>
+      expect(
+        remoteRecords.has(`${SHARED_FILE_ENTITY}:${retriedScreenshot.syncId}`),
+      ).toBe(true),
+    );
+    await waitFor(() => {
+      const completedActivity = ui!.getByTestId(`sync-activity-${activityId}`);
+      expect(within(completedActivity).getByText(/Sent/)).toBeTruthy();
+    });
+    expect(ui.queryByText('SHARED FILES')).toBeNull();
+
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(ui.getByTestId('sync-open-files'));
+    await waitFor(() =>
+      expect(
+        ui!.getByTestId(`sync-file-${retriedScreenshot.syncId}`),
+      ).toBeTruthy(),
+    );
+    expect(
+      ui.queryByTestId(`sync-file-${rejectedScreenshot.syncId}`),
+    ).toBeNull();
+    expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
+    // One line says where it went, instead of an origin ("This phone") and a count ("Shared with 1
+    // device") that the reader had to put together.
+    expect(ui.getByText(`Sent to ${desktopDevice.name}`)).toBeTruthy();
+
+    // Filters are behind a disclosure on this screen, the same two taps a user makes.
+    fireEvent.press(ui.getByTestId('sync-files-open-filters'));
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId('sync-file-filter-download')),
+    );
+    expect(
+      ui.getByText('No downloads have crossed your devices yet.'),
+    ).toBeTruthy();
+    fireEvent.press(ui.getByTestId('sync-file-filter-screenshot'));
+    expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
+  });
+
+  async function captureScreenshot(options: {
+    syncId: string;
+    name: string;
+    contents: string;
+  }): Promise<ScreenshotEvent> {
+    const filePath = `${modelTransferFsBoundary.DocumentDirectoryPath}/sync_screenshots/${options.name}`;
+    await modelTransferFsBoundary.module.writeFile(
+      filePath,
+      options.contents,
+      'utf8',
+    );
+    const event: ScreenshotEvent = {
+      syncId: options.syncId,
+      name: options.name,
+      mimeType: 'image/png',
+      filePath,
+      fileSize: Buffer.byteLength(options.contents),
+      createdAt: '2026-07-28T10:00:00.000Z',
+      width: 1179,
+      height: 2556,
+    };
+    screenshotListener?.(event);
+    return event;
+  }
+});

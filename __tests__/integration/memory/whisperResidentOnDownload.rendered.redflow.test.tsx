@@ -12,7 +12,7 @@
  * download the user never used, whisper is NOT resident. RED on HEAD: it is. Falsify: comment out the
  * auto-load line and whisper stays absent → green.
  *
- * Native residue the HUMAN confirms manually (no Provit): that the resident 1.5GB actually causes memory
+ * Native residue the HUMAN confirms manually (no device run): that the resident 1.5GB actually causes memory
  * pressure on device. The fake test proves the JS auto-load leak — the necessary condition.
  */
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
@@ -20,12 +20,12 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 describe('T022 (rendered) — whisper resident after download-only (DEV-B1)', () => {
   it('does NOT leave whisper resident just from downloading it (never transcribed)', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render, fireEvent, waitFor, act } = requireRTL();
     const { TranscriptionModelsTab } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
     const { ResidentsProbe } = require('../../harness/ResidentsProbe');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     const ui = render(
       React.createElement(React.Fragment, null,

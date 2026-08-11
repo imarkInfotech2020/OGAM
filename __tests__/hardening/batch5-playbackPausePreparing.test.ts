@@ -8,7 +8,7 @@
  * `flowing` event — emitted when audio actually starts — arrives AFTER the pause.
  * `flowing` promotes ONLY preparing→playing, so a late `flowing` on a session that the
  * user already paused must NOT resurrect playback. This is the exact interaction the
- * Provit journey exercises (cases 14/16/20/21: pause/stop/background during the
+ * on-device journey exercises (cases 14/16/20/21: pause/stop/background during the
  * preparing→playing transition, no stuck-or-restarted playback).
  *
  * Drives the REAL dispatchPlayback transition table (from @offgrid/pro) over a tiny

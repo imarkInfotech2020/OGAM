@@ -10,13 +10,13 @@ import { createMessage } from '../../utils/factories';
 describe('speak excludes thinking + tool-call data (guard)', () => {
   it('hands the speaker the answer only — no reasoning channel, no tool-call markup', () => {
     installNativeBoundary();
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { render } = requireRTL();
     const { MessageRenderer } = require('../../../src/screens/ChatScreen/MessageRenderer');
     const { registerSlot, SLOTS } = require('../../../src/bootstrap/slotRegistry');
     const { useUiModeStore } = require('../../../src/stores/uiModeStore');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     let spoken = '';
     registerSlot(SLOTS.messageSpeakButton, ({ text }: { text: string }) => { spoken = text; return null; });

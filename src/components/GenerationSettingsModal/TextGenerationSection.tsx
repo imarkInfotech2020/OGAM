@@ -12,6 +12,7 @@ import {
   BackendSelector,
   LiteRTBackendSelector,
   FlashAttentionToggle,
+  SpeculativeDecodingToggle,
   KvCacheTypeToggle,
   ModelLoadingModeSelector,
   ShowGenerationDetailsToggle,
@@ -209,6 +210,7 @@ const LlamaTextGenerationSection: React.FC = () => {
           <BatchSizeSlider />
           <BackendSelector />
           <FlashAttentionToggle />
+          <SpeculativeDecodingToggle />
           <KvCacheTypeToggle />
           <ModelLoadingModeSelector />
         </>

@@ -1,3 +1,4 @@
+import { selectHasProAccess } from '../stores/proAccessSlice';
 import { useAppStore } from '../stores/appStore';
 
 // Fires at count 3, then every 10 starting at 15 (3, 15, 25, 35...)
@@ -29,7 +30,7 @@ export function emitProPrompt(variant: ProPromptVariant): void {
 // Called by generationService after each completed text response
 export function checkProPromptForText(delayMs: number): void {
   const s = useAppStore.getState();
-  if (s.hasRegisteredPro || s.isProActive) return; // never upsell a Pro user (incl. keychain/dev unlock)
+  if (selectHasProAccess(s)) return;
   if (s.proAhaTriggeredBy !== null) return;
   if (!shouldShowProAha(s.textGenerationCount)) return;
   s.setProAhaTriggeredBy('text');
@@ -39,7 +40,7 @@ export function checkProPromptForText(delayMs: number): void {
 // Called by imageGenerationService after each completed image generation
 export function checkProPromptForImage(delayMs: number): void {
   const s = useAppStore.getState();
-  if (s.hasRegisteredPro || s.isProActive) return; // never upsell a Pro user (incl. keychain/dev unlock)
+  if (selectHasProAccess(s)) return;
   if (s.proAhaTriggeredBy !== null) return;
   if (!shouldShowProAha(s.imageGenerationCount)) return;
   s.setProAhaTriggeredBy('image');

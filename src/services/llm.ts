@@ -21,15 +21,13 @@ import { generateWithToolsImpl } from './llmToolGeneration';
 import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
-;
+import { resolveSpeculative } from './mtpDetection';
 import type { StreamToken } from './llmStreamTypes';
 export type { StreamToken };
 type StreamCallback = (data: StreamToken) => void;
 type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
-function resolveGpuBackend(enabled: boolean, devices: string[]): string {
-  if (!enabled) return 'CPU';
-  return Platform.OS === 'ios' ? 'Metal' : (devices.length > 0 ? devices.join(', ') : 'OpenCL');
-}
+const resolveGpuBackend = (enabled: boolean, devices: string[]): string =>
+  !enabled ? 'CPU' : (Platform.OS === 'ios' ? 'Metal' : (devices.join(', ') || 'OpenCL'));
 class LLMService {
   private context: LlamaContext | null = null;
   private currentModelPath: string | null = null;
@@ -72,7 +70,8 @@ class LLMService {
     // nThreads === 0 is the "auto" sentinel — substitute the hardware-recommended count.
     // Any explicit user choice (1–12) is respected as-is.
     const effectiveNThreads = settings.nThreads === 0 ? recommendedThreads : settings.nThreads;
-    const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads });
+    const speculativeDecoding = await resolveSpeculative(modelPath, settings.speculativeDecoding);
+    const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads, speculativeDecoding });
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
     const fileStat = await RNFS.stat(modelPath);
     const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;

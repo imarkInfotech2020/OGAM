@@ -18,11 +18,11 @@ jest.mock('@react-navigation/native', () => ({
 describe('residency visibility — model selector shows the loaded model + its RAM', () => {
   it('renders the currently-loaded model name and its RAM consumption', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
-    /* eslint-disable @typescript-eslint/no-var-requires */
+     
     const React = require('react');
     const { ModelSelectorModal } = require('../../../src/components/ModelSelectorModal');
     const { llmService } = require('../../../src/services/llm');
-    /* eslint-enable @typescript-eslint/no-var-requires */
+     
 
     // The real UI, wired with the real loaded path the screen passes in.
     const v = h.rtl.render(React.createElement(ModelSelectorModal, {

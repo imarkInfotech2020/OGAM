@@ -12,13 +12,13 @@ import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary'
 
 async function setup() {
   const boundary = installNativeBoundary({ download: true, fs: true });
-  /* eslint-disable @typescript-eslint/no-var-requires */
+   
   const React = require('react');
   const rtl = requireRTL();
   const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
   const { whisperService } = require('../../../src/services/whisperService');
   const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
-  /* eslint-enable @typescript-eslint/no-var-requires */
+   
 
   // base.en is downloading (native active row); the service tracks its downloadId.
   boundary.download!.seedActive({ downloadId: 'dl-base', fileName: 'ggml-base.en.bin', modelId: 'base.en', modelType: 'stt', status: 'running', bytesDownloaded: 40 * 1024 * 1024, totalBytes: 142 * 1024 * 1024 });

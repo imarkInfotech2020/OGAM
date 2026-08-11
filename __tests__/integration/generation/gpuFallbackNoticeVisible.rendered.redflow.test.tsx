@@ -38,7 +38,7 @@ function pressByWalkingUp(node: unknown): void {
 }
 
 function selectBackendViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>, backendId: string) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const { BackendSelector } = require('../../../src/components/settings/textGenAdvancedSections');
   const s = h.rtl.render(h.React.createElement(BackendSelector, {}));
   h.rtl.fireEvent.press(s.getByTestId(`backend-${backendId}-button`));
@@ -46,7 +46,7 @@ function selectBackendViaUI(h: Awaited<ReturnType<typeof setupChatScreen>>, back
 }
 
 async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const DeviceInfo = require('react-native-device-info');
   (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom'); // Adreno → OpenCL allowed
   selectBackendViaUI(h, 'opencl');
