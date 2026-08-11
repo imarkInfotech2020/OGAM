@@ -29,7 +29,6 @@ import { useSettingsSections } from '../components/settings/sectionRegistry';
 import { ProUpsellBanner } from '../components/settings/ProUpsellBanner';
 import { useFocusTrigger } from '../hooks/useFocusTrigger';
 import { useTheme, useThemedStyles } from '../theme';
-import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 import { useAppStore, useRemoteServerStore } from '../stores';
 import { hardwareService } from '../services';
@@ -38,7 +37,7 @@ import { useHasRegisteredScreen } from '../navigation/screenRegistry';
 import { clearProForTesting } from '../services/proLicenseService';
 import { useProStatusLabel } from '../hooks/useProStatusLabel';
 import { useOpenSync } from '../hooks/useOpenSync';
-import packageJson from '../../package.json';
+import { appBuildLabel, appVersion } from '../utils/appVersion';
 
 const FEEDBACK_EMAIL = 'support@offgridmobileai.co';
 
@@ -80,10 +79,7 @@ export const SettingsScreen: React.FC = () => {
     const { downloadedModels, activeModelId } = useAppStore.getState();
     const { activeServerId } = useRemoteServerStore.getState();
 
-    const [buildNumber, fsInfo] = await Promise.all([
-      DeviceInfo.getBuildNumber(),
-      RNFS.getFSInfo(),
-    ]);
+    const fsInfo = await RNFS.getFSInfo();
 
     const ramGB = hardwareService.getTotalMemoryGB().toFixed(1);
     const tier = hardwareService.getDeviceTier();
@@ -96,12 +92,12 @@ export const SettingsScreen: React.FC = () => {
       : 'Device: Unknown';
 
     const subject = encodeURIComponent(
-      `[Feedback] Off Grid AI v${packageJson.version}`,
+      `[Feedback] Off Grid AI v${appVersion()}`,
     );
     const body = encodeURIComponent(
       `Hi,\n\n[Describe your feedback or issue here]\n\n` +
         `---\n` +
-        `App: v${packageJson.version} (build ${buildNumber})\n` +
+        `App: ${appBuildLabel()}\n` +
         `${deviceLine}\n` +
         `RAM: ${ramGB} GB · Tier: ${tier}\n` +
         `Model: ${modelLine}\n` +
@@ -299,7 +295,7 @@ export const SettingsScreen: React.FC = () => {
               <View style={styles.navItemContent}>
                 <Text style={styles.navItemTitle}>About</Text>
                 <Text style={styles.navItemDesc}>
-                  Version {packageJson.version}
+                  Version {appVersion()}
                 </Text>
               </View>
               <Icon name="chevron-right" size={16} color={colors.textMuted} />

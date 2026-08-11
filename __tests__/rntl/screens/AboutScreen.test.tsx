@@ -21,8 +21,6 @@ jest.mock('../../../src/components/AnimatedListItem', () => ({
   },
 }));
 
-jest.mock('../../../package.json', () => ({ version: '1.0.0' }), { virtual: true });
-
 import { AboutScreen } from '../../../src/screens/AboutScreen';
 
 describe('AboutScreen — Follow / Community', () => {

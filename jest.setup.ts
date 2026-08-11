@@ -341,6 +341,10 @@ jest.mock('react-native-device-info', () => ({
   getModel: jest.fn(() => 'Test Device'),
   getSystemName: jest.fn(() => 'Android'),
   getSystemVersion: jest.fn(() => '13'),
+  // The build's own identity, which is what the UI and a feedback report read (src/utils/appVersion).
+  // Synchronous in the real package too - these are native build constants, not a lookup.
+  getVersion: jest.fn(() => '0.0.103'),
+  getBuildNumber: jest.fn(() => '1784144537'),
   isEmulator: jest.fn(() => Promise.resolve(false)),
   getDeviceId: jest.fn(() => 'test-device-id'),
   getHardware: jest.fn(() => Promise.resolve('unknown')),
