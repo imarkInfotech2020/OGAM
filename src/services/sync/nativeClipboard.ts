@@ -1,6 +1,7 @@
 import {
   NativeEventEmitter,
   NativeModules,
+  Platform,
   type EmitterSubscription,
 } from 'react-native';
 
@@ -16,11 +17,26 @@ interface SyncClipboardNativeModule {
   writeText(text: string): void;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
+  /** Android only: is the selection-reporting service switched on in system settings? */
+  isAccessibilityEnabled?(): Promise<boolean>;
+  /** Android only: open the system Accessibility screen, the only place the grant lives. */
+  openAccessibilitySettings?(): void;
 }
 
 export interface NativeClipboardBoundary {
   observe(listener: (change: NativeClipboardChange) => void): () => void;
   writeText(text: string): void;
+  /**
+   * Can this platform capture a copy made in ANOTHER app right now?
+   *
+   * A fact, not a verdict, and asked rather than remembered: on Android the user can revoke the
+   * accessibility grant in Settings without this app being told. iOS answers true because it has no
+   * such gate - and answering `false` there would send the user hunting for a switch that does not
+   * exist.
+   */
+  canCaptureInBackground(): Promise<boolean>;
+  /** Take the user to where the grant lives. A no-op where there is nothing to grant. */
+  requestBackgroundCapture(): void;
 }
 
 function module(): SyncClipboardNativeModule {
@@ -57,5 +73,19 @@ export const nativeClipboardBoundary: NativeClipboardBoundary = {
 
   writeText(text): void {
     module().writeText(text);
+  },
+
+  async canCaptureInBackground(): Promise<boolean> {
+    if (Platform.OS !== 'android') return true;
+    const ask = module().isAccessibilityEnabled;
+    // An older native build without the method is not a denial: it is a build that cannot answer, and
+    // treating silence as "off" would nag the user to enable something this app cannot even see.
+    if (!ask) return true;
+    return ask();
+  },
+
+  requestBackgroundCapture(): void {
+    if (Platform.OS !== 'android') return;
+    module().openAccessibilitySettings?.();
   },
 };

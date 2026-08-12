@@ -81,7 +81,18 @@ jest.mock('react-native-zeroconf', () => {
 class ClipboardBoundary implements NativeClipboardBoundary {
   enabled = false;
   readonly writes: string[] = [];
+  /** The device's answer to "can I capture a copy made in another app". Android's is the user's. */
+  backgroundCapture = true;
+  backgroundCaptureRequests = 0;
   private listener: ((change: NativeClipboardChange) => void) | null = null;
+
+  async canCaptureInBackground(): Promise<boolean> {
+    return this.backgroundCapture;
+  }
+
+  requestBackgroundCapture(): void {
+    this.backgroundCaptureRequests += 1;
+  }
 
   observe(listener: (change: NativeClipboardChange) => void): () => void {
     this.enabled = true;
