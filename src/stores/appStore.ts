@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RecordProvenance } from '@offgrid/sync';
+import { APP_CONFIG } from '../constants';
 import { DeviceInfo, DownloadedModel, ModelRecommendation, ONNXImageModel, ImageGenerationMode, AutoDetectMethod, CacheType, InferenceBackend, INFERENCE_BACKENDS, LiteRTBackend, GeneratedImage } from '../types';
 import {
   emitChangedModelSettings,
@@ -188,7 +189,10 @@ const DEFAULT_CHECKLIST: OnboardingChecklist = {
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
-  systemPrompt: 'You are a helpful AI assistant running locally on the user\'s device. Be concise and helpful.',
+  // ONE owner for the default persona. This was its own copy, and `projectStore` a third - three texts for
+  // one idea, all opening with the same sentence. That matters beyond tidiness: `systemPrompt` is a SYNCED
+  // model setting, so whichever copy a device happens to hold is the one that travels to its peers.
+  systemPrompt: APP_CONFIG.defaultSystemPrompt,
   temperature: 0.7,
   maxTokens: 1024,
   topP: 0.9,
