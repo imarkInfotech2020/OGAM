@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The narrowest configuration that can do the job.
+
+  `typeViewTextSelectionChanged` alone: the service needs the text the user highlighted and nothing
+  else, so the platform is told to deliver nothing else. No `canRetrieveWindowContent`, no key-event
+  filtering, no window-state events - each of those would hand this app screen contents it has no use
+  for, and the user reads this list when they grant the permission.
+
+  `accessibilityFlags` is left at the default for the same reason: reporting flags are what widen a
+  service's reach, and this one asks for none.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeViewTextSelectionChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:description="@string/sync_clipboard_accessibility_description"
+    android:notificationTimeout="100"
+    android:summary="@string/sync_clipboard_accessibility_summary" />
