@@ -89,11 +89,29 @@ export const ProManageSection: React.FC = () => {
                   );
                   return;
                 }
-                await loadProFeatures().catch(() => {});
-                await refresh();
+                // The seat IS released and the credential IS gone by this point, so a failure here is
+                // not a failed reset - it is a screen that could not catch up. Swallowing it left the
+                // card showing a licence the phone no longer has, which reads as "reset did nothing"
+                // and invites a second attempt on a device that has already been reset.
+                try {
+                  await loadProFeatures();
+                  await refresh();
+                } catch (e) {
+                  logger.error(`[Pro] reset reload failed: ${String(e)}`);
+                  Alert.alert(
+                    'Pro was reset',
+                    'This phone no longer holds the licence. Restart the app to finish unloading Pro features.',
+                  );
+                }
               })
+              // The reset itself threw, so whether the seat was released is unknown. Say so rather
+              // than only writing to a log the user cannot read.
               .catch(e => {
                 logger.error(`[Pro] reset failed: ${String(e)}`);
+                Alert.alert(
+                  'Could not reset Pro',
+                  'Something went wrong, so this phone may still hold its seat. Try again.',
+                );
               })
               .finally(() => setResetting(false));
           },
