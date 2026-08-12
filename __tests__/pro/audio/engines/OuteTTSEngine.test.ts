@@ -16,14 +16,13 @@
  */
 
 // ── Native llama.rn mockRuntime — a dumb, controllable context stub ─────────────
-type CompletionArgs = { prompt: string; grammar: unknown; guide_tokens: number[] };
+type CompletionArgs = { prompt: string; grammar: unknown; guide_tokens?: number[] };
 interface MockCtx {
   released: boolean;
   vocoderReleased: boolean;
   initVocoder: jest.Mock;
   isVocoderEnabled: jest.Mock;
   getFormattedAudioCompletion: jest.Mock;
-  getAudioCompletionGuideTokens: jest.Mock;
   completion: jest.Mock;
   decodeAudioTokens: jest.Mock;
   releaseVocoder: jest.Mock;
@@ -45,10 +44,11 @@ function mockMakeContext(): MockCtx {
     vocoderReleased: false,
     initVocoder: jest.fn(() => Promise.resolve()),
     isVocoderEnabled: jest.fn(() => Promise.resolve(mockRuntime.vocoderEnabled)),
-    getFormattedAudioCompletion: jest.fn((_speaker: unknown, text: string) =>
+    // llama.rn 0.13 takes ONE options object here. The double follows the runtime we ship, or it proves
+    // the engine against an API that no longer exists.
+    getFormattedAudioCompletion: jest.fn(({ prompt: text }: { prompt: string }) =>
       Promise.resolve({ prompt: `PROMPT:${text}`, grammar: 'G' }),
     ),
-    getAudioCompletionGuideTokens: jest.fn(() => Promise.resolve(mockRuntime.guideTokens)),
     completion: jest.fn((args: CompletionArgs) => {
       mockRuntime.completionArgs = args;
       return Promise.resolve({ audio_tokens: mockRuntime.audioTokens });
@@ -340,25 +340,23 @@ describe('OuteTTSEngine — speak', () => {
     expect(e.getPhase()).toBe('ready');
   });
 
-  it('forwards guide tokens + prompt from the runtime into completion()', async () => {
+  it('forwards the runtime\'s formatted prompt into completion(), and no guide tokens', async () => {
+    // llama.rn 0.13 removed `getAudioCompletionGuideTokens` AND the `guide_tokens` completion param:
+    // native owns them now, carried by the grammar the formatted completion returns. Sending our own
+    // would be this engine deciding something the runtime already decided.
     const e = await readyEngine();
     await e.speak('the quick brown fox');
     expect(mockRuntime.completionArgs?.prompt).toBe('PROMPT:the quick brown fox');
-    expect(mockRuntime.completionArgs?.guide_tokens).toEqual(mockRuntime.guideTokens);
-  });
-
-  it('defaults guide tokens to [] when the runtime returns null', async () => {
-    mockRuntime.guideTokens = null;
-    const e = await readyEngine();
-    await e.speak('x');
-    expect(mockRuntime.completionArgs?.guide_tokens).toEqual([]);
+    expect(mockRuntime.completionArgs?.guide_tokens).toBeUndefined();
   });
 
   it('truncates text longer than 300 chars before generation', async () => {
     const e = await readyEngine();
     const long = 'a'.repeat(500);
     await e.speak(long);
-    const forwarded = mockRuntime.lastContext!.getFormattedAudioCompletion.mock.calls[0][1] as string;
+    const forwarded = (
+      mockRuntime.lastContext!.getFormattedAudioCompletion.mock.calls[0][0] as { prompt: string }
+    ).prompt;
     expect(forwarded.length).toBe(300);
     expect(forwarded.endsWith('...')).toBe(true);
   });
@@ -464,11 +462,11 @@ describe('OuteTTSEngine — stop / pause / resume phase logic', () => {
 
   it('pause() moves processing → paused and resume() moves it back', async () => {
     const e = await readyEngine();
-    // Hold generation open so the engine sits in 'processing'. Deferring the
-    // FIRST awaited runtime call (guide tokens) keeps speak() in-flight.
-    let resolveGuide: (v: number[]) => void = () => {};
-    mockRuntime.lastContext!.getAudioCompletionGuideTokens.mockImplementationOnce(
-      () => new Promise<number[]>((resolve) => { resolveGuide = resolve; }),
+    // Hold generation open so the engine sits in 'processing'. The first awaited runtime call is now the
+    // formatted completion - 0.13 removed the guide-token call this used to defer.
+    let resolveGuide: (v: { prompt: string; grammar: string }) => void = () => {};
+    mockRuntime.lastContext!.getFormattedAudioCompletion.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveGuide = resolve; }),
     );
     const speaking = e.speak('hold');
     await flushMicrotasks();
@@ -479,16 +477,16 @@ describe('OuteTTSEngine — stop / pause / resume phase logic', () => {
     e.resume();
     expect(e.getPhase()).toBe('processing');
 
-    resolveGuide([1, 2]);
+    resolveGuide({ prompt: 'PROMPT:hold', grammar: 'G' });
     await speaking;
     expect(e.getPhase()).toBe('ready');
   });
 
   it('stop() during generation aborts playback (no audioComplete) and restores ready', async () => {
     const e = await readyEngine();
-    let resolveGuide: (v: number[]) => void = () => {};
-    mockRuntime.lastContext!.getAudioCompletionGuideTokens.mockImplementationOnce(
-      () => new Promise<number[]>((resolve) => { resolveGuide = resolve; }),
+    let resolveGuide: (v: { prompt: string; grammar: string }) => void = () => {};
+    mockRuntime.lastContext!.getFormattedAudioCompletion.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveGuide = resolve; }),
     );
     const completes: unknown[] = [];
     e.on('audioComplete', (a) => completes.push(a));
@@ -500,7 +498,7 @@ describe('OuteTTSEngine — stop / pause / resume phase logic', () => {
     e.stop(); // clears _isSpeakingFlag while generation is in-flight
     expect(e.getPhase()).toBe('ready');
 
-    resolveGuide([1, 2]);
+    resolveGuide({ prompt: 'PROMPT:hold', grammar: 'G' });
     await speaking;
     expect(completes).toHaveLength(0); // aborted before emit/playback
   });
