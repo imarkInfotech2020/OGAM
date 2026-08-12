@@ -51,11 +51,16 @@ export const ProManageSection: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
 
-  const refresh = useCallback(async () => {
+  // Answers whether the card now shows current state. It swallows its own failure so first paint can
+  // never reject, which also meant a caller could not tell a repaint from a silent miss - and after a
+  // reset that difference is the whole message.
+  const refresh = useCallback(async (): Promise<boolean> => {
     try {
       setInfo(await getProLicenseInfo());
+      return true;
     } catch (e) {
       logger.error('[ProManage] load failed:', e instanceof Error ? e.message : String(e));
+      return false;
     } finally {
       setLoading(false);
     }
@@ -93,11 +98,16 @@ export const ProManageSection: React.FC = () => {
                 // not a failed reset - it is a screen that could not catch up. Swallowing it left the
                 // card showing a licence the phone no longer has, which reads as "reset did nothing"
                 // and invites a second attempt on a device that has already been reset.
+                let repainted = false;
                 try {
                   await loadProFeatures();
-                  await refresh();
+                  repainted = await refresh();
                 } catch (e) {
                   logger.error(`[Pro] reset reload failed: ${String(e)}`);
+                }
+                // Covers both ways the card can be left behind: loadProFeatures throwing, and refresh
+                // failing to read the new state - which it reports rather than throws.
+                if (!repainted) {
                   Alert.alert(
                     'Pro was reset',
                     'This phone no longer holds the licence. Restart the app to finish unloading Pro features.',
