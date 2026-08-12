@@ -1,6 +1,6 @@
 # What to test by hand — `fix/feedback-2026-08-12`
 
-Six defects were fixed. Each one below names the exact thing to do, what you should see, and what the
+Five defects were fixed, and one that I thought I had fixed is corrected below in section 3. Each one below names the exact thing to do, what you should see, and what the
 failure looked like before, so a partial fix cannot pass as a whole one.
 
 Automated coverage already holds the logic: shared 461, mobile 3129, desktop pro sync 573, renderer 204.
@@ -50,18 +50,27 @@ targets — the record names the peer as it was, the row asks for the peer as it
 
 Repeat 1 and 2 for a **message attachment** from desktop, which has its own switch for the same reason.
 
-## 3. A cancelled pairing lets you try again
+## 3. Pairing — NOT FIXED, but worth reproducing precisely
 
-1. On the **phone**, start pairing with a desktop and deliberately type a **wrong** code.
-2. When it fails, press **Cancel**.
-3. Immediately start pairing again with the same device, this time with the right code.
+I had this wrong and the test suite caught me. My first fix hid a cancelled attempt, and
+`deviceManagement.integration.test.tsx` disproved the premise: that journey cancels, reads "Pairing
+cancelled", retries and pairs, so retry-after-cancel already worked and the confirmation is wanted. I
+reverted the behaviour change and kept only a genuine robustness fix — an attempt is now read at its LAST
+state, so it can never be presented from an earlier row of its own history.
 
-- **Expect:** the sheet is gone after Cancel, and the retry shows its own progress and pairs.
-- **Before:** the sheet still said "pairing…" over the retry, and only restarting the app cleared it.
+**So do not test for a fix here. Test to pin down the sequence**, because the working journey and your
+report disagree, and the difference is the bug:
 
-Also confirm the useful half survived: type a wrong code and do **not** cancel.
+1. Start pairing, type a **wrong** code, let it fail.
+2. Press **Cancel** on the failed attempt.
+3. Start pairing again with the correct code.
 
-- **Expect:** it still tells you the codes did not match. Only your own cancel is withheld.
+Tell me exactly what the sheet says at each step, and whether the retry pairs. My suspicion is that a
+cancel does nothing to an attempt that has already reached `failed` — a terminal attempt has nothing left
+to cancel — so it stays on screen as the last thing that happened. The journey that passes cancels while
+still `waiting_for_confirmation`, which is a different state and a different code path.
+
+A screen recording of those three steps would settle it in one pass.
 
 ## 4. A fresh phone can find the desktop
 
