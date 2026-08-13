@@ -18,6 +18,8 @@ export { ImageGenAdviceCard } from './ImageGenAdviceCard';
 export { MtpAdviceCard } from './MtpAdviceCard';
 export { ThinkingIndicator } from './ThinkingIndicator';
 export { LoadingDots } from './LoadingDots';
+export { SelectDropdown } from './SelectDropdown';
+export type { SelectDropdownOption } from './SelectDropdown';
 export { VisionRepairAdviceCard } from './VisionRepairAdviceCard';
 ;
 ;
