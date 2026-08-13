@@ -400,6 +400,8 @@ submitted twice.
 - Focused evidence is green: the Shared Sync build and runtime-notice contract pass; the rendered
   Desktop image journey passes 14 tests; Desktop web TypeScript passes; changed Mobile source lint
   passes. Full Mobile TypeScript remains blocked by the already-recorded stale Phase 2 policy tests.
+- Windows `.97` now matches the Mac by MD5 for both the rebuilt Shared Sync bundle and the changed
+  Desktop Chat renderer. The mirror daemon is running; its last error lines are old `.28` records.
 
 ## Current status
 
