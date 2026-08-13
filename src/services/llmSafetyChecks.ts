@@ -1,7 +1,9 @@
 import { LlamaContext } from 'llama.rn';
 import RNFS from 'react-native-fs';
+import { statFile } from '../utils/fileStat';
 import logger from '../utils/logger';
 import { OverridableMemoryError } from '../utils/modelLoadErrors';
+import { sizeToBytes } from '../utils/fileSize';
 
 /**
  * GGUF magic number — first 4 bytes of every valid GGUF file.
@@ -24,8 +26,7 @@ function decodeLittleEndianUint32(bytes: string): number | null {
  */
 export async function validateModelFile(modelPath: string): Promise<{ valid: boolean; reason?: string }> {
   try {
-    const stat = await RNFS.stat(modelPath);
-    const fileSize = typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size;
+    const fileSize = (await statFile(modelPath))?.size ?? 0;
     const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(1);
     logger.log(`[LLM] Validating model: ${modelPath}`);
     logger.log(`[LLM] Model file size: ${fileSizeMB}MB (${fileSize} bytes)`);

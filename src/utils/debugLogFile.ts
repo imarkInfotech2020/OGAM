@@ -18,6 +18,7 @@
  * unbounded. Logging must NEVER throw, so every FS call is best-effort.
  */
 import RNFS from 'react-native-fs';
+import { statFile } from './fileStat';
 
 const LOG_PATH = `${RNFS.DocumentDirectoryPath}/offgrid-debug.log`;
 /** Rotate (keep the tail) once the file exceeds this, so it can't grow forever. */
@@ -64,8 +65,8 @@ async function flush(): Promise<void> {
   buffer = [];
   try {
     await RNFS.appendFile(LOG_PATH, chunk, 'utf8');
-    const stat = await RNFS.stat(LOG_PATH).catch(() => null);
-    if (stat && Number(stat.size) > MAX_BYTES) {
+    const stat = await statFile(LOG_PATH);
+    if (stat && stat.size > MAX_BYTES) {
       // Keep only the most recent half so the file stays bounded but useful.
       const content = await RNFS.readFile(LOG_PATH, 'utf8').catch(() => '');
       await RNFS.writeFile(LOG_PATH, content.slice(-Math.floor(MAX_BYTES / 2)), 'utf8').catch(() => {});

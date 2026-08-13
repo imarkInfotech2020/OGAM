@@ -6,6 +6,7 @@
  * functions; their signatures and behavior are unchanged.
  */
 import RNFS from 'react-native-fs';
+import { statFile } from '../utils/fileStat';
 import logger from '../utils/logger';
 
 /**
@@ -75,8 +76,7 @@ export async function validateModelFile(modelPath: string): Promise<void> {
     throw new Error(`Whisper model file not found at: ${modelPath}`);
   }
 
-  const stat = await RNFS.stat(modelPath);
-  const fileSize = Number(stat.size);
+  const fileSize = (await statFile(modelPath))?.size ?? 0;
   if (Number.isNaN(fileSize) || fileSize < MIN_MODEL_FILE_SIZE) {
     // Remove the corrupted file so the user can re-download
     await RNFS.unlink(modelPath).catch(() => {});
