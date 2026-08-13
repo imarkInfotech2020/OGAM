@@ -64,6 +64,7 @@ An item is complete only when all three states are true.
 | Busy-state visuals                            | Shared design-system loader primitive  |
 | User Eject All lifecycle                      | Mobile user-model-ejection coordinator |
 | Shared-file backlog and active receive window | `@offgrid/sync` `SharedFileDelivery`   |
+| Concurrent knowledge-document offers          | `@offgrid/sync` transfer reservations  |
 
 ## Sequential work plan
 
@@ -132,6 +133,7 @@ pass, and both physical-device journeys pass.
 - [x] Prevent State Sync anti-entropy from announcing queued controls outside that window.
 - [x] Use the same active-control rule for normal delivery and repair on Desktop and Mobile.
 - [x] Clear stale nonterminal receive offers from the connected iPhone and Android device.
+- [x] Join identical concurrent knowledge-document offers behind one receiver-side writer.
 - [ ] Verify that enabling Screenshots and Downloads sends only files created after enablement.
 - [ ] Verify all eight Download types can be selected on Desktop and Mobile.
 - [ ] Move Copied text into the Automatic sharing matrix on Mobile and Desktop.
@@ -162,6 +164,11 @@ Focused evidence, 2026-08-13:
   `/tmp/offgrid-android-RKStorage-backup-20260813.sqlite`. Cleanup removed 1,136 nonterminal receive
   rows and 1,135 matching shared-file ops. It preserved 103 other history rows. A read-back from the
   phone confirms zero nonterminal receive rows and a valid SQLite integrity check.
+- A full mesh can offer one replicated knowledge document from two peers at the same time. Shared
+  Sync now gives matching bytes one staging-path owner and makes later offers wait for that result.
+  Shared typecheck, build, and 12 focused contract tests pass. Desktop node TypeScript and 47
+  knowledge-document tests pass. The Mobile knowledge-document integration and refusal suites pass:
+  5 tests. Mobile TypeScript remains blocked only by the existing Receiving test-fixture drift.
 
 ### Phase 3 - Make transfer history authoritative
 
