@@ -88,7 +88,7 @@ Decision: Option A. Production must not call `RNFS.stat`.
 
 - [x] Remove executable production `RNFS.stat` calls.
 - [ ] Confirm all file readers use the one filesystem adapter.
-- [ ] Add one faithful native-filesystem fake under the test harness.
+- [x] Add one faithful native-filesystem fake under the test harness.
 - [ ] Make tests declare a directory tree once and derive parent listings from it.
 - [ ] Replace test-local RNFS fakes with the shared boundary fake.
 - [ ] Add an architecture rule that rejects future production `RNFS.stat` calls.
@@ -249,6 +249,17 @@ submitted twice.
 | `desktop` | [off-grid-ai/OGAD#80](https://github.com/off-grid-ai/OGAD/pull/80) |
 | `mobile/pro` | [off-grid-ai/mobile-pro#50](https://github.com/off-grid-ai/mobile-pro/pull/50) |
 | `mobile` | [off-grid-ai/OGAM#628](https://github.com/off-grid-ai/OGAM/pull/628) |
+
+### 2026-08-13 - Mobile filesystem boundary, incremental verification
+
+- Added one stateful, directory-based native filesystem boundary in
+  `__tests__/harness/nativeFileSystem.ts`.
+- Updated file-sharing validation and the Oute/Qwen audio asset suites to use that boundary.
+- Pushed commits `f093c65f`, `3379b68b`, and `783dc27f` to Mobile draft PR #628.
+- Switched to one defect, one focused gate, one commit, and one push so each change can be verified
+  manually before the next defect starts.
+- Repaired the debug-log rotation suite. It now uses real stored bytes and parent directory entries;
+  all 12 tests pass, including rotation after the 5 MB limit.
 
 ## Current status
 
