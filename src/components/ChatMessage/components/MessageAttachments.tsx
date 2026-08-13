@@ -83,6 +83,52 @@ interface MessageAttachmentsProps {
   onImagePress?: (uri: string) => void;
 }
 
+/**
+ * A file a peer has NAMED whose bytes have not arrived.
+ *
+ * Its own component, not a branch in the map: everything below reads `uri`, and this is the one case
+ * that has none. Keeping it separate also keeps the row list readable - the map was one expression
+ * deciding audio, document, image AND this.
+ */
+function ArrivingAttachment({
+  attachment,
+  index,
+  isUser,
+  styles,
+  colors,
+}: {
+  attachment: MediaAttachment;
+  index: number;
+  isUser: boolean;
+  styles: any;
+  colors: any;
+}) {
+  return (
+    <View
+      testID={`attachment-pending-${index}`}
+      style={[
+        styles.documentBadge,
+        isUser ? styles.documentBadgeUser : styles.documentBadgeAssistant,
+      ]}
+    >
+      <LoadingDots
+        size={5}
+        color={isUser ? colors.background : colors.textSecondary}
+        testID={`attachment-pending-dots-${index}`}
+      />
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.documentBadgeText,
+          isUser ? styles.documentBadgeTextUser : styles.documentBadgeTextAssistant,
+        ]}
+      >
+        {attachment.fileName || 'Arriving'}
+      </Text>
+    </View>
+  );
+}
+
 export function MessageAttachments({
   attachments,
   isUser,
@@ -97,31 +143,14 @@ export function MessageAttachments({
         // attachment has no local file, and every branch below assumes one. The name and size come
         // from the announcement, so the row reads as the file it will become.
         attachment.pending ? (
-          <View
+          <ArrivingAttachment
             key={attachment.id}
-            testID={`attachment-pending-${index}`}
-            style={[
-              styles.documentBadge,
-              isUser ? styles.documentBadgeUser : styles.documentBadgeAssistant,
-            ]}
-          >
-            <LoadingDots
-              size={5}
-              color={isUser ? colors.background : colors.textSecondary}
-              testID={`attachment-pending-dots-${index}`}
-            />
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.documentBadgeText,
-                isUser
-                  ? styles.documentBadgeTextUser
-                  : styles.documentBadgeTextAssistant,
-              ]}
-            >
-              {attachment.fileName || 'Arriving'}
-            </Text>
-          </View>
+            attachment={attachment}
+            index={index}
+            isUser={isUser}
+            styles={styles}
+            colors={colors}
+          />
         ) : attachment.type === 'audio' ? (
           <View
             key={attachment.id}

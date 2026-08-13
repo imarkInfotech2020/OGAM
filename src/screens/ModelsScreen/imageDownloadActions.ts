@@ -15,7 +15,6 @@ import { ImageModelDescriptor, ImageDownloadDeps } from './types';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
 import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 import logger from '../../utils/logger';
-import { sizeToBytes } from '../../utils/fileSize';
 
 // ImageDownloadDeps now lives in ./types (so imageDownloadQnn can import it without cycling back
 // here). Re-exported for existing importers.

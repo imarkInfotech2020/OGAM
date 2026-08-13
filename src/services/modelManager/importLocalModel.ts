@@ -9,7 +9,6 @@ import {
 } from '../../types';
 import { buildDownloadedModel, persistDownloadedModel } from './storage';
 import { copyFileWithProgress } from './copyFile';
-import { parseSizeInt } from './scan';
 import { isLiteRTFileName } from '../../utils/modelHelpers';
 
 export interface ImportLocalModelOpts {

@@ -8,7 +8,6 @@ import { statFile } from '../../utils/fileStat';
 import { parseHuggingFaceUrl } from '../../utils/modelOrigin';
 import { collapseDuplicateFileRows, collapseDuplicateImageRows } from './collapseDuplicateFileRows';
 import { reconcilePrimaryPaths, resolveStoredPath } from './reconcileStoredPaths';
-import { sizeToBytes } from '../../utils/fileSize';
 import { useAppStore } from '../../stores';
 import { isLiteRTFileName } from '../../utils/modelHelpers';
 

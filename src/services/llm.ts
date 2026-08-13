@@ -17,14 +17,14 @@ import {
 import { awaitMemoryReclaim, effectiveAvailableMB } from './memoryBudget';
 import { modelResidencyManager } from './modelResidency';
 import { hardwareService } from './hardware';
-import { formatLlamaMessages, buildOAIMessages, modelImageAttachments } from './llmMessages';
+import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
+import { dropMissingImageAttachments, modelImageAttachments } from './llmImageInput';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 import { resolveSpeculative } from './mtpDetection';
 import type { StreamToken } from './llmStreamTypes';
-import { sizeToBytes } from '../utils/fileSize';
 export type { StreamToken };
 type StreamCallback = (data: StreamToken) => void;
 type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
@@ -368,26 +368,6 @@ class LLMService {
    * this boundary is the generation layer's own responsibility — a missing image is
    * simply not sent, so the turn runs (TEXT-ONLY if none remain) instead of crashing.
    */
-  private async dropMissingImageAttachments(messages: Message[]): Promise<Message[]> {
-    const out: Message[] = [];
-    for (const m of messages) {
-      const attachments = m.attachments;
-      if (!attachments?.some(a => a.type === 'image')) { out.push(m); continue; }
-      const kept: typeof attachments = [];
-      for (const a of attachments) {
-        if (a.type !== 'image') { kept.push(a); continue; }
-        // Not yet ARRIVED is not the same as gone, and saying "file gone" for a transfer still in
-        // flight sends the next person looking for a deletion that never happened.
-        if (a.pending) { logger.log(`[LLM] skipping an attachment still arriving: ${a.fileName ?? a.id}`); continue; }
-        const path = (a.uri || '').replace(/^file:\/\//, '');
-        const exists = path.length > 0 && await RNFS.exists(path).catch(() => false);
-        if (exists) kept.push(a);
-        else logger.warn(`[LLM] dropping missing image attachment (file gone): ${a.uri}`);
-      }
-      out.push(kept.length === attachments.length ? m : { ...m, attachments: kept });
-    }
-    return out;
-  }
   /**
    * Whether this turn should run in VISION mode: at least one message carries an
    * (already-existence-validated by {@link dropMissingImageAttachments}) image
@@ -474,7 +454,7 @@ class LLMService {
    * A guard a caller has to remember is a guard the next caller forgets, so it lives here now.
    */
   private async convertToOAIMessages(messages: Message[]): Promise<RNLlamaOAICompatibleMessage[]> {
-    const usable = await this.dropMissingImageAttachments(messages);
+    const usable = await dropMissingImageAttachments(messages);
     return buildOAIMessages(usable, this.multimodalSupport?.audio ?? false);
   }
   async getModelInfo() { return this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null; }

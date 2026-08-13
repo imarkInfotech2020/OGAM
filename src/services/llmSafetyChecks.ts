@@ -3,7 +3,6 @@ import RNFS from 'react-native-fs';
 import { statFile } from '../utils/fileStat';
 import logger from '../utils/logger';
 import { OverridableMemoryError } from '../utils/modelLoadErrors';
-import { sizeToBytes } from '../utils/fileSize';
 
 /**
  * GGUF magic number — first 4 bytes of every valid GGUF file.

@@ -1,4 +1,3 @@
-import RNFS from 'react-native-fs';
 import { statFile } from '../../utils/fileStat';
 import {
   ogamModelTransferBlocker,
@@ -10,7 +9,6 @@ import {
   determineCredibility,
   persistDownloadedModel,
 } from './storage';
-import { sizeToBytes } from '../../utils/fileSize';
 
 export async function registerTransferredModelFile(
   manifest: TransferredModelManifest,

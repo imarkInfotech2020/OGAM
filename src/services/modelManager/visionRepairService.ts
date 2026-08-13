@@ -2,7 +2,6 @@ import RNFS from 'react-native-fs';
 import { statFile } from '../../utils/fileStat';
 import logger from '../../utils/logger';
 import { DownloadedModel, ModelFile } from '../../types';
-import { sizeToBytes } from '../../utils/fileSize';
 import { commitModelsList } from './storage';
 import { isMMProjFile } from './scan';
 import { mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';

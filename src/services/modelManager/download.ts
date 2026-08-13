@@ -139,7 +139,6 @@ export {
   getOrphanedImageDirs,
   syncCompletedBackgroundDownloads,
 } from './downloadHelpers';
-import { sizeToBytes } from '../../utils/fileSize';
 ;
 
 export interface PerformBackgroundDownloadOpts {

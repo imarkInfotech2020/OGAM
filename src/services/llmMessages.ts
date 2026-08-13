@@ -1,5 +1,6 @@
 import { RNLlamaOAICompatibleMessage, RNLlamaMessagePart } from 'llama.rn';
 import { Message, MediaAttachment } from '../types';
+import { modelImageAttachments } from './llmImageInput';
 
 /**
  * PRODUCT RULE: every voice note is transcribed (whisper) and ONLY its transcript is sent to the
@@ -13,29 +14,6 @@ import { Message, MediaAttachment } from '../types';
  * (including a not-yet-transcribed note — which must not reach the model as raw audio either). */
 function modelAudioAttachments(_attachments: MediaAttachment[] | undefined): MediaAttachment[] {
   return [];
-}
-
-/**
- * The image attachments the MODEL may see.
- *
- * An attachment can exist on a message before its bytes do: a peer ANNOUNCES a file, the row is drawn
- * with a loader, and its `uri` is empty until the transfer lands. Handing that to the runtime is a
- * media path pointing at nothing, and llama.rn refuses the whole turn with "File does not exist or
- * cannot be opened" - so one unfinished transfer broke every generation in the conversation.
- *
- * Asked in one place for the same reason `modelAudioAttachments` is: five call sites each filtered
- * `type === 'image'` by hand, and a rule about what the model may see has to hold at all five or it
- * holds nowhere. An empty `uri` is refused too, so a row that lost its file cannot reach the runtime
- * either.
- */
-export function isModelVisibleImage(attachment: MediaAttachment): boolean {
-  return (
-    attachment.type === 'image' && !attachment.pending && !!attachment.uri
-  );
-}
-
-export function modelImageAttachments(attachments: MediaAttachment[] | undefined): MediaAttachment[] {
-  return (attachments ?? []).filter(isModelVisibleImage);
 }
 
 export function formatLlamaMessages(messages: Message[], supportsVision: boolean, supportsAudio = false): string {

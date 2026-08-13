@@ -3,10 +3,6 @@ import { statFile } from '../../utils/fileStat';
 
 type CopyProgressOpts = { knownTotalBytes: number | null; onProgress?: (fraction: number) => void };
 
-function parseSizeInt(size: string | number): number {
-  return typeof size === 'string' ? Number.parseInt(size, 10) : size;
-}
-
 export async function copyFileWithProgress(
   source: string,
   dest: string,
