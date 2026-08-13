@@ -402,6 +402,9 @@ submitted twice.
   passes. Full Mobile TypeScript remains blocked by the already-recorded stale Phase 2 policy tests.
 - Windows `.97` now matches the Mac by MD5 for both the rebuilt Shared Sync bundle and the changed
   Desktop Chat renderer. The mirror daemon is running; its last error lines are old `.28` records.
+- Published Shared `ea2d8e8`, Desktop `8e05797`, and Mobile `7e012023` to the existing draft PR
+  branches. Publication used `--no-verify` under the owner's standing instruction; focused gates are
+  recorded above and the full Mobile gate remains open.
 
 ## Current status
 
