@@ -405,6 +405,12 @@ submitted twice.
 - Published Shared `ea2d8e8`, Desktop `8e05797`, and Mobile `7e012023` to the existing draft PR
   branches. Publication used `--no-verify` under the owner's standing instruction; focused gates are
   recorded above and the full Mobile gate remains open.
+- Android device logs confirmed that Eject All unloaded three resident models and released about
+  2.1 GB. The missing answer was a separate context-budget defect: an 8K-context llama model received
+  `n_predict: 8192`, which left no prompt space and caused native `Not enough context space` before
+  inference. Mobile now derives the effective output cap from the loaded context through one shared
+  budget policy. Conversation compaction reads the same prompt-budget constant. Changed source lint
+  passes. Physical Android verification is pending.
 
 ## Current status
 

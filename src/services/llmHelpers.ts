@@ -11,6 +11,12 @@ import { ensureNativeLogCapture, resetNativeLogCapture, recentNativeLog } from '
 import { HTP_ENABLED } from '../config/featureFlags';
 
 const RESPONSE_RESERVE = 512;
+/**
+ * One context-budget policy for llama generation and conversation compaction.
+ * The remaining 5% covers chat-template, tool-schema, and multimodal overhead.
+ */
+export const CONTEXT_PROMPT_BUDGET_RATIO = 0.55;
+const CONTEXT_OUTPUT_BUDGET_RATIO = 0.40;
 const DEFAULT_THREADS = 4; // targets performance cores only; over-threading onto efficiency cores (A520) hurts
 const DEFAULT_BATCH = 512;
 const DEFAULT_GPU_LAYERS = Platform.OS === 'ios' ? 99 : 0;
@@ -413,9 +419,15 @@ export { validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeCont
 const STOP_TOKENS = ['</s>', '<|end|>', '<|eot_id|>'];
 export function buildCompletionParams(settings: {
   maxTokens?: number; temperature?: number; topP?: number; repeatPenalty?: number;
-}, options?: { disableCtxShift?: boolean }): Record<string, any> {
+}, options?: { disableCtxShift?: boolean; contextLength?: number }): Record<string, any> {
+  const requestedMaxTokens = Math.max(1, Math.floor(settings.maxTokens || RESPONSE_RESERVE));
+  const contextOutputLimit = options?.contextLength
+    ? Math.max(1, Math.floor(options.contextLength * CONTEXT_OUTPUT_BUDGET_RATIO))
+    : requestedMaxTokens;
   return {
-    n_predict: settings.maxTokens || RESPONSE_RESERVE,
+    // A requested output equal to the full context leaves zero prompt space and
+    // llama.cpp rejects the turn before inference with "Not enough context space".
+    n_predict: Math.min(requestedMaxTokens, contextOutputLimit),
     temperature: settings.temperature ?? 0.7,
     top_k: 40,
     top_p: settings.topP ?? 0.95,
