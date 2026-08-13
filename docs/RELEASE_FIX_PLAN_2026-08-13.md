@@ -60,6 +60,7 @@ An item is complete only when all three states are true.
 | Pending chat attachments | Desktop shared-file service |
 | Chat edit and regeneration | Desktop conversation service |
 | Clipboard consent and copy classification | Native clipboard service |
+| Live reply phase and wire shape | `@offgrid/sync` chat-stream contract |
 | Busy-state visuals | Shared design-system loader primitive |
 
 ## Sequential work plan
@@ -102,15 +103,27 @@ Decision: Option A. Production must not call `RNFS.stat`.
 Exit condition: zero executable production `RNFS.stat` calls, all Mobile suites pass, native builds
 pass, and both physical-device journeys pass.
 
-### Phase 2 - Make receive policy one contract
+### Phase 2 - Make mesh sharing policy one contract
 
-- [x] Define one canonical category for each record kind.
-- [x] Keep protocol kind IDs canonical for ambient categories; do not create a second policy ID.
-- [x] Generate UI rows and admission decisions from the same catalog.
-- [x] Remove duplicate Generated media and Message attachments rows.
-- [x] Test stored settings, rendered rows, and actual admission.
+- [x] Define one canonical send and receive mode for each workspace category.
+- [x] Make Chats, Projects, and Model settings send without optional controls.
+- [x] Make Generated media and Message attachments send without optional controls.
+- [x] Make Chats, Projects, Model settings, Generated media, and Message attachments required mesh data.
+- [x] Generate configurable UI rows and admission decisions from the same catalog.
+- [x] Remove the five required mesh categories from Receiving settings on Mobile and Desktop.
+- [x] Migrate the old receive master to optional data and discard stored refusals for required data.
+- [x] Merge Mobile automatic file rules into Sending and remove the Ambient sharing section.
+- [x] Remove the Ambient sharing heading from Desktop and keep one Sending surface.
+- [x] Store repeated Sending and Receiving copy in the shared package.
+- [x] Use one Mobile drop-down component for Sending destinations and Receiving sources.
+- [x] Use drop-down scope selection for both Desktop Sending and Receiving.
+- [x] Move detailed Mobile Sending and Receiving rules into bottom sheets.
+- [x] Use one reusable policy matrix for Off/Ask/Auto and Refuse/Accept decisions.
+- [x] Verify the final settings hierarchy and controls on Mobile and Desktop.
+- [ ] Verify always-sync behavior for generated media and message attachments across devices.
 
-Exit condition: one switch controls one content type, and Off always blocks it.
+Exit condition: required mesh data has no switch and always moves; every remaining switch controls
+one optional content type; both hosts use only Sending and Receiving language.
 
 ### Phase 3 - Make transfer history authoritative
 
@@ -192,6 +205,15 @@ Exit condition: repair preserves the transferred model's exact provenance.
 
 ### Phase 10 - Unify loading states
 
+- [x] Define one ephemeral live-turn contract: Waiting, Thinking, Answering, and Generating image.
+- [x] Make Desktop text, reasoning, direct image, and tool-deferred image paths publish that contract.
+- [x] Make Mobile text, reasoning, and image-generation services publish that contract.
+- [x] Render the same remote phases on Desktop and Mobile without device-attribution banners.
+- [x] Use one Desktop Thinking block for local, saved, and remote reasoning.
+- [ ] Verify Desktop-to-Desktop, Desktop-to-Mobile, Mobile-to-Desktop, and Mobile-to-Mobile.
+- [x] Keep one Desktop remote-reply placeholder alive from tool streaming through deferred image
+  generation, and replace it only when the durable image message arrives.
+- [x] Remove the separate `Off Grid AI - answering on <device>` label from Desktop remote replies.
 - [ ] Keep Mobile `LoadingDots` as the one Mobile implementation.
 - [ ] Add a production-ready web `LoadingDots` primitive to the component library.
 - [ ] Include tokens, ARIA, and reduced-motion behavior.
@@ -272,7 +294,112 @@ submitted twice.
   upgrade.
 - The full `@offgrid/sync` suite passes: 468 tests. Its build and TypeScript gate pass.
 - The rendered Mobile Receiving section passes 11 tests and shows one switch for each category.
-- Physical-device verification is still required before Phase 2 is fully verified.
+- Manual iPhone verification confirms that the Receiving section shows exactly one Generated media
+  switch and one Message attachments switch.
+- Manual Desktop-to-iPhone verification confirms the default Generated media path end to end: the
+  Desktop loading state appeared, generation completed, sync transferred the image, and Mobile
+  rendered the image in the correct chat.
+- Manual Desktop-to-iPhone verification also confirms policy independence: with Files Off and
+  Generated media On on iOS, the generated image still transferred and rendered in the correct
+  chat.
+- Windows showed the image loading component and then replaced it with the generated image. Treat
+  this as supporting UI evidence only because the installed Windows build version was not confirmed.
+- Product decision changed after that verification: Chats, Projects, Model settings, Generated media,
+  and Message attachments are required mesh data. Shared now gives every category one `always` or
+  `configurable` receive mode. The same field drives admission, normalization, and both host
+  projections.
+- Shared builds with the new contract. A direct production-contract probe shows that the four
+  required categories still arrive with optional receiving Off, while direct Files are refused.
+- An iPhone screenshot confirms that Chats, Projects, Generated media, and Message attachments are
+  absent from Receiving. Model settings was removed after the next review. The remaining rows come
+  from the shared configurable projection.
+- Shortened the Receiving hint to one sentence and added token-based spacing above the scope
+  description after device review.
+- Product decision also changed Sending: Chats, Projects, and Model settings now send as required
+  mesh state. Shared send modes enforce this even if an older stored preference disabled a row.
+- Generated media and Message attachments are also required send data. They are absent from the
+  Automatic sharing matrix, ignore old stored Off/Ask rules, and queue while a peer is offline.
+- A direct shared-package probe confirms that the configurable projection now contains only
+  Screenshots and Downloads, while Generated media queues even with optional sending and offline
+  queueing turned off.
+- Mobile now has only Sending and Receiving accordions. Automatic file rules and direct file sharing
+  are inside Sending. Desktop uses the same model and no longer shows an Ambient sharing heading.
+- Sending and Receiving explanations now come from one shared copy object used by both hosts.
+- Replaced the device chip rows with one selected-device drop-down. Mobile Sending and Receiving use
+  the same reusable control. Desktop Receiving now matches its existing Sending destination select
+  and supports per-device category rules through the shared policy.
+- Replaced the long Mobile rule lists with progressive disclosure. The main screen now shows compact
+  Automatic sharing and Receiving rules summaries. Each Configure action opens a bottom sheet using
+  the same policy-matrix primitive, with Off/Ask/Auto for sending and Refuse/Accept for receiving.
+- Added token-based space below the Automatic sharing sheet header after physical iPhone review.
+- Corrected the Desktop hierarchy after screenshot review: Sending and Receiving are now separate,
+  equal top-level panels. Receiving is no longer nested inside the Sending surface.
+- Fixed the receive-master migration precedence. A stored legacy `enabled: false` value can no longer
+  override a new `optionalEnabled: true` selection. The same normalization rule handles global and
+  per-device receive masters.
+- Removed Model settings from Receiving. Its shared catalog entry is now required in both directions,
+  so admission and both settings surfaces use the same rule.
+- The shared build passes. A direct production-package probe confirms that legacy global and
+  per-device receive masters can be enabled and that the configurable receive catalog contains only
+  Copied text, Screenshots, Downloads, Files, and Models.
+- Manual review confirms that the final Mobile and Desktop settings hierarchy and controls are
+  correct. Policy behavior remains a separate device gate.
+- Repaired the Windows development mirror address from `192.168.1.28` to `192.168.1.97` and restarted
+  its LaunchAgent. A download-based full comparison found zero differences across 1,202 mirrored
+  Desktop files and 467 mirrored Shared files. The Shared Sync production bundle also matches by MD5.
+- Manual Mac image generation produced a complete image, and Windows received the final image. The
+  Windows pending-image loader did not appear. This is now the next UI defect after runtime-message
+  filtering.
+- A synced Mobile runtime notice was rewritten without its `notice` context and rendered on the Mac
+  as a normal assistant reply with Speak, Copy, and Regenerate actions. Shared now owns one
+  `isRuntimeOnlyMessage` rule for current marked notices and legacy `Model loaded` or `Model unloaded`
+  rows. The shared receive projection and both host outbound adapters use that rule, so runtime state
+  neither enters the mesh nor renders from old received rows.
+- The shared build passes. A direct production-package check drops both current and legacy runtime
+  notices while preserving an ordinary assistant sentence that contains the words `model loaded`.
+- Shared builds with the final send and receive contract. Focused lint and diff checks pass. Host
+  screenshots and final physical-device behavior remain to be verified.
+- Physical-device verification of the final copy, spacing, and stored-policy migration is still
+  required.
+- The separate Desktop chat defect remains open: with Tools or Connectors enabled, an explicit
+  `draw` request can return false success text without calling the image-generation tool.
+- Fixed the Windows remote-image loading gap. Desktop now treats text-tool execution and deferred
+  image generation as two phases of one live turn, under one message ID. Native image progress keeps
+  the same preview alive; success, failure, or cancellation closes it through the image-job owner.
+- Removed the Desktop-only `Off Grid AI - answering on <device>` banner. Normal replies now stream as
+  the standard assistant bubble, and the image phase uses the shared Desktop three-dot chat loader.
+- Added a replayable live-stream snapshot for a Chat view that mounts after generation starts.
+- Shared live-stream integration tests pass (24 tests), Desktop lifecycle tests pass (11 tests),
+  Desktop node and web TypeScript checks pass, and the production build passes. The Windows mirror
+  matches the Mac by MD5 for the Shared bundle and all changed loader-path files. Physical Windows
+  replacement behavior is ready for manual verification.
+- Replaced the image-only live activity flag with one shared four-phase live-turn contract. The
+  transfer queue remains the durable file-transfer owner and does not carry ephemeral chat state.
+- Desktop direct image mode now starts a live turn even when no text stream came first. Desktop
+  reasoning uses one collapsible Thinking component for local and received replies.
+- Mobile Sync now observes the image-generation service as well as the chat store. It sends the same
+  stable message ID in the live preview and the durable image message, and it closes the preview
+  before the durable mutation leaves the phone.
+- Mobile received previews now use the normal chat renderer for Waiting, Thinking, Answering, and
+  Generating image. Remote rows are marked as streaming, so actions stay hidden until the durable
+  message arrives.
+- Current gate: Shared Sync build and 24 live-stream tests pass. Desktop lifecycle tests, node and web
+  type checks, and production build pass. Mobile lint has zero errors in the changed source. Mobile
+  TypeScript is blocked only by stale Receiving-policy tests from Phase 2; per the Mobile rule, those
+  tests wait until physical verification is complete and the owner asks for test work.
+- Windows `.97` matches the Mac by MD5 for the rebuilt Shared Sync bundle, Desktop live-stream owner,
+  and Desktop remote-preview renderer. The mirror error log still contains old `.28` failures, but
+  direct `.97` hashes prove the files used for this test are current.
+- Physical iPhone vision verification passes. A phone image request reached the model and rendered
+  the complete result correctly in Chat.
+- Found two remaining Mobile-to-Desktop image defects during that run. Desktop rendered a received
+  image attachment as a file chip, and Mobile prompt enhancement included a local model-load notice
+  in model context. Desktop now routes received image attachments through its existing image preview
+  and lightbox. Mobile now filters enhancement context and final output through the shared
+  `isRuntimeOnlyMessage` contract.
+- Focused evidence is green: the Shared Sync build and runtime-notice contract pass; the rendered
+  Desktop image journey passes 14 tests; Desktop web TypeScript passes; changed Mobile source lint
+  passes. Full Mobile TypeScript remains blocked by the already-recorded stale Phase 2 policy tests.
 
 ## Current status
 
@@ -280,7 +407,7 @@ submitted twice.
 | --- | --- | --- | --- | --- |
 | 0. Baseline | Partial | Partial | No | In progress |
 | 1. Filesystem boundary | Partial | No | No | In progress |
-| 2. Receive policy | Yes | Yes | Partial | Device verification |
+| 2. Mesh sharing policy | Yes | Yes | Partial | Device verification |
 | 3. Transfer history | No | No | No | Pending |
 | 4. Shared contracts | No | No | No | Pending |
 | 5. Desktop discovery | No | No | No | Pending |
@@ -288,6 +415,6 @@ submitted twice.
 | 7. Thinking capability | No | No | No | Pending |
 | 8. Android clipboard | No | No | No | Pending |
 | 9. Vision repair | No | No | No | Pending |
-| 10. Loading states | No | No | No | Pending |
+| 10. Loading states | Yes | Yes | Partial | Four-path device verification |
 | 11. Full verification | No | No | No | Pending |
 | 12. PR train | No | No | No | Pending |
