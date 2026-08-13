@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { isRuntimeOnlyMessage } from '@offgrid/sync';
 import { useChatStore } from '../stores';
 import { GeneratedImage, GenerationMeta, Message } from '../types';
 import { parseModelOutput } from '../utils/messageContent';
@@ -59,6 +60,14 @@ export function getConversationContext(conversationId: string): Message[] {
  */
 function readableText(message: Message): string {
   if (message.role !== 'assistant') return message.content.slice(0, 500);
+  // Runtime notices are device state, not conversation. Use the same classifier that protects the
+  // sync log, so prompt enhancement cannot teach the model to imitate "Model loaded: ..." as its
+  // answer.
+  if (isRuntimeOnlyMessage({
+    role: message.role,
+    content: message.content,
+    notice: message.isSystemInfo,
+  })) return '';
   // `resolution` is written by the image generator alone: this is the caption under a picture.
   if (message.generationMeta?.resolution) return '';
   const { answer, reasoning, reasoningLabel } = parseModelOutput(message.content, message.reasoningContent);
@@ -67,7 +76,8 @@ function readableText(message: Message): string {
 }
 
 export function cleanEnhancedPrompt(raw: string): string {
-  return raw.trim().replace(/(^["'])|(["']$)/g, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const clean = raw.trim().replace(/(^["'])|(["']$)/g, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  return isRuntimeOnlyMessage({ role: 'assistant', content: clean }) ? '' : clean;
 }
 
 /** THE one writer of the "Enhanced prompt" card's message content — partial (streaming) and final
