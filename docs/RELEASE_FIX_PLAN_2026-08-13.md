@@ -134,6 +134,7 @@ pass, and both physical-device journeys pass.
 - [x] Use the same active-control rule for normal delivery and repair on Desktop and Mobile.
 - [x] Clear stale nonterminal receive offers from the connected iPhone and Android device.
 - [x] Join identical concurrent knowledge-document offers behind one receiver-side writer.
+- [x] Accept reconnect offers for an existing matching knowledge document without sending its bytes again.
 - [ ] Verify that enabling Screenshots and Downloads sends only files created after enablement.
 - [ ] Verify all eight Download types can be selected on Desktop and Mobile.
 - [ ] Move Copied text into the Automatic sharing matrix on Mobile and Desktop.
@@ -169,11 +170,16 @@ Focused evidence, 2026-08-13:
   Shared typecheck, build, and 12 focused contract tests pass. Desktop node TypeScript and 47
   knowledge-document tests pass. The Mobile knowledge-document integration and refusal suites pass:
   5 tests. Mobile TypeScript remains blocked only by the existing Receiving test-fixture drift.
+- Reconnect backfill now compares an existing knowledge document at the receiver and resumes at the
+  end when size and checksum match. The Mobile integration test proves the repeated offer performs
+  zero source reads and does not re-index the document. Project transfer progress also keeps its
+  hidden category before, during, and after live progress. Shared focused tests pass: 11. Desktop
+  knowledge-document tests pass: 48. Mobile knowledge-document tests pass: 5.
 
 ### Phase 3 - Make transfer history authoritative
 
 - [ ] Preserve transfer `kind` during all updates.
-- [ ] Keep hidden project transfers hidden when live progress exists.
+- [x] Keep hidden project transfers hidden when live progress exists.
 - [ ] Persist `kind` in Desktop SQLite.
 - [ ] Derive Retry, Cancel, and Dismiss from executable service commands.
 - [ ] Make restored Mobile Cancel update durable history without a live manager.

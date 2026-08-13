@@ -335,6 +335,25 @@ describe('Pro mobile knowledge document sync journey', () => {
         }),
       ]);
 
+      let repeatedReads = 0;
+      const repeatedChecksum = new IncrementalChecksum();
+      repeatedChecksum.update(remoteBytes);
+      await remoteTransfers.sendFile(mobile.id, {
+        fileName: remoteDescriptor.name,
+        fileSize: remoteBytes.length,
+        mimeType: KNOWLEDGE_DOCUMENT_MIME,
+        metadata: createKnowledgeDocumentTransferMetadata(remoteDescriptor),
+        checksum: async () => repeatedChecksum.digest(),
+        read: async (offset: number, length: number) => {
+          repeatedReads += 1;
+          return new Uint8Array(remoteBytes.subarray(offset, offset + length));
+        },
+      });
+      // Reconnect backfill may offer a document again. The receiver proves it already has the same
+      // checksum and resumes at the end, so no payload crosses the mesh and no document is re-indexed.
+      expect(repeatedReads).toBe(0);
+      expect(await ragService.getAllDocumentsForSync()).toHaveLength(1);
+
       view = renderApp();
       rtl.fireEvent.press(view.getByTestId('projects-tab'));
       await rtl.waitFor(() => {
