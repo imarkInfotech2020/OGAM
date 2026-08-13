@@ -173,7 +173,8 @@ Focused evidence, 2026-08-13:
 - Reconnect backfill now compares an existing knowledge document at the receiver and resumes at the
   end when size and checksum match. The Mobile integration test proves the repeated offer performs
   zero source reads and does not re-index the document. Project transfer progress also keeps its
-  hidden category before, during, and after live progress. Shared focused tests pass: 11. Desktop
+  hidden category before, during, and after live progress, including legacy rows without a stored
+  category. Shared focused tests pass: 12. Desktop
   knowledge-document tests pass: 48. Mobile knowledge-document tests pass: 5.
 
 ### Phase 3 - Make transfer history authoritative
