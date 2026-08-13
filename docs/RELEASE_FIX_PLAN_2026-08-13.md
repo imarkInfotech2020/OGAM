@@ -269,7 +269,7 @@ Focused evidence, 2026-08-13:
 - [ ] Persist `kind` in Desktop SQLite.
 - [ ] Derive Retry, Cancel, and Dismiss from executable service commands.
 - [ ] Make restored Mobile Cancel update durable history without a live manager.
-- [ ] Render Mobile Activity and Files with one virtualized list adapter.
+- [x] Render Mobile Notifications, Activity, and Files with one virtualized list adapter.
 - [ ] Use the shared List mode as the initial and reset view on Mobile and Desktop.
 - [ ] Remove Retry when its source is not durably available.
 - [x] Persist every state transition without writing durable history on each byte update.
@@ -283,9 +283,10 @@ Current gate, 2026-08-13:
 - Code and wiring are present for durable Mobile Cancel. A live transfer still cancels through the
   manager; a restored row falls back to `CompletedTransferHistory.cancel`. Physical iOS and Android
   verification is pending.
-- Mobile Activity and Files use one `FlatList` adapter with bounded initial render, batch size, and
-  window size. The focused Activity component suite passes: 8 tests. Physical large-list
-  verification is pending.
+- Mobile Notifications, Activity, and Files use one `FlatList` adapter with bounded initial render,
+  batch size, and window size. Notifications no longer mounts every card in a `ScrollView`.
+  Activity and Files now index completed deliveries once instead of scanning the complete delivery
+  set for every file. Live device review reports that all three screens open much faster.
 - Mobile Activity uses the existing small-button action row with the shared 8-point gap token, so
   adjacent Open, Retry, Cancel, and Dismiss actions do not touch. Physical iOS and Android review is
   pending.
@@ -401,6 +402,21 @@ submitted twice.
 - [ ] Merge in dependency order with merge commits.
 
 ## Progress log
+
+### 2026-08-13 - Mobile Sync list performance
+
+- Code: the Notifications feed now projects one typed heterogeneous row list and renders it through
+  the same `SyncVirtualizedList` adapter used by Activity and Files.
+- Code: the Mobile file projection indexes completed deliveries by `syncId` in one pass. Activity
+  and Files no longer do file-count times delivery-count work before the list appears.
+- Wired: Notifications uses one All, Approvals, File transfers, or Recent drop-down. Clear recent is
+  one accessible icon on its right. The shared drop-down renders its options as an overlay, so it
+  does not move the list below it. Live transfer progress remains in Activity only.
+- Gate: Mobile TypeScript and focused Pro lint pass. The standalone Pro TypeScript command remains
+  blocked by three pre-existing `audio/services/ttsService.ts` errors against the installed
+  `llama.rn` types.
+- Verified: live device review confirms that Notifications, Activity, and Files are much faster.
+  Commits `48d6ca64`, `e84e6f72`, and `ac934761` record the projection, list, and overlay changes.
 
 ### 2026-08-13 - Plan created
 
