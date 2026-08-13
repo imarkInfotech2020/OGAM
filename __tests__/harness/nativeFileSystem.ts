@@ -6,6 +6,7 @@ export interface NativeFileSystemOptions {
   documentDirectoryPath?: string;
   cachesDirectoryPath?: string;
   externalDirectoryPath?: string;
+  externalStorageDirectoryPath?: string;
   mainBundlePath?: string;
 }
 
@@ -14,6 +15,7 @@ export interface NativeFileSystemBoundary {
   DocumentDirectoryPath: string;
   reset(): void;
   seedFile(path: string, sizeBytes: number): void;
+  seedTextFile(path: string, contents: string, reportedSize?: number | string): void;
   seedDir(path: string): void;
   setReportedFileSize(path: string, size: number | string): void;
   readAscii(path: string, length: number, position?: number): Promise<string>;
@@ -34,6 +36,7 @@ export interface NativeFileSystemModule {
   DocumentDirectoryPath: string;
   CachesDirectoryPath: string;
   ExternalDirectoryPath: string;
+  ExternalStorageDirectoryPath: string;
   MainBundlePath: string;
   exists: jest.Mock<Promise<boolean>, [string]>;
   mkdir: jest.Mock<Promise<void>, [string]>;
@@ -47,6 +50,7 @@ export interface NativeFileSystemModule {
   unlink: jest.Mock<Promise<void>, [string]>;
   moveFile: jest.Mock<Promise<void>, [string, string]>;
   copyFile: jest.Mock<Promise<void>, [string, string]>;
+  copyFileAssets: jest.Mock<Promise<void>, [string, string]>;
   hash: jest.Mock<Promise<string>, [string, string]>;
   getFSInfo: jest.Mock<Promise<{ freeSpace: number; totalSpace: number }>, []>;
   downloadFile: jest.Mock<
@@ -71,9 +75,12 @@ export function createNativeFileSystemBoundary(
   const DocumentDirectoryPath = options.documentDirectoryPath ?? '/docs';
   const CachesDirectoryPath = options.cachesDirectoryPath ?? '/caches';
   const ExternalDirectoryPath = options.externalDirectoryPath ?? '/external';
+  const ExternalStorageDirectoryPath =
+    options.externalStorageDirectoryPath ?? ExternalDirectoryPath;
   const MainBundlePath = options.mainBundlePath ?? '/bundle';
   let volume = Volume.fromJSON({});
   const reportedFileSizes = new Map<string, number | string>();
+  let restoreModuleMocks = (): void => {};
 
   function normalize(path: string): string {
     return path.replace(/^file:\/\//, '').replace(/\/+$/, '') || '/';
@@ -87,7 +94,16 @@ export function createNativeFileSystemBoundary(
   function reset(): void {
     volume = Volume.fromJSON({});
     reportedFileSizes.clear();
-    volume.mkdirSync(DocumentDirectoryPath, { recursive: true });
+    for (const directory of [
+      DocumentDirectoryPath,
+      CachesDirectoryPath,
+      ExternalDirectoryPath,
+      ExternalStorageDirectoryPath,
+      MainBundlePath,
+    ]) {
+      volume.mkdirSync(directory, { recursive: true });
+    }
+    restoreModuleMocks();
   }
 
   function stat(path: string): NativeFileSystemEntry {
@@ -107,6 +123,7 @@ export function createNativeFileSystemBoundary(
     DocumentDirectoryPath,
     CachesDirectoryPath,
     ExternalDirectoryPath,
+    ExternalStorageDirectoryPath,
     MainBundlePath,
     exists: jest.fn(async (path: string) => volume.existsSync(normalize(path))),
     mkdir: jest.fn(async (path: string) => {
@@ -226,6 +243,15 @@ export function createNativeFileSystemBoundary(
       if (reportedSize !== undefined)
         reportedFileSizes.set(target, reportedSize);
     }),
+    copyFileAssets: jest.fn(async (from: string, to: string) => {
+      const source = normalize(from);
+      const target = normalize(to);
+      volume.mkdirSync(parent(target), { recursive: true });
+      volume.copyFileSync(source, target);
+      const reportedSize = reportedFileSizes.get(source);
+      if (reportedSize !== undefined)
+        reportedFileSizes.set(target, reportedSize);
+    }),
     hash: jest.fn(async (path: string, algorithm: string) =>
       createHash(algorithm)
         .update(volume.readFileSync(normalize(path)))
@@ -242,6 +268,33 @@ export function createNativeFileSystemBoundary(
     stopDownload: jest.fn(),
   };
 
+  const baseMockImplementations = [
+    module.exists,
+    module.mkdir,
+    module.stat,
+    module.readDir,
+    module.writeFile,
+    module.write,
+    module.read,
+    module.readFile,
+    module.appendFile,
+    module.unlink,
+    module.moveFile,
+    module.copyFile,
+    module.copyFileAssets,
+    module.hash,
+    module.getFSInfo,
+    module.downloadFile,
+    module.stopDownload,
+  ].map(mock => [mock, mock.getMockImplementation()] as const);
+
+  restoreModuleMocks = () => {
+    for (const [mock, implementation] of baseMockImplementations) {
+      mock.mockReset();
+      if (implementation) mock.mockImplementation(implementation as never);
+    }
+  };
+
   const seedFile = (path: string, sizeBytes: number): void => {
     const normalized = normalize(path);
     volume.mkdirSync(parent(normalized), { recursive: true });
@@ -252,6 +305,19 @@ export function createNativeFileSystemBoundary(
       Buffer.from('GGUF').subarray(0, Math.min(sizeBytes, 4)),
     );
     reportedFileSizes.set(normalized, sizeBytes);
+  };
+
+  const seedTextFile = (
+    path: string,
+    contents: string,
+    reportedSize?: number | string,
+  ): void => {
+    const normalized = normalize(path);
+    volume.mkdirSync(parent(normalized), { recursive: true });
+    volume.writeFileSync(normalized, Buffer.from(contents, 'utf8'));
+    if (reportedSize !== undefined) {
+      reportedFileSizes.set(normalized, reportedSize);
+    }
   };
 
   const seedDir = (path: string): void => {
@@ -265,6 +331,7 @@ export function createNativeFileSystemBoundary(
     DocumentDirectoryPath,
     reset,
     seedFile,
+    seedTextFile,
     seedDir,
     setReportedFileSize: (path: string, size: number | string) => {
       reportedFileSizes.set(normalize(path), size);
@@ -274,3 +341,12 @@ export function createNativeFileSystemBoundary(
     exists: (path: string) => module.exists(path),
   };
 }
+
+/** The default Jest RNFS module. Individual suites seed this device boundary instead of replacing it. */
+export const defaultNativeFileSystemBoundary = createNativeFileSystemBoundary({
+  documentDirectoryPath: '/mock/documents',
+  cachesDirectoryPath: '/mock/caches',
+  externalDirectoryPath: '/mock/external',
+  externalStorageDirectoryPath: '/mock/external',
+  mainBundlePath: '/mock/bundle',
+});
