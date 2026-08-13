@@ -310,7 +310,11 @@ async function generateWithCompactionRetry(
       const recent = opts.messages.filter(m => m.role !== 'system').slice(-FALLBACK_RECENT_MESSAGE_COUNT);
       return [{ id: 'system', role: 'system', content: opts.prompt, timestamp: 0 } as Message, ...recent];
     });
-    await gen(compacted);
+    // Stop/Eject can arrive while the summary is running. Do not start a new
+    // completion after the owner has cancelled this turn.
+    if (generationService.wasAborted()) return true;
+    const retryOutcome = await gen(compacted);
+    turnInterrupted = !!(retryOutcome as { interrupted?: boolean } | void)?.interrupted;
   }
   return turnInterrupted;
 }

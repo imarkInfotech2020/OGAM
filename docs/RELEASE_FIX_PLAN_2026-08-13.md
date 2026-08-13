@@ -62,6 +62,7 @@ An item is complete only when all three states are true.
 | Clipboard consent and copy classification | Native clipboard service |
 | Live reply phase and wire shape | `@offgrid/sync` chat-stream contract |
 | Busy-state visuals | Shared design-system loader primitive |
+| User Eject All lifecycle | Mobile user-model-ejection coordinator |
 
 ## Sequential work plan
 
@@ -411,6 +412,12 @@ submitted twice.
   inference. Mobile now derives the effective output cap from the loaded context through one shared
   budget policy. Conversation compaction reads the same prompt-budget constant. Changed source lint
   passes. Physical Android verification is pending.
+- User Eject All now has one coordinator for Home and Chat. It cancels text generation, image
+  generation, and an in-progress compaction retry before it releases model memory. Stop now marks a
+  turn cancelled even between native attempts, and the compaction owner checks that state before it
+  retries. The text-residency check also uses the active engine contract, so LiteRT is no longer
+  omitted. Changed source lint has zero errors, and TypeScript has no new errors beyond the recorded
+  stale Phase 2 Receiving-policy tests. Physical Android verification is pending.
 
 ## Current status
 

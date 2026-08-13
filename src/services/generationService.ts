@@ -242,6 +242,9 @@ class GenerationService {
 
   /** Stop the current generation. Returns partial content if any was generated. */
   async stopGeneration(): Promise<string> {
+    // Set this even between native attempts. Conversation compaction runs after the
+    // failed completion has reset `isGenerating`; Stop/Eject must still prevent its retry.
+    this.abortRequested = true;
     if (!this.state.isGenerating) {
       // Stop generation on every engine through the registry — no engine enumeration leaked into the caller.
       await stopAllTextEngines();
@@ -257,9 +260,6 @@ class GenerationService {
       return '';
     }
 
-    // Set abort flag BEFORE stopping so the onComplete callback
-    // knows we're stopping and won't finalize/reset on its own.
-    this.abortRequested = true;
     this.forceFlushTokens();
 
     const { startTime } = this.state;
