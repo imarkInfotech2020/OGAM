@@ -4,10 +4,10 @@ import {
   Text,
   TouchableOpacity,
   Switch,
-  ActivityIndicator,
   ScrollView,
   Platform,
 } from 'react-native';
+import { LoadingDots } from '../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import {
   pick,
@@ -219,7 +219,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
 
       {indexingFile && (
         <View style={styles.kbIndexing}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <LoadingDots color={colors.primary} />
           <Text style={styles.kbIndexingText} numberOfLines={1}>
             Indexing {indexingFile}...
           </Text>

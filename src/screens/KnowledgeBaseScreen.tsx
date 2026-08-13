@@ -5,10 +5,10 @@ import {
   FlatList,
   TouchableOpacity,
   Switch,
-  ActivityIndicator,
   Alert,
   Platform,
 } from 'react-native';
+import { LoadingDots } from '../components/LoadingDots';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -190,7 +190,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
         </View>
         <TouchableOpacity onPress={handleAddDocument} style={styles.addButton} disabled={isPicking || !!indexingFile}>
           {indexingFile ? (
-            <ActivityIndicator size="small" color={colors.primary} />
+            <LoadingDots color={colors.primary} />
           ) : (
             <Icon name="plus" size={20} color={colors.primary} />
           )}
@@ -199,7 +199,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
 
       {indexingFile && (
         <View style={styles.indexingBanner}>
-          <ActivityIndicator size="small" color={colors.primary} />
+          <LoadingDots color={colors.primary} />
           <Text style={styles.indexingText}>Indexing {indexingFile}...</Text>
         </View>
       )}
@@ -226,7 +226,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <LoadingDots color={colors.primary} size={8} />
         </View>
       ) : kbDocs.length === 0 ? (
         <View style={styles.centered}>
