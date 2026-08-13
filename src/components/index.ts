@@ -17,6 +17,8 @@ export { ModelFailureCard } from './ModelFailureCard';
 export { ImageGenAdviceCard } from './ImageGenAdviceCard';
 export { MtpAdviceCard } from './MtpAdviceCard';
 export { ThinkingIndicator } from './ThinkingIndicator';
+export { LoadingDots } from './LoadingDots';
+export { VisionRepairAdviceCard } from './VisionRepairAdviceCard';
 ;
 ;
 ;

@@ -25,6 +25,49 @@ class HuggingFaceService {
     return results.map(this.transformModelResult);
   }
 
+  /**
+   * Repos that publish a file of this name, each reduced to its file list with exact byte sizes.
+   *
+   * This is a CANDIDATE generator, not an identification: several repos publish the same file
+   * name (`SmolVLM-500M-Instruct-GGUF` matches three, one an `i1` requantisation). The caller
+   * decides which is ours by comparing sizes - see resolveVisionRepairSource.
+   */
+  async findReposPublishing(
+    fileName: string,
+    limit = 10,
+  ): Promise<{ repoId: string; files: { name: string; sizeBytes?: number }[] }[]> {
+    // The repo is usually named after the model, so the file name minus its quant/extension is the
+    // best query we have. `.gguf` and the trailing quant tag never appear in a repo id.
+    const query = fileName.replace(/\.gguf$/i, '').replace(/[._-](Q\d+[_\w]*|f16|f32|i1)$/i, '');
+    const results = await this.searchModels(query, { limit });
+    const listings = await Promise.all(
+      results.map(async result => ({
+        repoId: result.id,
+        files: await this.listRepoFileSizes(result.id),
+      })),
+    );
+    return listings.filter(listing => listing.files.length > 0);
+  }
+
+  /** Every file in a repo with its exact size - the only field that identifies a build. */
+  private async listRepoFileSizes(
+    modelId: string,
+  ): Promise<{ name: string; sizeBytes?: number }[]> {
+    try {
+      const result = await this.fetchJson<{
+        siblings?: { rfilename: string; size?: number; lfs?: { size?: number } }[];
+      }>(`${this.apiUrl}/models/${modelId}?blobs=true`);
+      return (result.siblings ?? []).map(sibling => ({
+        name: sibling.rfilename,
+        sizeBytes: sibling.lfs?.size ?? sibling.size,
+      }));
+    } catch {
+      // An unreachable or private repo is simply not a candidate. HF answers an unknown repo with
+      // 401, so a throw here means "cannot confirm", never "this is the one".
+      return [];
+    }
+  }
+
   async getModelDetails(modelId: string): Promise<ModelInfo> {
     const result = await this.fetchJson<HFModelSearchResult>(`${this.apiUrl}/models/${modelId}`);
     return this.transformModelResult(result);
