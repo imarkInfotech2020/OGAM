@@ -12,6 +12,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
+// Imported directly, not through the barrel: a component that reaches its sibling via the index
+// resolves undefined at render time.
+import { LoadingDots } from '../../LoadingDots';
 import { MediaAttachment } from '../../../types';
 import { viewDocument } from '@react-native-documents/viewer';
 import logger from '../../../utils/logger';
@@ -90,7 +93,36 @@ export function MessageAttachments({
   return (
     <View testID="message-attachments" style={styles.attachmentsContainer}>
       {attachments.map((attachment, index) =>
-        attachment.type === 'audio' ? (
+        // Announced, not yet here. Checked FIRST, before any branch that reads `uri`: a pending
+        // attachment has no local file, and every branch below assumes one. The name and size come
+        // from the announcement, so the row reads as the file it will become.
+        attachment.pending ? (
+          <View
+            key={attachment.id}
+            testID={`attachment-pending-${index}`}
+            style={[
+              styles.documentBadge,
+              isUser ? styles.documentBadgeUser : styles.documentBadgeAssistant,
+            ]}
+          >
+            <LoadingDots
+              size={5}
+              color={isUser ? colors.background : colors.textSecondary}
+              testID={`attachment-pending-dots-${index}`}
+            />
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.documentBadgeText,
+                isUser
+                  ? styles.documentBadgeTextUser
+                  : styles.documentBadgeTextAssistant,
+              ]}
+            >
+              {attachment.fileName || 'Arriving'}
+            </Text>
+          </View>
+        ) : attachment.type === 'audio' ? (
           <View
             key={attachment.id}
             testID={`audio-badge-${index}`}
