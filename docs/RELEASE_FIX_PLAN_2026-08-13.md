@@ -255,6 +255,12 @@ Focused evidence, 2026-08-13:
   Commits `5007235` and `ef82adc` are pushed. The five delivery rows reopened by the old build were
   restored to `sent` after a database backup and integrity check. The Windows Shared bundle and
   Desktop Pro service match the Mac by MD5. Physical restart verification is pending.
+- The first iOS restart exposed one remaining restored-row path: nonterminal history was projected
+  as live progress with the correct hidden `kind`, but Activity ignored that field and guessed from
+  `image/png`. The shared projector now uses the transfer's canonical kind before MIME fallback.
+  The exact no-separate-durable-row regression is covered for generated media and message
+  attachments. Shared Sync builds and 51 focused tests pass. Commit `31983fa` is pushed. Physical
+  iOS verification is pending.
 
 ### Phase 3 - Make transfer history authoritative
 
