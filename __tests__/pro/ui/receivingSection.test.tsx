@@ -103,6 +103,19 @@ describePro('the Receiving section', () => {
     ).toBeTruthy();
   });
 
+  maybe('shows one effective switch for generated media and message attachments', () => {
+    const view = render(
+      <ReceivingSection policy={policyWith()} devices={[]} {...handlers()} />,
+    );
+
+    expect(view.getAllByText('Generated media')).toHaveLength(1);
+    expect(view.getAllByText('Message attachments')).toHaveLength(1);
+    expect(view.getByTestId('receive-generated_media-toggle')).toBeTruthy();
+    expect(view.getByTestId('receive-message_attachment-toggle')).toBeTruthy();
+    expect(view.queryByTestId('receive-generated-media-toggle')).toBeNull();
+    expect(view.queryByTestId('receive-message-attachments-toggle')).toBeNull();
+  });
+
   maybe('starts scoped to every paired device', () => {
     const on = handlers();
     const view = render(

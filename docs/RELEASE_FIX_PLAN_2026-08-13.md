@@ -104,11 +104,11 @@ pass, and both physical-device journeys pass.
 
 ### Phase 2 - Make receive policy one contract
 
-- [ ] Define one canonical category for each record kind.
-- [ ] Treat old underscore IDs as input migration aliases only.
-- [ ] Generate UI rows and admission decisions from the same catalog.
-- [ ] Remove duplicate Generated media and Message attachments rows.
-- [ ] Test old settings, new settings, rendered rows, and actual admission.
+- [x] Define one canonical category for each record kind.
+- [x] Keep protocol kind IDs canonical for ambient categories; do not create a second policy ID.
+- [x] Generate UI rows and admission decisions from the same catalog.
+- [x] Remove duplicate Generated media and Message attachments rows.
+- [x] Test stored settings, rendered rows, and actual admission.
 
 Exit condition: one switch controls one content type, and Off always blocks it.
 
@@ -261,13 +261,26 @@ submitted twice.
 - Repaired the debug-log rotation suite. It now uses real stored bytes and parent directory entries;
   all 12 tests pass, including rotation after the 5 MB limit.
 
+### 2026-08-13 - One Receiving switch per content type
+
+- Removed the second Generated media and Message attachments definitions from the shared receive
+  policy. The ambient source catalog is now their only owner.
+- Proved the original failure before the fix: the policy projected two Generated media rows.
+- Proved the complete policy path after the fix: one row, one category ID, Off in the projection, and
+  refused incoming bytes.
+- Proved that stored `generated_media` and `message_attachment` refusals remain effective after an
+  upgrade.
+- The full `@offgrid/sync` suite passes: 468 tests. Its build and TypeScript gate pass.
+- The rendered Mobile Receiving section passes 11 tests and shows one switch for each category.
+- Physical-device verification is still required before Phase 2 is fully verified.
+
 ## Current status
 
 | Phase | Code | Wired | Verified | State |
 | --- | --- | --- | --- | --- |
 | 0. Baseline | Partial | Partial | No | In progress |
 | 1. Filesystem boundary | Partial | No | No | In progress |
-| 2. Receive policy | No | No | No | Pending |
+| 2. Receive policy | Yes | Yes | Partial | Device verification |
 | 3. Transfer history | No | No | No | Pending |
 | 4. Shared contracts | No | No | No | Pending |
 | 5. Desktop discovery | No | No | No | Pending |
