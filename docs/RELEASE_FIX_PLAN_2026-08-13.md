@@ -69,7 +69,7 @@ An item is complete only when all three states are true.
 - [x] Identify the five release repositories.
 - [x] Record the current release branch heads.
 - [x] Confirm that top-level `sync` and `website` are outside this release.
-- [ ] Make every release worktree clean, including the final Mobile Pro submodule pointer.
+- [x] Make every release worktree clean, including the final Mobile Pro submodule pointer.
 - [ ] Record the exact full-suite baseline after the filesystem test boundary is repaired.
 
 Baseline heads at plan creation:
@@ -234,6 +234,21 @@ submitted twice.
   names the old call.
 - Current Mobile worktree change is the `pro` submodule pointer.
 - Phase 1 remains in progress because the full test boundary migration and gates are not yet green.
+
+### 2026-08-13 - Draft PRs published
+
+- Published the exact local release branch heads as draft PRs so the complete deltas can be reviewed.
+- Skipped the pre-push hooks for this publication at the owner's explicit direction. The skipped or
+  failed gates remain open work. No PR is merge-ready.
+- Uploaded the Desktop branch's 88 referenced Git LFS objects before GitHub accepted the branch.
+
+| Repository | Draft PR |
+| --- | --- |
+| `shared` | [off-grid-ai/shared#3](https://github.com/off-grid-ai/shared/pull/3) |
+| `desktop/pro` | [off-grid-ai/desktop-pro#41](https://github.com/off-grid-ai/desktop-pro/pull/41) |
+| `desktop` | [off-grid-ai/OGAD#80](https://github.com/off-grid-ai/OGAD/pull/80) |
+| `mobile/pro` | [off-grid-ai/mobile-pro#50](https://github.com/off-grid-ai/mobile-pro/pull/50) |
+| `mobile` | [off-grid-ai/OGAM#628](https://github.com/off-grid-ai/OGAM/pull/628) |
 
 ## Current status
 
