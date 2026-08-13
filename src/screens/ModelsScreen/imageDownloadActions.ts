@@ -2,6 +2,7 @@
  *  useDownloadStore via the stable image:<id> modelKey (single source of truth). */
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
+import { statFile } from '../../utils/fileStat';
 import { unzip } from 'react-native-zip-archive';
 import { showAlert } from '../../components/CustomAlert';
 import { modelManager, hardwareService, backgroundDownloadService } from '../../services';
@@ -14,6 +15,7 @@ import { ImageModelDescriptor, ImageDownloadDeps } from './types';
 import { getQnnWarningMessage, showQnnWarningAlert } from './imageDownloadQnn';
 import { ensureImageExtractionComplete } from '../../utils/imageModelIntegrity';
 import logger from '../../utils/logger';
+import { sizeToBytes } from '../../utils/fileSize';
 
 // ImageDownloadDeps now lives in ./types (so imageDownloadQnn can import it without cycling back
 // here). Re-exported for existing importers.
@@ -164,8 +166,7 @@ async function downloadSequentialFiles(opts: {
 async function validateMultifileComplete(modelDir: string, files: MultifileDownloadSpec[]): Promise<void> {
   for (const file of files) {
     const filePath = `${modelDir}/${file.relativePath}`;
-    const stat = await RNFS.stat(filePath).catch(() => null);
-    const size = stat ? (typeof stat.size === 'string' ? Number.parseInt(stat.size, 10) : stat.size) : -1;
+    const size = (await statFile(filePath))?.size ?? -1;
     if (size <= 0) throw new Error(`Downloaded file missing or empty: ${file.relativePath} — tap retry`);
   }
 }

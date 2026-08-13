@@ -3,10 +3,10 @@ import {
   View,
   Text,
   ScrollView,
-  ActivityIndicator,
   Platform,
   Linking,
 } from 'react-native';
+import { LoadingDots } from '../components/LoadingDots';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Card, ModelCard } from '../components';
@@ -340,7 +340,7 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
   if (isLoading) return (
     <SafeAreaView style={styles.container}>
       <View testID="model-download-loading" style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <LoadingDots color={colors.primary} size={8} />
         <Text style={styles.loadingText}>Analyzing your device...</Text>
       </View>
     </SafeAreaView>
