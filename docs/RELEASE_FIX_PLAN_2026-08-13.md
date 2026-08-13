@@ -48,21 +48,22 @@ An item is complete only when all three states are true.
 
 ## Canonical owners
 
-| Fact | Canonical owner |
-| --- | --- |
-| File existence and metadata | Mobile filesystem adapter |
-| Receive categories and legacy aliases | `@offgrid/sync` receive policy |
-| Transfer state, visibility, and actions | `@offgrid/sync` transfer service |
-| Persisted transfer order | Transfer-history contract |
-| Device actions | Shared device-capability projection |
-| Model origin | Validated transfer manifest |
-| Current network endpoint | Desktop discovery service |
-| Pending chat attachments | Desktop shared-file service |
-| Chat edit and regeneration | Desktop conversation service |
-| Clipboard consent and copy classification | Native clipboard service |
-| Live reply phase and wire shape | `@offgrid/sync` chat-stream contract |
-| Busy-state visuals | Shared design-system loader primitive |
-| User Eject All lifecycle | Mobile user-model-ejection coordinator |
+| Fact                                          | Canonical owner                        |
+| --------------------------------------------- | -------------------------------------- |
+| File existence and metadata                   | Mobile filesystem adapter              |
+| Receive categories and legacy aliases         | `@offgrid/sync` receive policy         |
+| Transfer state, visibility, and actions       | `@offgrid/sync` transfer service       |
+| Persisted transfer order                      | Transfer-history contract              |
+| Device actions                                | Shared device-capability projection    |
+| Model origin                                  | Validated transfer manifest            |
+| Current network endpoint                      | Desktop discovery service              |
+| Pending chat attachments                      | Desktop shared-file service            |
+| Chat edit and regeneration                    | Desktop conversation service           |
+| Clipboard consent and copy classification     | Native clipboard service               |
+| Live reply phase and wire shape               | `@offgrid/sync` chat-stream contract   |
+| Busy-state visuals                            | Shared design-system loader primitive  |
+| User Eject All lifecycle                      | Mobile user-model-ejection coordinator |
+| Shared-file backlog and active receive window | `@offgrid/sync` `SharedFileDelivery`   |
 
 ## Sequential work plan
 
@@ -76,13 +77,13 @@ An item is complete only when all three states are true.
 
 Baseline heads at plan creation:
 
-| Repository | Branch | Head |
-| --- | --- | --- |
-| `desktop` | `release/sync-feedback` | `79bb06ffd833` |
+| Repository    | Branch                  | Head           |
+| ------------- | ----------------------- | -------------- |
+| `desktop`     | `release/sync-feedback` | `79bb06ffd833` |
 | `desktop/pro` | `release/sync-feedback` | `bfca9bdf07d7` |
-| `mobile` | `release/sync-feedback` | `10e357f82849` |
-| `mobile/pro` | `release/sync-feedback` | `5a4769caa8d5` |
-| `shared` | `release/sync-feedback` | `966dd99ce0bd` |
+| `mobile`      | `release/sync-feedback` | `10e357f82849` |
+| `mobile/pro`  | `release/sync-feedback` | `5a4769caa8d5` |
+| `shared`      | `release/sync-feedback` | `966dd99ce0bd` |
 
 ### Phase 1 - Close the Mobile filesystem crash class
 
@@ -121,10 +122,46 @@ pass, and both physical-device journeys pass.
 - [x] Move detailed Mobile Sending and Receiving rules into bottom sheets.
 - [x] Use one reusable policy matrix for Off/Ask/Auto and Refuse/Accept decisions.
 - [x] Verify the final settings hierarchy and controls on Mobile and Desktop.
+- [x] Default Downloads to all eight supported automatic-sharing file types from one shared policy.
+- [x] Save Desktop file-type edits once on Done so rapid choices cannot overwrite each other.
+- [x] Persist one opt-in watermark per Desktop folder and baseline existing configured folders on upgrade.
+- [x] Keep folder arrival time separate from file modification time so copied downloads remain new.
+- [x] Coalesce Desktop sync invalidations at the main-process boundary during transfer bursts.
+- [x] Keep the durable shared-file backlog only on the sender.
+- [x] Publish shared-file controls only when the bounded delivery window admits the file.
+- [x] Prevent State Sync anti-entropy from announcing queued controls outside that window.
+- [x] Use the same active-control rule for normal delivery and repair on Desktop and Mobile.
+- [x] Clear stale nonterminal receive offers from the connected iPhone and Android device.
+- [ ] Verify that enabling Screenshots and Downloads sends only files created after enablement.
+- [ ] Verify all eight Download types can be selected on Desktop and Mobile.
+- [ ] Move Copied text into the Automatic sharing matrix on Mobile and Desktop.
 - [ ] Verify always-sync behavior for generated media and message attachments across devices.
 
 Exit condition: required mesh data has no switch and always moves; every remaining switch controls
 one optional content type; both hosts use only Sending and Receiving language.
+
+Focused evidence, 2026-08-13:
+
+- Shared ambient-directory build and all 31 source-contract tests pass, including the existing-grant
+  watermark migration.
+- Desktop ambient-folder and coalesced-invalidation suites pass: 22 tests.
+- Desktop main-process TypeScript passes.
+- The accidental local outgoing backlog was backed up, then cleared without changing pairings,
+  local files, completed history, or incoming transfers. The deliberate logo-PDF test remains queued.
+- The shared 20-file delivery-window test passes: only three controls publish, and the fourth
+  publishes only after one active transfer settles.
+- Desktop shared-file and State Bridge suites pass: 87 tests. Desktop node TypeScript passes.
+- Mobile shared-file unit tests, explicit-share tests, and the real ambient-share integration journey
+  pass: 20 tests. The ambient journey proves that a staged control is absent before approval and is
+  published when its transfer becomes active.
+- The connected iPhone backup is retained at
+  `/tmp/offgrid-ios-asyncstorage-backup-20260813.kNt0wF`. Cleanup removed 2,066 nonterminal receive
+  rows and 2,062 matching shared-file ops. It preserved 100 completed-history rows. A read-back from
+  the phone confirms zero nonterminal receive rows.
+- The connected Android backup is retained at
+  `/tmp/offgrid-android-RKStorage-backup-20260813.sqlite`. Cleanup removed 1,136 nonterminal receive
+  rows and 1,135 matching shared-file ops. It preserved 103 other history rows. A read-back from the
+  phone confirms zero nonterminal receive rows and a valid SQLite integrity check.
 
 ### Phase 3 - Make transfer history authoritative
 
@@ -213,7 +250,7 @@ Exit condition: repair preserves the transferred model's exact provenance.
 - [x] Use one Desktop Thinking block for local, saved, and remote reasoning.
 - [ ] Verify Desktop-to-Desktop, Desktop-to-Mobile, Mobile-to-Desktop, and Mobile-to-Mobile.
 - [x] Keep one Desktop remote-reply placeholder alive from tool streaming through deferred image
-  generation, and replace it only when the durable image message arrives.
+      generation, and replace it only when the durable image message arrives.
 - [x] Remove the separate `Off Grid AI - answering on <device>` label from Desktop remote replies.
 - [ ] Keep Mobile `LoadingDots` as the one Mobile implementation.
 - [ ] Add a production-ready web `LoadingDots` primitive to the component library.
@@ -258,6 +295,22 @@ submitted twice.
 - Current Mobile worktree change is the `pro` submodule pointer.
 - Phase 1 remains in progress because the full test boundary migration and gates are not yet green.
 
+### 2026-08-13 - Download file-type policy
+
+- Code: `@offgrid/sync` now owns the eight-type default for Desktop and Mobile.
+- Code: the previous six-type default resolves to the new eight-type default without changing a
+  user's custom subset.
+- Code: Desktop file-type choices now use a local draft and one save on Done. This removes the
+  concurrent last-write-wins failure seen with Presentations, Audio, and Video.
+- Wired: Desktop and Mobile read the same shared default. Their reset actions now mean all supported
+  types.
+- Gate: Shared build, Shared TypeScript, focused Shared policy tests, Desktop renderer TypeScript,
+  and focused Mobile/desktop lint passed with no errors.
+- Gate: Mobile full TypeScript remains blocked only by the previously recorded stale Receiving test
+  contracts. This change added no Mobile source error.
+- Verified: physical UI verification is pending. The new Desktop dialog is identifiable by the
+  `Select all` action; the old build says `Documents and images`.
+
 ### 2026-08-13 - Draft PRs published
 
 - Published the exact local release branch heads as draft PRs so the complete deltas can be reviewed.
@@ -265,13 +318,13 @@ submitted twice.
   failed gates remain open work. No PR is merge-ready.
 - Uploaded the Desktop branch's 88 referenced Git LFS objects before GitHub accepted the branch.
 
-| Repository | Draft PR |
-| --- | --- |
-| `shared` | [off-grid-ai/shared#3](https://github.com/off-grid-ai/shared/pull/3) |
+| Repository    | Draft PR                                                                         |
+| ------------- | -------------------------------------------------------------------------------- |
+| `shared`      | [off-grid-ai/shared#3](https://github.com/off-grid-ai/shared/pull/3)             |
 | `desktop/pro` | [off-grid-ai/desktop-pro#41](https://github.com/off-grid-ai/desktop-pro/pull/41) |
-| `desktop` | [off-grid-ai/OGAD#80](https://github.com/off-grid-ai/OGAD/pull/80) |
-| `mobile/pro` | [off-grid-ai/mobile-pro#50](https://github.com/off-grid-ai/mobile-pro/pull/50) |
-| `mobile` | [off-grid-ai/OGAM#628](https://github.com/off-grid-ai/OGAM/pull/628) |
+| `desktop`     | [off-grid-ai/OGAD#80](https://github.com/off-grid-ai/OGAD/pull/80)               |
+| `mobile/pro`  | [off-grid-ai/mobile-pro#50](https://github.com/off-grid-ai/mobile-pro/pull/50)   |
+| `mobile`      | [off-grid-ai/OGAM#628](https://github.com/off-grid-ai/OGAM/pull/628)             |
 
 ### 2026-08-13 - Mobile filesystem boundary, incremental verification
 
@@ -421,18 +474,18 @@ submitted twice.
 
 ## Current status
 
-| Phase | Code | Wired | Verified | State |
-| --- | --- | --- | --- | --- |
-| 0. Baseline | Partial | Partial | No | In progress |
-| 1. Filesystem boundary | Partial | No | No | In progress |
-| 2. Mesh sharing policy | Yes | Yes | Partial | Device verification |
-| 3. Transfer history | No | No | No | Pending |
-| 4. Shared contracts | No | No | No | Pending |
-| 5. Desktop discovery | No | No | No | Pending |
-| 6. Desktop chat | No | No | No | Pending |
-| 7. Thinking capability | No | No | No | Pending |
-| 8. Android clipboard | No | No | No | Pending |
-| 9. Vision repair | No | No | No | Pending |
-| 10. Loading states | Yes | Yes | Partial | Four-path device verification |
-| 11. Full verification | No | No | No | Pending |
-| 12. PR train | No | No | No | Pending |
+| Phase                  | Code    | Wired   | Verified | State                         |
+| ---------------------- | ------- | ------- | -------- | ----------------------------- |
+| 0. Baseline            | Partial | Partial | No       | In progress                   |
+| 1. Filesystem boundary | Partial | No      | No       | In progress                   |
+| 2. Mesh sharing policy | Yes     | Yes     | Partial  | Device verification           |
+| 3. Transfer history    | No      | No      | No       | Pending                       |
+| 4. Shared contracts    | No      | No      | No       | Pending                       |
+| 5. Desktop discovery   | No      | No      | No       | Pending                       |
+| 6. Desktop chat        | No      | No      | No       | Pending                       |
+| 7. Thinking capability | No      | No      | No       | Pending                       |
+| 8. Android clipboard   | No      | No      | No       | Pending                       |
+| 9. Vision repair       | No      | No      | No       | Pending                       |
+| 10. Loading states     | Yes     | Yes     | Partial  | Four-path device verification |
+| 11. Full verification  | No      | No      | No       | Pending                       |
+| 12. PR train           | No      | No      | No       | Pending                       |
