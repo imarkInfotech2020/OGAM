@@ -86,7 +86,11 @@ describe('the files this phone offers the rest of the mesh', () => {
   };
 
   /** A picture the user generated, on disk where the app put it. */
-  async function generatedImageOnDisk(id: string, bytes = 2048): Promise<void> {
+  async function generatedImageOnDisk(
+    id: string,
+    bytes = 2048,
+    conversationId?: string,
+  ): Promise<void> {
     const path = `/docs/generated/${id}.png`;
     await write(path, bytes);
     useAppStore.setState({
@@ -103,6 +107,7 @@ describe('the files this phone offers the rest of the mesh', () => {
           width: 512,
           height: 512,
           createdAt: '2026-08-04T09:00:00.000Z',
+          ...(conversationId ? { conversationId } : {}),
         },
       ],
     } as never);
@@ -255,6 +260,52 @@ describe('the files this phone offers the rest of the mesh', () => {
       // picture that has never gone anywhere belongs to the gallery, and showing it here would turn a
       // transfer list into a second copy of the photo library.
       expect(service.files()).toEqual([]);
+    });
+
+    it('waits for its durable message identity before it enters the mesh', async () => {
+      await generatedImageOnDisk(IMAGE_ID, 2048, CONVERSATION_ID);
+      await launch();
+
+      // The gallery store is written before the chat message at image completion. Publishing in this
+      // gap produces a gallery-only control that cannot put the received bytes back into the bubble.
+      expect(putIds()).toEqual([]);
+
+      useChatStore.setState({
+        conversations: [
+          {
+            id: CONVERSATION_ID,
+            title: 'A generated picture',
+            messages: [
+              {
+                id: 'local-generated',
+                uuid: MESSAGE_ID,
+                role: 'assistant',
+                content: 'Generated image for: "a lighthouse"',
+                timestamp: 1_700_000_000_000,
+                attachments: [
+                  {
+                    id: IMAGE_ID,
+                    type: 'image',
+                    uri: `file:///docs/generated/${IMAGE_ID}.png`,
+                  },
+                ],
+              },
+            ],
+            createdAt: 1_700_000_000_000,
+            updatedAt: 1_700_000_000_000,
+          },
+        ],
+      } as never);
+      await settle();
+
+      expect(putIds()).toEqual([IMAGE_ID]);
+      expect(
+        mutations.find(mutation => mutation.entityId === IMAGE_ID)?.fields,
+      ).toMatchObject({
+        kind: 'generated_media',
+        conversation_id: CONVERSATION_ID,
+        message_id: MESSAGE_ID,
+      });
     });
 
     it('is not admitted twice when the app is opened again', async () => {
