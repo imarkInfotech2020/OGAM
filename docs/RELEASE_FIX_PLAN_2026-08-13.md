@@ -65,6 +65,24 @@ An item is complete only when all three states are true.
 | User Eject All lifecycle                      | Mobile user-model-ejection coordinator |
 | Shared-file backlog and active receive window | `@offgrid/sync` `SharedFileDelivery`   |
 | Concurrent knowledge-document offers          | `@offgrid/sync` transfer reservations  |
+| Per-destination outbound transfer order        | `@offgrid/sync` `FileTransferManager`  |
+
+### Typed transfer queue end state
+
+- One logical outbound queue lives in `@offgrid/sync` and is partitioned by destination.
+- Every queued job has one stable activity ID and one category derived from the canonical transfer
+  classifier. Models, shared files, screenshots, downloads, generated media, attachments, direct
+  files, and knowledge documents use the same job contract.
+- A job may provide a feature-owned preparation callback, such as publishing a shared-file control.
+  The shared queue invokes it only when that job reaches the front. Feature services do not schedule
+  transport work themselves.
+- `FileTransferManager` moves only the active job. It emits queue and transfer state through one
+  progress contract.
+- Completed history persists state transitions from that contract. Activity and Files are read-only
+  projections; they never schedule or own transfer state.
+- Feature-level queues, concurrency gates, and duplicate outgoing-history writers are removed.
+- Per-record reconciliation and single-flight deduplication remain separate state-machine concerns;
+  they cannot decide transfer order.
 
 ## Sequential work plan
 
@@ -132,9 +150,16 @@ pass, and both physical-device journeys pass.
 - [x] Publish shared-file controls only when the bounded delivery window admits the file.
 - [x] Prevent State Sync anti-entropy from announcing queued controls outside that window.
 - [x] Use the same active-control rule for normal delivery and repair on Desktop and Mobile.
+- [ ] Remove receiver-side file controls with no local or staged bytes before startup replay.
 - [x] Clear stale nonterminal receive offers from the connected iPhone and Android device.
 - [x] Join identical concurrent knowledge-document offers behind one receiver-side writer.
 - [x] Accept reconnect offers for an existing matching knowledge document without sending its bytes again.
+- [x] Make Project and Knowledge document transfer independent of legacy optional-sharing preferences.
+- [x] Enforce one active outbound transfer per destination in the shared transfer manager.
+- [x] Route models, direct files, knowledge documents, generated media, attachments, screenshots, and downloads through that manager queue.
+- [x] Remove the Desktop host queue, Mobile knowledge-document queue, shared-file concurrency gate, and repair scheduler.
+- [x] Publish shared-file controls only when their typed transfer job reaches the front of the manager queue.
+- [x] Stop exporting queue primitives to Desktop and Mobile hosts.
 - [ ] Verify that enabling Screenshots and Downloads sends only files created after enablement.
 - [ ] Verify all eight Download types can be selected on Desktop and Mobile.
 - [ ] Move Copied text into the Automatic sharing matrix on Mobile and Desktop.
@@ -151,8 +176,8 @@ Focused evidence, 2026-08-13:
 - Desktop main-process TypeScript passes.
 - The accidental local outgoing backlog was backed up, then cleared without changing pairings,
   local files, completed history, or incoming transfers. The deliberate logo-PDF test remains queued.
-- The shared 20-file delivery-window test passes: only three controls publish, and the fourth
-  publishes only after one active transfer settles.
+- The shared 20-file backlog test passes: submitting the backlog publishes no controls. The first
+  control publishes only when the manager activates the first typed transfer job.
 - Desktop shared-file and State Bridge suites pass: 87 tests. Desktop node TypeScript passes.
 - Mobile shared-file unit tests, explicit-share tests, and the real ambient-share integration journey
   pass: 20 tests. The ambient journey proves that a staged control is absent before approval and is
@@ -169,27 +194,72 @@ Focused evidence, 2026-08-13:
   Sync now gives matching bytes one staging-path owner and makes later offers wait for that result.
   Shared typecheck, build, and 12 focused contract tests pass. Desktop node TypeScript and 47
   knowledge-document tests pass. The Mobile knowledge-document integration and refusal suites pass:
-  5 tests. Mobile TypeScript remains blocked only by the existing Receiving test-fixture drift.
+  5 tests. Mobile TypeScript and the updated Receiving policy tests pass.
 - Reconnect backfill now compares an existing knowledge document at the receiver and resumes at the
   end when size and checksum match. The Mobile integration test proves the repeated offer performs
   zero source reads and does not re-index the document. Project transfer progress also keeps its
   hidden category before, during, and after live progress, including legacy rows without a stored
   category. Shared focused tests pass: 12. Desktop
   knowledge-document tests pass: 48. Mobile knowledge-document tests pass: 5.
+- A later Android restart proved that the first cleanup removed symptoms only: 955 remote controls
+  rebuilt 107 new 0% receiver rows before the app was stopped. The shared op-log now owns a
+  provenance-aware cleanup rule. Mobile and Desktop provide only the IDs whose bytes exist locally
+  or are fully staged. Local sender records remain. Shared typecheck and all 470 Sync tests pass,
+  including remote-history cleanup before replay. Desktop typecheck and 63 focused sync tests pass.
+  Real restart verification is pending.
+- The second device cleanup is backed up at
+  `/tmp/offgrid-mobile-cleanup-3ll5bs/android-RKStorage.before-cleanup.sqlite` and
+  `/tmp/offgrid-ios-cleanup-8dFR2k-before-cleanup`. Android removed 955 remote shared-file ops and
+  107 ghost receiver rows. iOS Debug removed four ghost receiver rows, including the dead
+  `log_list.json` row. Completed history, staged bytes, and sender-owned rows remain.
+- Physical Android restart verification: Sync Activity reopened with 78 rows instead of rebuilding
+  the previous 1,033-row ghost backlog. The one-minute no-growth observation is still pending, then
+  the same restart check moves to iOS.
+- Project and Knowledge document state was already marked required, but Mobile still consulted an
+  old raw `projects` preference before sending document bytes. That duplicate gate is removed from
+  both hosts. Mobile now normalizes every required category from the shared send-mode contract. The
+  focused Desktop knowledge-document suite passes: 23 tests, plus one real SQLite integration test.
+  The focused Mobile integration journey passes and includes a stored legacy `projects: false`
+  preference.
+- Android then proved that one Mac could still offer several files at the same time. Feature-local
+  queues did not cover every transfer path. `FileTransferManager` now owns one serial outbound queue
+  per destination for every model, shared file, attachment, and knowledge-document sender. The full
+  transfer-manager contract passes: 11 tests, including serial order, active cancellation, and
+  cancellation before a queued item is offered. The shared package no longer exports its queue
+  primitive to hosts. Shared typecheck and all 472 Sync tests pass. Desktop typecheck and 129 focused
+  transfer-owner tests pass. Mobile TypeScript, 29 receive-policy tests, 8 Activity tests, and the
+  real knowledge-document integration journey pass. Physical four-host verification is pending.
 
 ### Phase 3 - Make transfer history authoritative
 
-- [ ] Preserve transfer `kind` during all updates.
+- [x] Preserve transfer `kind` during all live and in-memory history updates.
 - [x] Keep hidden project transfers hidden when live progress exists.
 - [ ] Persist `kind` in Desktop SQLite.
 - [ ] Derive Retry, Cancel, and Dismiss from executable service commands.
 - [ ] Make restored Mobile Cancel update durable history without a live manager.
+- [ ] Render Mobile Activity and Files with one virtualized list adapter.
+- [ ] Use the shared List mode as the initial and reset view on Mobile and Desktop.
 - [ ] Remove Retry when its source is not durably available.
-- [ ] Persist byte progress at a bounded interval and persist every state transition.
+- [x] Persist every state transition without writing durable history on each byte update.
 - [ ] Define one stable order for memory, adapters, SQLite, retention, and restart.
 - [ ] Verify manual tests 9.3, 9.4, 9.6, and 9.7 through real stores and restarts.
 
 Exit condition: history, live progress, available actions, and restart projection agree.
+
+Current gate, 2026-08-13:
+
+- Code and wiring are present for durable Mobile Cancel. A live transfer still cancels through the
+  manager; a restored row falls back to `CompletedTransferHistory.cancel`. Physical iOS and Android
+  verification is pending.
+- Mobile Activity and Files use one `FlatList` adapter with bounded initial render, batch size, and
+  window size. The focused Activity component suite passes: 8 tests. Physical large-list
+  verification is pending.
+- Mobile Activity uses the existing small-button action row with the shared 8-point gap token, so
+  adjacent Open, Retry, Cancel, and Dismiss actions do not touch. Physical iOS and Android review is
+  pending.
+- `DEFAULT_SYNC_FILE_VIEW_MODE` in `@offgrid/sync` is `list`. Shared projections, Mobile Activity,
+  Mobile Files, Desktop Activity, Desktop Files, and Desktop file notifications use it. Desktop
+  typecheck passes. Physical UI verification is pending.
 
 ### Phase 4 - Fix the remaining Shared contracts
 
