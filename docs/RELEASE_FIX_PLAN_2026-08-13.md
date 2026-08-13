@@ -229,6 +229,32 @@ Focused evidence, 2026-08-13:
   primitive to hosts. Shared typecheck and all 472 Sync tests pass. Desktop typecheck and 129 focused
   transfer-owner tests pass. Mobile TypeScript, 29 receive-policy tests, 8 Activity tests, and the
   real knowledge-document integration journey pass. Physical four-host verification is pending.
+- Physical explicit-file verification used a 163,626,750-byte DMG from macOS. Windows and Android
+  each received one active delivery in their own destination lane. iOS correctly refused Files, but
+  its Activity row stayed at Receiving 0% after macOS received the refusal. The shared transfer
+  manager now emits the same terminal failed state on the receiver for policy, peer-limit, and
+  missing-sink refusals. The real encrypted manager suite passes 12 tests, including this policy
+  refusal journey.
+- Direct inspection of the iPhone store found two IDs for each refused DMG. The durable control row
+  used the sender ID, while the transfer manager used the receiver ID. Incoming and outgoing rows
+  now derive the same destination-scoped ID in `@offgrid/sync`; host code supplies only the local
+  receiver ID and peer display facts. The shared build and 37 focused transfer and receive-policy
+  tests pass, including a real history projection that settles one queued row into one Failed row.
+  Mobile TypeScript and its knowledge-document integration pass. Desktop TypeScript and 86 focused
+  shared-file and knowledge-document tests pass. Commits `a93008a`, `72061eea`, `979cc32c`, and
+  `0fad9d1` are pushed. The Windows Shared bundle and all changed Desktop Pro files match the Mac by
+  MD5. Physical restart verification is pending.
+- macOS now keeps the Share file action pending while it copies the selected file into owned
+  storage, blocks duplicate clicks, and opens Activity after queue admission. The focused rendered
+  control test passes. Physical macOS verification is pending.
+- Generated media and message attachments now read one `hidden` visibility rule from the shared
+  sharing catalog. Durable rows, live progress, Desktop delivery rows, and file notifications all
+  use that rule. Desktop startup backfill also stops when an attachment's stable `syncId` already
+  exists, so it cannot change a completed delivery from `sent` back to `granted`. Shared Sync builds,
+  49 focused shared tests pass, 65 Desktop shared-file tests pass, and Desktop node TypeScript passes.
+  Commits `5007235` and `ef82adc` are pushed. The five delivery rows reopened by the old build were
+  restored to `sent` after a database backup and integrity check. The Windows Shared bundle and
+  Desktop Pro service match the Mac by MD5. Physical restart verification is pending.
 
 ### Phase 3 - Make transfer history authoritative
 
