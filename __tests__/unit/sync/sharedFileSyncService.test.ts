@@ -42,7 +42,7 @@ jest.mock('react-native-fs', () => {
  * filesystem stands in, and there are no peers connected - which is not a gap but the state a phone is in
  * most of the time.
  */
-describe("the files this phone offers the rest of the mesh", () => {
+describe('the files this phone offers the rest of the mesh', () => {
   const IMAGE_ID = '11111111-1111-4111-8111-111111111111';
   const OTHER_IMAGE_ID = '22222222-2222-4222-8222-222222222222';
   const CONVERSATION_ID = '33333333-3333-4333-8333-333333333333';
@@ -86,10 +86,7 @@ describe("the files this phone offers the rest of the mesh", () => {
   };
 
   /** A picture the user generated, on disk where the app put it. */
-  async function generatedImageOnDisk(
-    id: string,
-    bytes = 2048,
-  ): Promise<void> {
+  async function generatedImageOnDisk(id: string, bytes = 2048): Promise<void> {
     const path = `/docs/generated/${id}.png`;
     await write(path, bytes);
     useAppStore.setState({
@@ -171,7 +168,11 @@ describe("the files this phone offers the rest of the mesh", () => {
 
   async function write(path: string, bytes: number): Promise<void> {
     disk.push({ path, bytes });
-    await fs.writeFile(path, Buffer.alloc(bytes, 0x41).toString('base64'), 'base64');
+    await fs.writeFile(
+      path,
+      Buffer.alloc(bytes, 0x41).toString('base64'),
+      'base64',
+    );
   }
 
   async function launch(): Promise<void> {
@@ -189,6 +190,9 @@ describe("the files this phone offers the rest of the mesh", () => {
       },
     } as never);
     await service.start({
+      stageStateMutation: (mutation: SyncMutation) => {
+        mutations.push(mutation);
+      },
       recordStateMutation: (mutation: SyncMutation) => {
         mutations.push(mutation);
       },
@@ -346,13 +350,15 @@ describe("the files this phone offers the rest of the mesh", () => {
     it('is skipped while its message has no durable identity yet', async () => {
       await attachmentOnDisk();
       useChatStore.setState({
-        conversations: useChatStore.getState().conversations.map(conversation => ({
-          ...conversation,
-          messages: conversation.messages.map(message => ({
-            ...message,
-            uuid: undefined,
+        conversations: useChatStore
+          .getState()
+          .conversations.map(conversation => ({
+            ...conversation,
+            messages: conversation.messages.map(message => ({
+              ...message,
+              uuid: undefined,
+            })),
           })),
-        })),
       } as never);
 
       await launch();
@@ -386,7 +392,9 @@ describe("the files this phone offers the rest of the mesh", () => {
       // Asked again, and it is not withdrawn twice: the withdrawal is already travelling, and a second
       // one would be a delete for a record the far device has already dropped.
       mutations = [];
-      useAppStore.setState({ generatedImages: [...useAppStore.getState().generatedImages] } as never);
+      useAppStore.setState({
+        generatedImages: [...useAppStore.getState().generatedImages],
+      } as never);
       await settle();
       expect(deletedIds()).toEqual([]);
     });
@@ -461,10 +469,9 @@ describe("the files this phone offers the rest of the mesh", () => {
       });
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      // The record travels on the state channel and the bytes come separately, so for a moment the phone
-      // knows about a file it does not have. It must not be offered onward as if it did.
+      // A received record is not one of this phone's active outgoing controls.
       expect(service.files()).toEqual([]);
-      expect(service.canSendControl('the-ipad', ARRIVING_ID)).toBe(false);
+      expect(service.canPublishControl('the-ipad', ARRIVING_ID)).toBe(false);
     });
 
     it('stops waiting when the record is withdrawn again', async () => {
@@ -486,5 +493,4 @@ describe("the files this phone offers the rest of the mesh", () => {
       expect(service.files()).toEqual([]);
     });
   });
-
 });

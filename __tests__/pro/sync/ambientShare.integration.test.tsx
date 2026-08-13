@@ -300,6 +300,7 @@ describe('mobile ambient sharing journey', () => {
     await remote.engine.start(0);
     desktopDevice.port = remote.transport.boundPort ?? 0;
     await sharedFileSyncService.start({
+      stageStateMutation: mutation => stateSyncService.stageMutation(mutation),
       recordStateMutation: mutation =>
         stateSyncService.recordMutation(mutation),
       requestStateSync: deviceId => stateSyncService.requestSync(deviceId),
@@ -348,16 +349,17 @@ describe('mobile ambient sharing journey', () => {
     );
 
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
-    // Ambient sharing is behind an accordion on that screen, so it has to be opened before any of its
-    // controls exist - the same two taps a user makes.
     fireEvent.press(
-      await waitFor(() => ui!.getByTestId('sync-ambient-accordion')),
+      await waitFor(() => ui!.getByTestId('ambient-destination-select')),
     );
     fireEvent.press(
       await waitFor(() =>
-        ui!.getByTestId(`ambient-destination-${desktopDevice.id}`),
+        ui!.getByTestId(
+          `ambient-destination-select-option-${desktopDevice.id}`,
+        ),
       ),
     );
+    fireEvent.press(ui.getByTestId('ambient-open-settings'));
     fireEvent.press(ui.getByTestId('ambient-screenshot-ask'));
     await waitFor(() => expect(screenshotListener).toBeDefined());
 
