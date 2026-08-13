@@ -101,34 +101,11 @@ jest.mock('react-native-audio-api', () => ({
   })),
 }), { virtual: true });
 
-// ── Filesystem — in-memory, dumb ────────────────────────────────────────────
-const mockFsFiles: Record<string, number> = {};
-const mockFsDirs = new Set<string>();
-const mockFsWrites: Record<string, { data: string; enc: string }> = {};
-jest.mock('react-native-fs', () => ({
-  DocumentDirectoryPath: '/doc',
-  exists: jest.fn((p: string) => Promise.resolve(p in mockFsFiles || mockFsDirs.has(p))),
-  stat: jest.fn((p: string) => Promise.resolve({ size: mockFsFiles[p] ?? 0, isFile: () => true })),
-  mkdir: jest.fn((p: string) => { mockFsDirs.add(p); return Promise.resolve(); }),
-  unlink: jest.fn((p: string) => { delete mockFsFiles[p]; delete mockFsWrites[p]; mockFsDirs.delete(p); return Promise.resolve(); }),
-  writeFile: jest.fn((p: string, data: string, enc: string) => { mockFsWrites[p] = { data, enc }; mockFsFiles[p] = data.length; return Promise.resolve(); }),
-  readDir: jest.fn((p: string) => Promise.resolve(mockFsReadDir(p))),
-  downloadFile: jest.fn(() => ({ promise: Promise.resolve({ statusCode: 200 }) })),
-}));
-function mockFsReadDir(dir: string): Array<{ path: string; size: number; isDirectory: () => boolean; isFile: () => boolean }> {
-  const out: Array<{ path: string; size: number; isDirectory: () => boolean; isFile: () => boolean }> = [];
-  for (const d of mockFsDirs) {
-    if (d !== dir && d.startsWith(`${dir}/`) && !d.slice(dir.length + 1).includes('/')) {
-      out.push({ path: d, size: 0, isDirectory: () => true, isFile: () => false });
-    }
-  }
-  for (const f of Object.keys(mockFsFiles)) {
-    if (f.startsWith(`${dir}/`) && !f.slice(dir.length + 1).includes('/')) {
-      out.push({ path: f, size: mockFsFiles[f], isDirectory: () => false, isFile: () => true });
-    }
-  }
-  return out;
-}
+// ── Filesystem — the shared stateful native boundary ─────────────────────────
+jest.mock('react-native-fs', () => {
+  const { defaultNativeFileSystemBoundary: boundary } = require('../../../harness/nativeFileSystem');
+  return { __esModule: true, default: boundary.module, ...boundary.module };
+});
 
 // ── Background download boundary ────────────────────────────────────────────
 const mockBgAvailable = { value: false };
@@ -147,21 +124,20 @@ import {
   OUTETTS_SAMPLE_RATE,
 } from '@offgrid/pro/audio/engine/tts/engines/outetts/models';
 import type { EnginePhase } from '@offgrid/pro/audio/engine/types';
+import RNFS from 'react-native-fs';
+import { defaultNativeFileSystemBoundary } from '../../../harness/nativeFileSystem';
 
-const backbonePath = `/doc/tts-models/${OUTETTS_BACKBONE.filename}`;
-const vocoderPath = `/doc/tts-models/${OUTETTS_VOCODER.filename}`;
+const backbonePath = `${defaultNativeFileSystemBoundary.DocumentDirectoryPath}/tts-models/${OUTETTS_BACKBONE.filename}`;
+const vocoderPath = `${defaultNativeFileSystemBoundary.DocumentDirectoryPath}/tts-models/${OUTETTS_VOCODER.filename}`;
 
 /** Land both model files full-size so initialize() can proceed. */
 function putModelsOnDisk() {
-  mockFsFiles[backbonePath] = OUTETTS_BACKBONE.sizeBytes;
-  mockFsFiles[vocoderPath] = OUTETTS_VOCODER.sizeBytes;
+  defaultNativeFileSystemBoundary.seedFile(backbonePath, OUTETTS_BACKBONE.sizeBytes);
+  defaultNativeFileSystemBoundary.seedFile(vocoderPath, OUTETTS_VOCODER.sizeBytes);
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  for (const k of Object.keys(mockFsFiles)) delete mockFsFiles[k];
-  for (const k of Object.keys(mockFsWrites)) delete mockFsWrites[k];
-  mockFsDirs.clear();
+  defaultNativeFileSystemBoundary.reset();
   mockRuntime.initLlamaImpl = undefined;
   mockRuntime.lastContext = undefined;
   mockRuntime.audioTokens = [1, 2, 3, 4];
@@ -301,8 +277,8 @@ describe('OuteTTSEngine — release / destroy', () => {
     const e = new OuteTTSEngine();
     await e.initialize();
     await e.destroy();
-    expect(mockFsFiles[backbonePath]).toBeUndefined();
-    expect(mockFsFiles[vocoderPath]).toBeUndefined();
+    expect(await defaultNativeFileSystemBoundary.exists(backbonePath)).toBe(false);
+    expect(await defaultNativeFileSystemBoundary.exists(vocoderPath)).toBe(false);
     const states = await e.checkAssetStatus();
     expect(states.every((s) => s.status === 'not-downloaded')).toBe(true);
   });
@@ -420,12 +396,15 @@ describe('OuteTTSEngine — generateAndSave', () => {
 
     const result = await e.generateAndSave('hello', 'conv1', 'msgA');
 
-    const expectedPath = '/doc/audio-cache/conv1/msgA.pcm';
+    const expectedPath = `${defaultNativeFileSystemBoundary.DocumentDirectoryPath}/audio-cache/conv1/msgA.pcm`;
     expect(result.filePath).toBe(expectedPath);
     expect(result.durationSeconds).toBeCloseTo(mockRuntime.pcm.length / OUTETTS_SAMPLE_RATE);
     expect(result.waveformData).toHaveLength(200);
-    expect(mockFsWrites[expectedPath].enc).toBe('base64');
-    expect(mockFsWrites[expectedPath].data.length).toBeGreaterThan(0);
+    const write = (RNFS.writeFile as jest.Mock).mock.calls.find(
+      ([path]) => path === expectedPath,
+    );
+    expect(write?.[2]).toBe('base64');
+    expect(write?.[1].length).toBeGreaterThan(0);
     expect(completes).toHaveLength(1); // audioComplete still fires
   });
 
@@ -525,7 +504,10 @@ describe('OuteTTSEngine — assets & progress', () => {
 
   it('checkAssetStatus reports downloaded vs not-downloaded per asset', async () => {
     const e = new OuteTTSEngine();
-    mockFsFiles[backbonePath] = OUTETTS_BACKBONE.sizeBytes;
+    defaultNativeFileSystemBoundary.seedFile(
+      backbonePath,
+      OUTETTS_BACKBONE.sizeBytes,
+    );
     // vocoder absent
     const states = await e.checkAssetStatus();
     const backbone = states.find((s) => s.asset.id === 'backbone');
@@ -536,11 +518,13 @@ describe('OuteTTSEngine — assets & progress', () => {
     expect(vocoder?.localPath).toBeUndefined();
   });
 
-  it('treats an asset as absent when stat() throws', async () => {
+  it('treats an asset as absent when its directory cannot be read', async () => {
     const e = new OuteTTSEngine();
-    mockFsFiles[backbonePath] = OUTETTS_BACKBONE.sizeBytes; // file "exists"
-    const RNFS = require('react-native-fs');
-    RNFS.stat.mockRejectedValueOnce(new Error('stat blew up'));
+    defaultNativeFileSystemBoundary.seedFile(
+      backbonePath,
+      OUTETTS_BACKBONE.sizeBytes,
+    );
+    (RNFS.readDir as jest.Mock).mockRejectedValueOnce(new Error('readDir blew up'));
     const states = await e.checkAssetStatus();
     const backbone = states.find((s) => s.asset.id === 'backbone');
     expect(backbone?.status).toBe('not-downloaded'); // catch → false
@@ -551,8 +535,8 @@ describe('OuteTTSEngine — assets & progress', () => {
     putModelsOnDisk();
     await e.checkAssetStatus();
     await e.deleteAssets(['vocoder']);
-    expect(mockFsFiles[vocoderPath]).toBeUndefined();
-    expect(mockFsFiles[backbonePath]).toBe(OUTETTS_BACKBONE.sizeBytes);
+    expect(await defaultNativeFileSystemBoundary.exists(vocoderPath)).toBe(false);
+    expect(await defaultNativeFileSystemBoundary.exists(backbonePath)).toBe(true);
   });
 });
 
@@ -564,25 +548,28 @@ describe('OuteTTSEngine — audio cache', () => {
 
   it('sums file sizes across conversation dirs into MB', async () => {
     const e = new OuteTTSEngine();
-    mockFsDirs.add('/doc/audio-cache');
-    mockFsDirs.add('/doc/audio-cache/conv1');
-    mockFsFiles['/doc/audio-cache/conv1/a.pcm'] = 1024 * 1024; // 1 MB
-    mockFsFiles['/doc/audio-cache/conv1/b.pcm'] = 1024 * 1024; // 1 MB
+    const cache = `${defaultNativeFileSystemBoundary.DocumentDirectoryPath}/audio-cache/conv1`;
+    defaultNativeFileSystemBoundary.seedFile(`${cache}/a.pcm`, 1024 * 1024);
+    defaultNativeFileSystemBoundary.seedFile(`${cache}/b.pcm`, 1024 * 1024);
     expect(await e.getAudioCacheSizeMB()).toBeCloseTo(2);
   });
 
   it('isAudioCached reflects presence of the message file', async () => {
     const e = new OuteTTSEngine();
     expect(await e.isAudioCached('conv1', 'msgX')).toBe(false);
-    mockFsFiles['/doc/audio-cache/conv1/msgX.pcm'] = 10;
+    defaultNativeFileSystemBoundary.seedFile(
+      `${defaultNativeFileSystemBoundary.DocumentDirectoryPath}/audio-cache/conv1/msgX.pcm`,
+      10,
+    );
     expect(await e.isAudioCached('conv1', 'msgX')).toBe(true);
   });
 
   it('clearAudioCache unlinks the cache root when present, no-op otherwise', async () => {
     const e = new OuteTTSEngine();
     await e.clearAudioCache(); // root absent → no-op, no throw
-    mockFsDirs.add('/doc/audio-cache');
+    const cacheRoot = `${defaultNativeFileSystemBoundary.DocumentDirectoryPath}/audio-cache`;
+    defaultNativeFileSystemBoundary.seedDir(cacheRoot);
     await e.clearAudioCache();
-    expect(mockFsDirs.has('/doc/audio-cache')).toBe(false);
+    expect(await defaultNativeFileSystemBoundary.exists(cacheRoot)).toBe(false);
   });
 });
