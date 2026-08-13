@@ -1,6 +1,7 @@
 import { LlamaContext, RNLlamaOAICompatibleMessage } from 'llama.rn';
 import { Platform } from 'react-native';
 import RNFS from 'react-native-fs';
+import { statFile } from '../utils/fileStat';
 import { Message, INFERENCE_BACKENDS } from '../types';
 import { APP_CONFIG } from '../constants';
 import { useAppStore } from '../stores/appStore';
@@ -16,13 +17,14 @@ import {
 import { awaitMemoryReclaim, effectiveAvailableMB } from './memoryBudget';
 import { modelResidencyManager } from './modelResidency';
 import { hardwareService } from './hardware';
-import { formatLlamaMessages, buildOAIMessages } from './llmMessages';
+import { formatLlamaMessages, buildOAIMessages, modelImageAttachments } from './llmMessages';
 import { generateWithToolsImpl } from './llmToolGeneration';
 import type { ToolCall } from './tools/types';
 import type { MultimodalSupport, LLMPerformanceSettings, LLMPerformanceStats } from './llmTypes';
 import logger from '../utils/logger';
 import { resolveSpeculative } from './mtpDetection';
 import type { StreamToken } from './llmStreamTypes';
+import { sizeToBytes } from '../utils/fileSize';
 export type { StreamToken };
 type StreamCallback = (data: StreamToken) => void;
 type CompleteCallback = (result: { content: string; reasoningContent: string }) => void;
@@ -73,8 +75,7 @@ class LLMService {
     const speculativeDecoding = await resolveSpeculative(modelPath, settings.speculativeDecoding);
     const params = buildModelParams(modelPath, { ...settings, nThreads: effectiveNThreads, speculativeDecoding });
     logger.log(`[LLM] Resolved params: threads=${params.nThreads}, batch=${params.nBatch}, ctx=${params.ctxLen}, gpuLayers=${params.nGpuLayers}`);
-    const fileStat = await RNFS.stat(modelPath);
-    const fileSize = typeof fileStat.size === 'string' ? Number.parseInt(fileStat.size, 10) : fileStat.size;
+    const fileSize = (await statFile(modelPath))?.size ?? 0;
     // Use the EFFECTIVE cache type, not the raw setting: OpenCL/HTP coerce the KV cache
     // to f16 (see buildModelParams), so keying off settings.cacheType alone would let the
     // guard use the cheaper quantized estimate and approve a context that then OOMs.
@@ -216,7 +217,7 @@ class LLMService {
   /** Multimodal init on a NOT-YET-PUBLISHED context (the load pipeline) — no instance-state writes. */
   private async deriveMultimodalFromProjector(context: LlamaContext, modelPath: string, mmProjPath: string): Promise<{ initialized: boolean; support: MultimodalSupport }> {
     try {
-      const sizeMB = Number((await RNFS.stat(mmProjPath)).size) / (1024 * 1024);
+      const sizeMB = ((await statFile(mmProjPath))?.size ?? 0) / (1024 * 1024);
       logger.log(`[LLM] mmproj file size: ${sizeMB.toFixed(1)} MB`);
       if (sizeMB < 100) console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB.toFixed(1)} MB)`);
     } catch (statErr) { console.error('[LLM] Failed to stat mmproj file:', statErr); }
@@ -288,11 +289,11 @@ class LLMService {
     this.isGenerating = true;
     const ctx = this.context;
     const completionWork = (async () => {
-      const managed = await this.dropMissingImageAttachments(await this.manageContextWindow(messages));
-      const hasImages = managed.some(m => m.attachments?.some(a => a.type === 'image'));
+      const managed = await this.manageContextWindow(messages);
+      const hasImages = managed.some(m => modelImageAttachments(m.attachments).length > 0);
       if (hasImages && !this.multimodalInitialized) logger.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
       logger.log('[LLM] Generation mode:', this.hasVisionInputs(managed) ? 'VISION' : 'TEXT-ONLY');
-      const oaiMessages = this.convertToOAIMessages(managed);
+      const oaiMessages = await this.convertToOAIMessages(managed);
       const { settings } = useAppStore.getState();
       const startTime = Date.now();
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
@@ -375,6 +376,9 @@ class LLMService {
       const kept: typeof attachments = [];
       for (const a of attachments) {
         if (a.type !== 'image') { kept.push(a); continue; }
+        // Not yet ARRIVED is not the same as gone, and saying "file gone" for a transfer still in
+        // flight sends the next person looking for a deletion that never happened.
+        if (a.pending) { logger.log(`[LLM] skipping an attachment still arriving: ${a.fileName ?? a.id}`); continue; }
         const path = (a.uri || '').replace(/^file:\/\//, '');
         const exists = path.length > 0 && await RNFS.exists(path).catch(() => false);
         if (exists) kept.push(a);
@@ -397,14 +401,14 @@ class LLMService {
    */
   private hasVisionInputs(messages: Message[]): boolean {
     if (!this.multimodalInitialized) return false;
-    return messages.some(m => m.attachments?.some(a => a.type === 'image'));
+    return messages.some(m => modelImageAttachments(m.attachments).length > 0);
   }
   /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
   async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
-    const oaiMessages = this.convertToOAIMessages(messages);
+    const oaiMessages = await this.convertToOAIMessages(messages);
     const { settings } = useAppStore.getState();
     let fullResponse = '';
     const ctx = this.context;
@@ -459,7 +463,20 @@ class LLMService {
   }
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
   private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision(), this.multimodalSupport?.audio ?? false); }
-  private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] { return buildOAIMessages(messages, this.multimodalSupport?.audio ?? false); }
+  /**
+   * The ONE conversion from our messages to model input, and therefore the one place that can
+   * guarantee every image handed to the runtime exists.
+   *
+   * The existence check used to live in `completion`, one caller of three. The tool path and the
+   * capped-token path converted directly, so a stale attachment reached llama.rn there and it
+   * refused the whole turn with "File does not exist or cannot be opened" - a plain text message
+   * failed because a PHOTO from an earlier turn pointed into an app container that no longer exists.
+   * A guard a caller has to remember is a guard the next caller forgets, so it lives here now.
+   */
+  private async convertToOAIMessages(messages: Message[]): Promise<RNLlamaOAICompatibleMessage[]> {
+    const usable = await this.dropMissingImageAttachments(messages);
+    return buildOAIMessages(usable, this.multimodalSupport?.audio ?? false);
+  }
   async getModelInfo() { return this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null; }
   async tokenize(text: string) {
     if (!this.context) throw new Error('No model loaded');
