@@ -265,14 +265,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const supportingContextParsedContent = supportingContext
     ? buildMessageData(supportingContext).parsedContent
     : undefined;
-  const isSupportingContext = isSupportingChatContext({
-    answer: parsedContent.response,
-    reasoning: parsedContent.thinking,
-    reasoningLabel: parsedContent.thinkingLabel,
-  });
-
   const isUser = message.role === 'user';
   const hasAttachments = Boolean(message.attachments?.length);
+  const isSupportingContext =
+    !isStreaming &&
+    !hasAttachments &&
+    isSupportingChatContext({
+      answer: parsedContent.response,
+      reasoning: parsedContent.thinking,
+      reasoningLabel: parsedContent.thinkingLabel,
+    });
   const bubbleStyle = [
     styles.bubble,
     isUser ? styles.userBubble : styles.assistantBubble,

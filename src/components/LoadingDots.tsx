@@ -33,17 +33,23 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
     const duration = 400;
     // Each dot runs the same fade, offset by 150ms, so the brightness travels left to right.
     const loops = [dot1Anim, dot2Anim, dot3Anim].map((anim, i) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * 150),
-          Animated.timing(anim, { toValue: 1, duration, useNativeDriver: true }),
-          Animated.timing(anim, {
-            toValue: 0.3,
-            duration,
-            useNativeDriver: true,
-          }),
-        ]),
-      ),
+      Animated.sequence([
+        Animated.delay(i * 150),
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(anim, {
+              toValue: 1,
+              duration,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim, {
+              toValue: 0.3,
+              duration,
+              useNativeDriver: true,
+            }),
+          ]),
+        ),
+      ]),
     );
     loops.forEach(loop => loop.start());
 

@@ -819,7 +819,7 @@ describe('ModelSettingsScreen', () => {
       expect(getByText('0.90')).toBeTruthy(); // topP || 0.9
       expect(getByText('1.10')).toBeTruthy(); // repeatPenalty || 1.1
       expect(getAllByText('1').length).toBeGreaterThan(0); // undefined falls back to cpuThreadsSliderValue (1)
-      expect(getByText('8')).toBeTruthy(); // imageSteps || 8
+      expect(getByText('50')).toBeTruthy(); // imageSteps || the platform default
       expect(getByText('7.5')).toBeTruthy(); // imageGuidanceScale || 7.5
     });
 

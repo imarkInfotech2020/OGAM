@@ -74,10 +74,3 @@ export interface RunGenerationOptions {
   imageHeight: number;
   useOpenCL: boolean;
 }
-
-export interface UpdateEnhancementOptions {
-  conversationId: string | undefined;
-  tempMessageId: string | null;
-  enhancedPrompt: string;
-  originalPrompt: string;
-}
