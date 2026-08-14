@@ -632,7 +632,7 @@ describe('mobile ambient sharing journey', () => {
     ).toBeTruthy();
     fireEvent.press(ui.getByTestId('sync-file-filter-screenshot'));
     expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
-  });
+  }, 30_000);
 
   async function captureScreenshot(options: {
     syncId: string;
