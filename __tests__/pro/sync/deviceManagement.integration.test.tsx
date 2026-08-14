@@ -208,7 +208,19 @@ describe('Pro mobile saved-device management journey', () => {
     );
     expect(within(connectedRow).getByText(/Connected · WiFi/)).toBeTruthy();
     expect(within(connectedRow).queryByLabelText(/Rename/)).toBeNull();
-    expect(ui.queryByTestId('sync-rename-this-device')).toBeNull();
+    fireEvent.press(ui.getByTestId('sync-rename-this-device'));
+    expect(await waitFor(() => ui!.getByText('Rename this device'))).toBeTruthy();
+    fireEvent.changeText(
+      ui.getByTestId('sync-rename-this-device-input'),
+      'Travel Phone',
+    );
+    fireEvent.press(ui.getByTestId('sync-rename-this-device-save'));
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-this-device').props.children).toBe(
+        'Travel Phone',
+      ),
+    );
+    expect(within(connectedRow).queryByLabelText(/Rename/)).toBeNull();
 
     fireEvent.press(ui.getByTestId(`sync-disconnect-${remoteDevice.id}`));
     await waitFor(() =>
