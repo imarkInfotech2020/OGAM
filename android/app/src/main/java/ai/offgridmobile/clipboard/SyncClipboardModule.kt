@@ -17,8 +17,13 @@ internal class SyncClipboardObserver(
     private val clipboardManager: ClipboardManager,
     private val onText: (String, Double) -> Unit,
     private val now: () -> Long = System::currentTimeMillis,
+    private val accessibilityCapture: ClipboardAccessibilityCapture =
+        SyncClipboardAccessibilityService.capture,
 ) {
     private var enabled = false
+    private val accessibilityListener: (String, Long) -> Unit = { text, at ->
+        if (enabled) onText(text, at.toDouble())
+    }
     private val listener = ClipboardManager.OnPrimaryClipChangedListener {
         if (!enabled) return@OnPrimaryClipChangedListener
         val at = now()
@@ -49,9 +54,12 @@ internal class SyncClipboardObserver(
         if (enabled == next) return
         enabled = next
         if (next) {
+            accessibilityCapture.addListener(accessibilityListener)
             clipboardManager.addPrimaryClipChangedListener(listener)
         } else {
             clipboardManager.removePrimaryClipChangedListener(listener)
+            accessibilityCapture.removeListener(accessibilityListener)
+            SyncClipboardAccessibilityService.selectionMemory.forget()
         }
     }
 
@@ -74,6 +82,11 @@ class SyncClipboardModule(
     )
 
     override fun getName(): String = "SyncClipboardModule"
+
+    override fun invalidate() {
+        observer.setEnabled(false)
+        super.invalidate()
+    }
 
     @ReactMethod
     fun setEnabled(enabled: Boolean) {

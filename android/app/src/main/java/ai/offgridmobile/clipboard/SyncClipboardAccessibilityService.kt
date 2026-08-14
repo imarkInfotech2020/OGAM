@@ -7,22 +7,47 @@ import android.view.accessibility.AccessibilityEvent
 /**
  * Reports what the user selected, so a copy made OUTSIDE this app still has text behind it.
  *
- * It exists because of one platform rule: from Android 10, `primaryClip` is refused to an app without
- * focus. The change notification still arrives, so this app knows a copy HAPPENED and cannot know what
- * it was. Accessibility is the only sanctioned way to learn the second half.
+ * It exists because of one platform rule: from Android 10, clipboard reads and change callbacks can be
+ * refused to an app without focus. Accessibility is the sanctioned path that still sees the user's
+ * explicit selection and Copy action.
  *
- * Deliberately narrow. It reads selection events and nothing else - no window content, no keystrokes,
- * no scraping of the screen - and it stores exactly one string at a time, in memory, consumed by the
- * next copy. Its config declares `typeViewTextSelectionChanged` alone, so the platform never delivers
- * the rest.
+ * Deliberately narrow. It reads selection changes and Copy/Cut clicks - no window content, no
+ * keystrokes, no scraping of the screen - and stores exactly one string at a time, in memory, consumed
+ * by the next explicit Copy action.
  *
- * It never touches the clipboard itself. `SyncClipboardObserver` owns that, and asks here only when the
- * platform has denied it a read.
+ * It never touches the clipboard itself. It publishes the selected text directly to
+ * `SyncClipboardObserver`, so delivery does not depend on a background clipboard callback.
  */
 class SyncClipboardAccessibilityService : AccessibilityService() {
+    private val eventRules by lazy {
+        ClipboardAccessibilityEventRules(
+            setOf(
+                resources.getString(android.R.string.copy),
+                resources.getString(android.R.string.cut),
+            ),
+        )
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        val selection = event?.let(::selectedText) ?: return
-        selectionMemory.remember(selection, System.currentTimeMillis())
+        event ?: return
+        val at = System.currentTimeMillis()
+
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED) {
+            eventRules.selectedText(event.text, event.fromIndex, event.toIndex)?.let { selection ->
+                selectionMemory.remember(selection, at)
+            }
+        }
+
+        if (
+            eventRules.isCopyCommand(
+                action = event.action,
+                eventType = event.eventType,
+                text = event.text,
+                contentDescription = event.contentDescription,
+            )
+        ) {
+            selectionMemory.takeFor(at)?.let { selected -> capture.publish(selected, at) }
+        }
     }
 
     override fun onInterrupt() {
@@ -35,27 +60,13 @@ class SyncClipboardAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
-    /**
-     * The selected substring, taken from the event's own indices.
-     *
-     * `fromIndex`/`toIndex` describe the selection inside the field's full text, so the range is what
-     * the user highlighted and the whole text is not. A collapsed range (a caret move, not a selection)
-     * carries nothing to copy.
-     */
-    private fun selectedText(event: AccessibilityEvent): String? {
-        val whole = event.text.firstOrNull()?.toString() ?: return null
-        val from = event.fromIndex
-        val to = event.toIndex
-        if (from < 0 || to < 0 || from >= to || to > whole.length) return null
-        return whole.substring(from, to)
-    }
-
     companion object {
         /**
          * Shared with `SyncClipboardObserver`, which is instantiated by the React module rather than by
          * the platform - so the two halves cannot be handed to each other and must meet on one owner.
          */
         internal val selectionMemory = ClipboardSelectionMemory()
+        internal val capture = ClipboardAccessibilityCapture()
 
         /**
          * Is the service switched on in system settings?
