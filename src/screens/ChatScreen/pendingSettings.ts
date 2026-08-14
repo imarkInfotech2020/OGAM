@@ -19,7 +19,8 @@ export function computePendingSettings(
       (loadedSettings.liteRTMaxTokens as number | undefined) ?? 4096;
     return (
       changed(settings.liteRTBackend, loadedSettings.liteRTBackend) ||
-      (loadedSettings.liteRTBackend !== undefined &&
+      ((loadedSettings.liteRTMaxTokens !== undefined ||
+        loadedSettings.liteRTBackend !== undefined) &&
         liveTokens !== loadedTokens)
     );
   }
