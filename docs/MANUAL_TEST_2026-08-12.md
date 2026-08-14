@@ -33,23 +33,36 @@ targets — the record names the peer as it was, the row asks for the peer as it
 
 ## 2. Generated media arrives on the phone
 
+Before this test, fully stop and restart the Windows `npm run dev` process so Electron reloads the
+new Shared bundle. Generated media and message attachments have no policy settings. They always move
+with their chat, so one successful replication to every connected device proves each journey.
+
 1. On the **desktop**, generate an image.
 2. Watch the **Android** phone.
 
 - **Expect:** it arrives with no extra switch touched. Generated media is on by default now.
 - **Before:** attachments arrived and generated media did not.
 
-3. Then go to the phone's receiving settings and turn **Files** off. Generate another image.
+3. Go to the phone's receiving settings. Confirm that **Chats**, **Projects**, **Model settings**,
+   **Generated media**, and **Message attachments** are not shown as options. These records always
+   sync across the mesh.
+
+   In the same screen, confirm there are only two sections: **Sending** and **Receiving**. Sending
+   must not show Chats, Projects, or Model settings, and there must be no Ambient sharing section.
+   Confirm that **Destination** and **From** each use one drop-down, not a row of device chips.
+   Confirm that **Automatic sharing** and **Receiving rules** are compact summary rows. Each
+   **Configure** action must open a policy matrix in a bottom sheet.
+   The Automatic sharing matrix must contain only **Screenshots** and **Downloads**. Generated media
+   and Message attachments move with their chats and must not have optional controls.
+
+4. Turn **Files** off. Generate another image.
 
 - **Expect:** it still arrives. "Files" means files sent to you directly, and it no longer governs
   generated media.
 - **Before:** one switch silently governed both.
 
-4. Turn **Generated media** off. Generate one more.
-
-- **Expect:** now it is refused, and the sender reports it as refused rather than silently dropping it.
-
-Repeat 1 and 2 for a **message attachment** from desktop, which has its own switch for the same reason.
+Repeat 1 and 2 for a **message attachment** from desktop. It also has no Receiving switch and always
+syncs across the mesh.
 
 ## 3. Copy in another app on Android, paste on the desktop
 
@@ -432,3 +445,57 @@ disable. If OFF still reasons, say so; that is a known gap, not a surprise.
 
 - **Expect:** the label darkens and stays readable.
 - **Before:** the label turned near-white on a near-white row and disappeared. Light mode only.
+
+## H. The four-device mesh connects every direct pair
+
+Use Android, iPhone, Mac and Windows on the same Wi-Fi network.
+
+1. Start Sync on all four devices. On each device, press **Rescan** once.
+2. Wait for the mesh to settle. Do not enter another pairing code.
+
+- **Expect:** each device connects directly to the other three devices.
+- **Expect:** Android shows only **WiFi**, never **Nearby**.
+- **Expect:** every LAN route is named **WiFi**.
+
+3. Force-quit Android and iPhone. Start both apps at nearly the same time.
+
+- **Expect:** Android and iPhone connect to each other automatically.
+- **Expect:** simultaneous silent pairing does not leave both phones disconnected.
+
+4. While the iPhone is on the network, make its saved pairing need repair.
+
+- **Expect:** the iPhone stays under **Available** because it is reachable now.
+- **Expect:** the key action is visible, and no pencil is visible.
+- **Expect:** after the iPhone leaves the network and discovery reports it lost, the row moves to
+  **Saved**.
+
+5. Use the key action on an offline saved row and enter the current code.
+
+- **Expect:** the pairing is replaced, the device reconnects, and the licence still uses the same
+  number of device slots.
+
+## I. Enhanced prompt and generated image use one Mobile result
+
+1. Generate an image on Android with prompt enhancement on.
+
+- **Expect:** **Enhanced prompt** is collapsible at the top of the image result.
+- **Expect:** the image and caption are below it in the same message bubble.
+- **Expect:** the result has one timestamp, one menu and no empty bubble.
+
+2. Confirm the image reaches iPhone, Mac and Windows and appears in each Gallery.
+3. Restart one receiving device.
+
+- **Expect:** the image remains in the chat and Gallery after restart.
+
+## J. A phone attachment reaches another phone
+
+1. With no older transfers queued, attach one image to a chat on iPhone.
+2. Watch the same chat on Android.
+
+- **Expect:** a loader appears when the durable record arrives.
+- **Expect:** the image replaces the loader without a rescan or pairing code.
+
+3. Repeat while a large iPhone-to-Android file is already moving.
+
+- **Expect:** the loader can remain while the older file is ahead in the queue, but the image must
+  arrive when its bytes are transferred. It must not disappear or become an empty message.
