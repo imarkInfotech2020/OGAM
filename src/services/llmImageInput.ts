@@ -16,7 +16,7 @@ import logger from '../utils/logger';
  */
 
 /** Declared state says the model may see this image. Pure: no filesystem, so it is cheap and total. */
-export function isModelVisibleImage(attachment: MediaAttachment): boolean {
+function isModelVisibleImage(attachment: MediaAttachment): boolean {
   return (
     attachment.type === 'image' && !attachment.pending && !!attachment.uri
   );

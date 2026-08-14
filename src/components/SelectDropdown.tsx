@@ -5,7 +5,7 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { useThemedStyles } from '../theme';
 
-export interface SelectDropdownOption {
+interface SelectDropdownOption {
   value: string;
   label: string;
 }

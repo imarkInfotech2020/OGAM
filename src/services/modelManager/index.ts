@@ -46,8 +46,6 @@ import { resolveStoredPath, determineCredibility } from './storage';
 import * as visionRepair from './visionRepairService';
 import type { RepairOpts, VisionRepairContext } from './visionRepairService';
 
-export type { VisionRepairOutcome } from './visionRepairService';
-
 class ModelManager {
   private readonly modelsDir: string;
   private readonly imageModelsDir: string;

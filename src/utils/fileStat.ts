@@ -71,8 +71,3 @@ export async function statFile(path: string): Promise<FileFacts | null> {
     return null;
   }
 }
-
-/** The size in bytes, or 0 when the file is absent. For callers that only need the number. */
-export async function fileSizeBytes(path: string): Promise<number> {
-  return (await statFile(path))?.size ?? 0;
-}

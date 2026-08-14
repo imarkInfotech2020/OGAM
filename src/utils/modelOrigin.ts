@@ -23,8 +23,3 @@ export function parseHuggingFaceUrl(url: string | undefined): ModelOrigin | null
   if (repoId.split('/').length < 2) return null;
   return { repoId, revision, path };
 }
-
-/** The download URL for a sibling file in the SAME repo and at the SAME revision. */
-export function siblingDownloadUrl(origin: ModelOrigin, fileName: string): string {
-  return `https://huggingface.co/${origin.repoId}/resolve/${origin.revision}/${fileName}`;
-}

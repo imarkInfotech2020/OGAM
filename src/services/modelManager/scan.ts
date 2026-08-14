@@ -11,7 +11,7 @@ import { isMMProjFile, pickMmProjForModel } from '../mmproj';
 
 export { isMMProjFile };
 
-export function parseSizeInt(size: string | number): number {
+function parseSizeInt(size: string | number): number {
   return typeof size === 'string' ? Number.parseInt(size, 10) : size;
 }
 
@@ -432,4 +432,3 @@ async function doScanForUntrackedTextModels(
 
   return discoveredModels;
 }
-

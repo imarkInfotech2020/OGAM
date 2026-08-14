@@ -35,7 +35,7 @@ export const SWEET_SPOT_SIZE = 256;
 /** Default guidance scale and platform step counts. */
 export const DEFAULT_IMAGE_GUIDANCE = 7.5;
 export const MAX_IMAGE_STEPS = 50;
-export const IMAGE_STEP_DEFAULTS = {
+const IMAGE_STEP_DEFAULTS = {
   android: 8,
   ios: MAX_IMAGE_STEPS,
 } as const;

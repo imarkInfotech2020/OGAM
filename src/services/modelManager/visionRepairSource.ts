@@ -21,7 +21,7 @@ export type VisionRepairSource =
   | { kind: 'unknown' };
 
 /** One candidate repo, reduced to what identifies a file: its name and its exact size. */
-export interface RepoFileCandidate {
+interface RepoFileCandidate {
   repoId: string;
   files: { name: string; sizeBytes?: number }[];
 }
