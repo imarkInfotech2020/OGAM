@@ -26,6 +26,8 @@ internal class ClipboardAccessibilityCapture {
         }
     }
 
+    fun isActive(): Boolean = synchronized(lock) { listener != null }
+
     fun publish(text: String, at: Long) {
         val current = synchronized(lock) { listener }
         current?.invoke(text, at)
@@ -49,14 +51,20 @@ internal class ClipboardAccessibilityEventRules(
         eventType: Int,
         text: List<CharSequence>,
         contentDescription: CharSequence?,
+        sourceText: CharSequence? = null,
+        sourceContentDescription: CharSequence? = null,
     ): Boolean {
         if (
             action == AccessibilityNodeInfo.ACTION_COPY ||
             action == AccessibilityNodeInfo.ACTION_CUT
         ) return true
         if (eventType != AccessibilityEvent.TYPE_VIEW_CLICKED) return false
-        val description = contentDescription?.let(::sequenceOf) ?: emptySequence()
-        return (text.asSequence() + description)
+        val labels = sequenceOf(
+            contentDescription,
+            sourceText,
+            sourceContentDescription,
+        ).filterNotNull()
+        return (text.asSequence() + labels)
             .map(CharSequence::toString)
             .map(::normalize)
             .any(normalizedCopyLabels::contains)

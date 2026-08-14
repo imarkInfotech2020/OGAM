@@ -21,8 +21,10 @@ internal class SyncClipboardObserver(
         SyncClipboardAccessibilityService.capture,
 ) {
     private var enabled = false
+    private var lastPublishedText: String? = null
+    private var lastPublishedAt = Long.MIN_VALUE
     private val accessibilityListener: (String, Long) -> Unit = { text, at ->
-        if (enabled) onText(text, at.toDouble())
+        publishOnce(text, at)
     }
     private val listener = ClipboardManager.OnPrimaryClipChangedListener {
         if (!enabled) return@OnPrimaryClipChangedListener
@@ -36,7 +38,7 @@ internal class SyncClipboardObserver(
             // returns without publishing a guess.
             val selected = SyncClipboardAccessibilityService.selectionMemory.takeFor(at)
                 ?: return@OnPrimaryClipChangedListener
-            onText(selected, at.toDouble())
+            publishOnce(selected, at)
             return@OnPrimaryClipChangedListener
         }
         if (clip.description.label?.toString() == SYNC_CLIP_LABEL) {
@@ -47,6 +49,15 @@ internal class SyncClipboardObserver(
         // A copy this app COULD read is the truth; the remembered selection would only compete with it,
         // and a selection left behind would be claimed by the next copy that arrives contentless.
         SyncClipboardAccessibilityService.selectionMemory.forget()
+        publishOnce(text, at)
+    }
+
+    private fun publishOnce(text: String, at: Long) {
+        if (!enabled) return
+        val duplicate = text == lastPublishedText && at - lastPublishedAt in 0..COPY_COALESCE_MS
+        if (duplicate) return
+        lastPublishedText = text
+        lastPublishedAt = at
         onText(text, at.toDouble())
     }
 
@@ -54,12 +65,16 @@ internal class SyncClipboardObserver(
         if (enabled == next) return
         enabled = next
         if (next) {
+            // A selection made before the user enabled Sync is not permission to publish it later.
+            SyncClipboardAccessibilityService.selectionMemory.forget()
             accessibilityCapture.addListener(accessibilityListener)
             clipboardManager.addPrimaryClipChangedListener(listener)
         } else {
             clipboardManager.removePrimaryClipChangedListener(listener)
             accessibilityCapture.removeListener(accessibilityListener)
             SyncClipboardAccessibilityService.selectionMemory.forget()
+            lastPublishedText = null
+            lastPublishedAt = Long.MIN_VALUE
         }
     }
 
@@ -69,6 +84,7 @@ internal class SyncClipboardObserver(
 
     private companion object {
         const val SYNC_CLIP_LABEL = "Off Grid Sync"
+        const val COPY_COALESCE_MS = 1_000L
     }
 }
 

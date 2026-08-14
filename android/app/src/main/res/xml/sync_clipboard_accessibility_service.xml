@@ -3,8 +3,9 @@
   The narrowest configuration that can do the job.
 
   Selection changes provide only the text the user highlighted. View clicks let the service see the
-  explicit Copy or Cut command. It ignores every other click. No `canRetrieveWindowContent`, no
-  key-event filtering, and no window-state events are enabled.
+  explicit Copy or Cut command. It ignores every other click. Window-content access is used only to
+  read the clicked toolbar node when a device omits its label from the event payload. The service
+  never traverses the window. No key-event filtering or window-state events are enabled.
 
   `accessibilityFlags` is left at the default for the same reason: reporting flags are what widen a
   service's reach, and this one asks for none.
@@ -13,5 +14,6 @@
     android:accessibilityEventTypes="typeViewTextSelectionChanged|typeViewClicked"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:description="@string/sync_clipboard_accessibility_description"
+    android:canRetrieveWindowContent="true"
     android:notificationTimeout="100"
     android:summary="@string/sync_clipboard_accessibility_summary" />

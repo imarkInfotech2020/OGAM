@@ -32,21 +32,35 @@ class SyncClipboardAccessibilityService : AccessibilityService() {
         event ?: return
         val at = System.currentTimeMillis()
 
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED) {
+        if (
+            capture.isActive() &&
+            event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED
+        ) {
             eventRules.selectedText(event.text, event.fromIndex, event.toIndex)?.let { selection ->
                 selectionMemory.remember(selection, at)
             }
         }
 
-        if (
-            eventRules.isCopyCommand(
-                action = event.action,
-                eventType = event.eventType,
-                text = event.text,
-                contentDescription = event.contentDescription,
-            )
-        ) {
-            selectionMemory.takeFor(at)?.let { selected -> capture.publish(selected, at) }
+        if (capture.isActive()) {
+            // Some system floating toolbars omit their label from the event payload. Read only the
+            // node Android says the user clicked; never walk the window or inspect unrelated nodes.
+            val source = event.source
+            try {
+                if (
+                    eventRules.isCopyCommand(
+                        action = event.action,
+                        eventType = event.eventType,
+                        text = event.text,
+                        contentDescription = event.contentDescription,
+                        sourceText = source?.text,
+                        sourceContentDescription = source?.contentDescription,
+                    )
+                ) {
+                    selectionMemory.takeFor(at)?.let { selected -> capture.publish(selected, at) }
+                }
+            } finally {
+                source?.recycle()
+            }
         }
     }
 
