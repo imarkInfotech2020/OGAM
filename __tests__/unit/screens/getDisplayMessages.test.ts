@@ -47,7 +47,11 @@ describe('getDisplayMessages', () => {
   });
 
   it('shows a bare thinking bubble (no loading text) once generating', () => {
-    const out = getDisplayMessages(msgs, { ...base(), isThinking: true, isStreamingForThisConversation: true });
+    const out = getDisplayMessages(msgs, {
+      ...base(),
+      isThinking: true,
+      isStreamingForThisConversation: true,
+    });
     const last = out[out.length - 1] as any;
     expect(last.id).toBe('thinking');
     expect(last.content).toBe('');
@@ -73,5 +77,123 @@ describe('getDisplayMessages', () => {
       isStreamingForThisConversation: true,
     });
     expect((out[out.length - 1] as any).id).toBe('streaming');
+  });
+
+  it('keeps remote thought and text while a generated image is loading', () => {
+    const out = getDisplayMessages(msgs, {
+      ...base(),
+      remotePreviews: [
+        {
+          id: 'remote-image-turn',
+          messageId: 'message-1',
+          deviceId: 'the-mac',
+          content: 'I will make that image.',
+          reasoning: 'I should use the image tool.',
+          phase: 'generating_image',
+          progress: { current: 3, total: 8 },
+        },
+      ],
+    });
+
+    expect(out.at(-1)).toMatchObject({
+      content: 'I will make that image.',
+      reasoningContent: 'I should use the image tool.',
+      statusText: 'Generating image... 3/8',
+      isStreaming: true,
+    });
+  });
+
+  it('shows the image-model loader without replacing remote thought or text', () => {
+    const out = getDisplayMessages(msgs, {
+      ...base(),
+      remotePreviews: [
+        {
+          id: 'remote-image-turn',
+          messageId: 'message-1',
+          deviceId: 'the-mac',
+          content: 'I will make that image.',
+          reasoning: 'I should use the image tool.',
+          phase: 'loading_image_model',
+        },
+      ],
+    });
+
+    expect(out.at(-1)).toMatchObject({
+      content: 'I will make that image.',
+      reasoningContent: 'I should use the image tool.',
+      statusText: 'Loading image model...',
+      isStreaming: true,
+    });
+  });
+
+  it('projects a lifecycle-only remote image frame as status without a sentinel bubble', () => {
+    const out = getDisplayMessages(msgs, {
+      ...base(),
+      remotePreviews: [
+        {
+          id: 'remote-image-turn',
+          messageId: 'message-1',
+          deviceId: 'the-mac',
+          content: ' - ',
+          phase: 'loading_image_model',
+        },
+      ],
+    });
+
+    expect(out.at(-1)).toMatchObject({
+      statusText: 'Loading image model...',
+      suppressMessageBubble: true,
+      isStreaming: true,
+    });
+  });
+
+  it('projects a remote tool as soon as its running frame arrives', () => {
+    const out = getDisplayMessages(msgs, {
+      ...base(),
+      remotePreviews: [
+        {
+          id: 'remote-tool-turn',
+          messageId: 'message-1',
+          deviceId: 'the-mac',
+          content: 'I will make that image.',
+          phase: 'answering',
+          tools: [{ name: 'generate_image', status: 'running' }],
+        },
+      ],
+    });
+
+    expect(out.at(-1)).toMatchObject({
+      content: 'I will make that image.',
+      isStreaming: true,
+      toolArtifacts: [
+        { name: 'generate_image', result: '', status: 'running' },
+      ],
+    });
+  });
+
+  it('removes a remote preview when its durable message is visible', () => {
+    const durableMessage = {
+      id: 'local-record-id',
+      uuid: 'remote-message-id',
+      role: 'assistant',
+      content: 'The complete reply.',
+      timestamp: 2,
+    } as Message;
+
+    const out = getDisplayMessages([...msgs, durableMessage], {
+      ...base(),
+      remotePreviews: [
+        {
+          id: 'remote-stream:remote-message-id',
+          messageId: 'remote-message-id',
+          deviceId: 'the-iphone',
+          content: 'The complete reply.',
+          phase: 'answering',
+        },
+      ],
+    });
+
+    expect(out).toHaveLength(2);
+    expect(out.at(-1)).toBe(durableMessage);
   });
 });

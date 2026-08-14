@@ -2,6 +2,8 @@ import { Message } from '../../types';
 
 export interface ChatMessageProps {
   message: Message;
+  /** Display-only context owned by this result and rendered at the top of its bubble. */
+  supportingContext?: Message;
   isStreaming?: boolean;
   onImagePress?: (uri: string) => void;
   onCopy?: (content: string) => void;

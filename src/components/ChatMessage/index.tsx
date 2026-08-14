@@ -30,6 +30,7 @@ import {
 } from './components/ToolMessages';
 import type { ChatMessageProps } from './types';
 import type { Message } from '../../types';
+import { isSupportingChatContext } from '@offgrid/sync';
 
 type MetaRowProps = {
   message: Message;
@@ -112,6 +113,9 @@ const ToolCallWithThinking: React.FC<{
 // ChatMessage so its per-section conditionals don't inflate ChatMessage's complexity.
 interface MessageBubbleProps {
   message: Message;
+  supportingContextParsedContent?: ReturnType<
+    typeof buildMessageData
+  >['parsedContent'];
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
   isUser: boolean;
@@ -120,17 +124,20 @@ interface MessageBubbleProps {
   bubbleStyle: StyleProp<ViewStyle>;
   parsedContent: ReturnType<typeof buildMessageData>['parsedContent'];
   showThinking: boolean;
+  showSupportingContext: boolean;
   showActions: boolean;
   showGenerationDetails: boolean;
   metaExtra?: React.ReactNode;
   onImagePress?: (uri: string) => void;
   onToggleThinking: () => void;
+  onToggleSupportingContext: () => void;
   onLongPress: () => void;
   onMenuOpen: () => void;
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
+  supportingContextParsedContent,
   styles,
   colors,
   isUser,
@@ -139,11 +146,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   bubbleStyle,
   parsedContent,
   showThinking,
+  showSupportingContext,
   showActions,
   showGenerationDetails,
   metaExtra,
   onImagePress,
   onToggleThinking,
+  onToggleSupportingContext,
   onLongPress,
   onMenuOpen,
 }) => (
@@ -157,13 +166,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     onLongPress={onLongPress}
     delayLongPress={300}
   >
-    {/* Above the reply, because that is when they happened. A locally generated turn shows its tool
-        results as their own messages BEFORE the answer; a synced turn carries them on the assistant
-        message, and rendering them underneath told the opposite story - as if the model answered and
-        then went looking. */}
-    <SyncedToolArtifacts message={message} styles={styles} colors={colors} />
+    <View testID="message-bubble" style={bubbleStyle}>
+      {!!supportingContextParsedContent?.thinking && (
+        <ThinkingBlock
+          parsedContent={supportingContextParsedContent}
+          showThinking={showSupportingContext}
+          onToggle={onToggleSupportingContext}
+          styles={styles}
+        />
+      )}
 
-    <View style={bubbleStyle}>
       {hasAttachments && (
         <MessageAttachments
           attachments={message.attachments!}
@@ -185,6 +197,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         styles={styles}
       />
     </View>
+
+    <SyncedToolArtifacts message={message} styles={styles} colors={colors} />
 
     <RoutedToolsRow
       message={message}
@@ -220,6 +234,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
+  supportingContext,
   isStreaming,
   onImagePress,
   onCopy,
@@ -243,9 +258,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
   const [showThinking, setShowThinking] = useState(!!isStreaming);
+  const [showSupportingContext, setShowSupportingContext] = useState(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const { displayContent, parsedContent } = buildMessageData(message);
+  const supportingContextParsedContent = supportingContext
+    ? buildMessageData(supportingContext).parsedContent
+    : undefined;
+  const isSupportingContext = isSupportingChatContext({
+    answer: parsedContent.response,
+    reasoning: parsedContent.thinking,
+    reasoningLabel: parsedContent.thinkingLabel,
+  });
 
   const isUser = message.role === 'user';
   const hasAttachments = Boolean(message.attachments?.length);
@@ -339,9 +363,29 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       />
     );
   }
+  if (isSupportingContext) {
+    const supportingContextView = (
+      <View style={[styles.container, styles.assistantContainer]}>
+        <View style={styles.toolCallReplyContent}>
+          <ThinkingBlock
+            parsedContent={parsedContent}
+            showThinking={showThinking}
+            onToggle={() => setShowThinking(!showThinking)}
+            styles={styles}
+          />
+        </View>
+      </View>
+    );
+    return animateEntry ? (
+      <AnimatedEntry index={0}>{supportingContextView}</AnimatedEntry>
+    ) : (
+      supportingContextView
+    );
+  }
   const messageBody = (
     <MessageBubble
       message={message}
+      supportingContextParsedContent={supportingContextParsedContent}
       styles={styles}
       colors={colors}
       isUser={isUser}
@@ -350,11 +394,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       bubbleStyle={bubbleStyle}
       parsedContent={parsedContent}
       showThinking={showThinking}
+      showSupportingContext={showSupportingContext}
       showActions={showActions}
       showGenerationDetails={showGenerationDetails}
       metaExtra={metaExtra}
       onImagePress={onImagePress}
       onToggleThinking={() => setShowThinking(!showThinking)}
+      onToggleSupportingContext={() =>
+        setShowSupportingContext(!showSupportingContext)
+      }
       onLongPress={handleLongPress}
       onMenuOpen={() => setShowActionMenu(true)}
     />

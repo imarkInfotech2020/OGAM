@@ -181,20 +181,27 @@ export const SyncedToolArtifacts: React.FC<{
   colors: ReturnType<typeof useTheme>['colors'];
 }> = ({ message, styles, colors }) => (
   <>
-    {message.toolArtifacts?.map((artifact, index) => (
-      <ToolResultBubble
-        key={`${artifact.name}:${index}`}
-        stableKey={`${message.uuid ?? message.id}:${artifact.name}:${index}`}
-        toolIcon={getToolIcon(artifact.name)}
-        toolLabel={getToolLabel(artifact.name, artifact.result)}
-        toolName={artifact.name}
-        durationLabel=""
-        content={artifact.result}
-        hasDetails={artifact.result.length > 0}
-        styles={styles}
-        colors={colors}
-      />
-    ))}
+    {message.toolArtifacts?.map((artifact, index) => {
+      const running = artifact.status === 'running';
+      return (
+        <ToolResultBubble
+          key={`${artifact.name}:${index}`}
+          stableKey={`${message.uuid ?? message.id}:${artifact.name}:${index}`}
+          toolIcon={getToolIcon(artifact.name)}
+          toolLabel={
+            running
+              ? `Using ${artifact.name}...`
+              : getToolLabel(artifact.name, artifact.result)
+          }
+          toolName={artifact.name}
+          durationLabel=""
+          content={artifact.result}
+          hasDetails={!running && artifact.result.length > 0}
+          styles={styles}
+          colors={colors}
+        />
+      );
+    })}
   </>
 );
 
