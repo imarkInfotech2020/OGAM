@@ -1,5 +1,18 @@
 import type { ModelOrigin } from '../types';
 
+const SPECIAL_HUGGING_FACE_REVISION_SOURCE = String.raw`refs\/(?:pr\/\d+|convert\/[\w.-]+)`;
+const SPECIAL_HUGGING_FACE_REVISION = new RegExp(`^${SPECIAL_HUGGING_FACE_REVISION_SOURCE}$`);
+const SPECIAL_HUGGING_FACE_RESOLVE_URL = new RegExp(
+  `^https?://huggingface\\.co/([^/]+/[^/]+)/resolve/(${SPECIAL_HUGGING_FACE_REVISION_SOURCE})/(.+)$`,
+);
+
+/** One resolve-route revision. Hugging Face reserves two slash-bearing ref shapes as path routes. */
+export function huggingFaceRevisionPath(revision: string): string {
+  return SPECIAL_HUGGING_FACE_REVISION.test(revision)
+    ? revision
+    : encodeURIComponent(revision);
+}
+
 /**
  * Reads a Hugging Face resolve URL back into the provenance it encodes.
  *
@@ -14,12 +27,20 @@ import type { ModelOrigin } from '../types';
  */
 export function parseHuggingFaceUrl(url: string | undefined): ModelOrigin | null {
   if (!url) return null;
-  const match = /^https?:\/\/huggingface\.co\/(.+?)\/resolve\/([^/]+)\/(.+)$/.exec(
-    url.split('?')[0],
-  );
+  const cleanUrl = url.split('?')[0];
+  const special = SPECIAL_HUGGING_FACE_RESOLVE_URL.exec(cleanUrl);
+  const match =
+    special ??
+    /^https?:\/\/huggingface\.co\/([^/]+\/[^/]+)\/resolve\/([^/]+)\/(.+)$/.exec(
+      cleanUrl,
+    );
   if (!match) return null;
-  const [, repoId, revision, path] = match;
+  const [, repoId, encodedRevision, path] = match;
   // A repo id is always `owner/name`; anything shallower is a URL we do not understand.
   if (repoId.split('/').length < 2) return null;
-  return { repoId, revision, path };
+  try {
+    return { repoId, revision: decodeURIComponent(encodedRevision), path };
+  } catch {
+    return null;
+  }
 }

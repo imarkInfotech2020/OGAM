@@ -12,6 +12,7 @@ import {
   VERIFIED_QUANTIZERS,
 } from '../constants';
 import { looksLikeVisionModel } from '../utils/visionModel';
+import { huggingFaceRevisionPath } from '../utils/modelOrigin';
 import { isMMProjFile, pickMmProjForDownload } from './mmproj';
 
 class HuggingFaceService {
@@ -188,7 +189,9 @@ class HuggingFaceService {
     fileName: string,
     revision: string = 'main',
   ): string {
-    return `${this.baseUrl}/${modelId}/resolve/${revision}/${fileName}`;
+    return `${this.baseUrl}/${modelId}/resolve/${huggingFaceRevisionPath(
+      revision,
+    )}/${fileName}`;
   }
 
   private determineCredibility(author: string): ModelCredibility {

@@ -36,6 +36,9 @@ export async function validateModelFile(
     if (!facts) {
       return { valid: false, reason: `Model file not found at: ${modelPath}` };
     }
+    if (!facts.isFile) {
+      return { valid: false, reason: `Model path is not a file: ${modelPath}` };
+    }
     const fileSize = facts.size;
     const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(1);
     logger.log(`[LLM] Validating model: ${modelPath}`);

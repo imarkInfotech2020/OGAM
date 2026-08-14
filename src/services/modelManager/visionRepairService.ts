@@ -4,7 +4,7 @@ import logger from '../../utils/logger';
 import { DownloadedModel, ModelFile } from '../../types';
 import { commitModelsList } from './storage';
 import { isMMProjFile } from './scan';
-import { mmProjBelongsToModel, pickMmProjForModel } from '../mmproj';
+import { canKeepMmProjLink, pickMmProjForModel } from '../mmproj';
 import { performMmProjRepairDownload } from './download';
 import { resolveVisionRepairSource } from './visionRepairSource';
 import { huggingFaceService } from '../huggingface';
@@ -78,11 +78,9 @@ export async function linkOrphanMmProj(
       : undefined;
 
     if (m.mmProjPath) {
-      // Clear the link if the stored file no longer exists OR doesn't belong to this model (strict).
-      const belongs = mmProjBelongsToModel(
-        m.fileName,
-        m.mmProjPath.split('/').pop() ?? '',
-      );
+      // Clear the link if the stored file no longer exists or cannot be paired with this model.
+      const persistedName = m.mmProjPath.split('/').pop() ?? '';
+      const belongs = canKeepMmProjLink(m.fileName, persistedName);
       const fileExists = await RNFS.exists(m.mmProjPath).catch(() => false);
       if (!fileExists || !belongs) {
         logger.log(
