@@ -403,13 +403,15 @@ function makeLlamaFake(
         }) => void,
       ) => {
         calls.completion.push([params]);
+        const scripted = pending;
+        pending = { text: '' };
         stopRequested = false; // per-completion abort flag — a fresh completion starts un-stopped
-        if (pending.throwMessage) throw new Error(pending.throwMessage);
+        if (scripted.throwMessage) throw new Error(scripted.throwMessage);
         // holdBeforeStream models PREFILL-in-progress: the completion is in flight but has emitted ZERO
         // tokens. llama cannot honor a stop mid-prefill; on release-by-stop it resolves interrupted with
         // nothing streamed — the exact device state whose empty result the tool loop mistook for a
         // normal empty reply (firing the no-tools fallback zombie).
-        if (pending.holdBeforeStream) {
+        if (scripted.holdBeforeStream) {
           await new Promise<void>(res => {
             releaseFn = res;
           });
@@ -422,28 +424,28 @@ function makeLlamaFake(
         // The final `text` carries the raw combined markers, which the app must NOT surface as the answer.
         if (
           wantsThinking &&
-          pending.reasoning != null &&
+          scripted.reasoning != null &&
           typeof onToken === 'function'
         ) {
           let accR = '';
-          for (const c of [...pending.reasoning]) {
+          for (const c of [...scripted.reasoning]) {
             if (stopRequested) break;
             accR += c;
             onToken({ token: c, reasoning_content: accR });
           }
           let accC = '';
-          for (const c of [...pending.text]) {
+          for (const c of [...scripted.text]) {
             if (stopRequested) break;
             accC += c;
             onToken({ token: c, content: accC, reasoning_content: accR });
           }
           if (!stopRequested) {
-            const metaR = pending.completionMeta ?? {};
+            const metaR = scripted.completionMeta ?? {};
             return {
-              text: `<|channel>thought\n${pending.reasoning}<channel|>${pending.text}`,
-              content: pending.text,
-              reasoning_content: pending.reasoning,
-              tool_calls: pending.toolCalls,
+              text: `<|channel>thought\n${scripted.reasoning}<channel|>${scripted.text}`,
+              content: scripted.text,
+              reasoning_content: scripted.reasoning,
+              tool_calls: scripted.toolCalls,
               tokens_predicted: metaR.tokens_predicted ?? 8,
               tokens_evaluated: 4,
               stopped_eos: metaR.stopped_eos ?? true,
@@ -457,9 +459,9 @@ function makeLlamaFake(
         // caller left enable_thinking on for a request that shouldn't reason (B30 enhancement), it gets the
         // reasoning dump; disabling thinking yields the clean text. Emergent from the caller's own decision.
         const outText =
-          wantsThinking && pending.thinkingText != null
-            ? pending.thinkingText
-            : pending.text;
+          wantsThinking && scripted.thinkingText != null
+            ? scripted.thinkingText
+            : scripted.text;
         if (outText && typeof onToken === 'function') {
           // Char-by-char streaming so a pauseAfter lands EXACTLY (never spanning a delimiter like </think>).
           const chars = [...outText];
@@ -470,9 +472,9 @@ function makeLlamaFake(
             acc += c;
             onToken({ token: c, content: acc });
             if (
-              pending.pauseAfter &&
+              scripted.pauseAfter &&
               !paused &&
-              acc.endsWith(pending.pauseAfter)
+              acc.endsWith(scripted.pauseAfter)
             ) {
               paused = true;
               await new Promise<void>(res => {
@@ -485,10 +487,10 @@ function makeLlamaFake(
         // streamed (B13 wire: tokens flow, then `llama_decode: failed to decode, ret = -1` →
         // "Failed to evaluate chunks"). Distinct from throwMessage (fails at the very start): throwAfter
         // reproduces the case where the spinner is already up + streaming when the runtime dies.
-        if (pending.throwAfter) throw new Error(pending.throwAfter);
+        if (scripted.throwAfter) throw new Error(scripted.throwAfter);
         // Defaults model a NORMAL complete turn (stopped on EOS, under the cap); a scripted completionMeta
         // overrides them to model a truncated turn (B15: stopped_eos=false, stopped_limit=1 at n_predict).
-        const meta = pending.completionMeta ?? {};
+        const meta = scripted.completionMeta ?? {};
         // An aborted completion carries the device wire shape: interrupted=true, no EOS, and only
         // what streamed before the stop (tool_calls are dropped — the turn never finished them).
         if (stopRequested) {
@@ -508,7 +510,7 @@ function makeLlamaFake(
         return {
           text: outText,
           content: outText,
-          tool_calls: pending.toolCalls,
+          tool_calls: scripted.toolCalls,
           tokens_predicted: meta.tokens_predicted ?? 8,
           tokens_evaluated: 4,
           stopped_eos: meta.stopped_eos ?? true,
