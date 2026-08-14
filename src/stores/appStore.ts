@@ -10,6 +10,7 @@ import {
   mobileModelSettingPatch,
 } from '../services/sync/mutation';
 import { createProAccessSlice, type ProAccessSlice } from './proAccessSlice';
+import { defaultImageSteps } from '../utils/imageGenAdvice';
 
 function isUnknownLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
@@ -204,7 +205,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   imageGenerationMode: 'auto' as ImageGenerationMode,
   autoDetectMethod: 'pattern' as AutoDetectMethod,
   classifierModelId: null,
-  imageSteps: Platform.OS === 'ios' ? 20 : 8,
+  imageSteps: defaultImageSteps(Platform.OS),
   imageGuidanceScale: 7.5,
   imageThreads: 4,
   imageWidth: 512,

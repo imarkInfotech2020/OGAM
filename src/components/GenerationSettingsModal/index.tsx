@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { Platform, View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../AppSheet';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -10,7 +10,11 @@ import { ConversationActionsSection } from './ConversationActionsSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
-import { SWEET_SPOT_SIZE, DEFAULT_IMAGE_GUIDANCE, DEFAULT_IMAGE_STEPS } from '../../utils/imageGenAdvice';
+import {
+  SWEET_SPOT_SIZE,
+  DEFAULT_IMAGE_GUIDANCE,
+  defaultImageSteps,
+} from '../../utils/imageGenAdvice';
 
 const DEFAULT_SETTINGS = {
   temperature: 0.7,
@@ -25,7 +29,7 @@ const DEFAULT_SETTINGS = {
   imageWidth: SWEET_SPOT_SIZE,
   imageHeight: SWEET_SPOT_SIZE,
   imageGuidanceScale: DEFAULT_IMAGE_GUIDANCE,
-  imageSteps: DEFAULT_IMAGE_STEPS,
+  imageSteps: defaultImageSteps(Platform.OS),
 };
 
 interface GenerationSettingsModalProps {

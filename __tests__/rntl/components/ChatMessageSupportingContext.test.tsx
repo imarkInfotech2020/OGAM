@@ -14,15 +14,43 @@ import type { Message } from '../../../src/types';
 afterEach(_clearSlotsForTesting);
 
 describe('<ChatMessage/> supporting context', () => {
+  const renderItem = (item: Message) =>
+    render(
+      <MessageRenderer
+        item={item}
+        index={0}
+        displayMessagesLength={1}
+        animateLastN={0}
+        imageModelLoaded={false}
+        isStreaming={false}
+        isGeneratingImage={false}
+        showGenerationDetails={false}
+        onCopy={jest.fn()}
+        onRetry={jest.fn()}
+        onEdit={jest.fn()}
+        onGenerateImage={jest.fn()}
+        onImagePress={jest.fn()}
+      />,
+    );
+
+  const enhancedPrompt: Message = {
+    id: 'enhanced-prompt',
+    role: 'assistant',
+    content:
+      '<think>__LABEL:Enhanced prompt__\nA cinematic lighthouse in a winter storm.</think>',
+    timestamp: Date.UTC(2026, 7, 13, 9, 0, 0),
+  };
+
+  it('keeps an enhanced prompt inside an assistant bubble before the image result exists', () => {
+    const view = renderItem(enhancedPrompt);
+
+    expect(view.getByTestId('message-bubble')).toBeTruthy();
+    expect(view.getByText('Enhanced prompt')).toBeTruthy();
+    expect(view.queryByText('•••')).toBeNull();
+  });
+
   it('renders the enhanced prompt, image, and caption in one result bubble', () => {
     registerSlot(SLOTS.messageSpeakButton, () => <Text>Speak</Text>);
-    const enhancedPrompt: Message = {
-      id: 'enhanced-prompt',
-      role: 'assistant',
-      content:
-        '<think>__LABEL:Enhanced prompt__\nA cinematic lighthouse in a winter storm.</think>',
-      timestamp: Date.UTC(2026, 7, 13, 9, 0, 0),
-    };
     const imageResult: Message = {
       id: 'image-result',
       role: 'assistant',
@@ -45,23 +73,7 @@ describe('<ChatMessage/> supporting context', () => {
       isStreamingForThisConversation: false,
     });
 
-    const view = render(
-      <MessageRenderer
-        item={item}
-        index={0}
-        displayMessagesLength={1}
-        animateLastN={0}
-        imageModelLoaded={false}
-        isStreaming={false}
-        isGeneratingImage={false}
-        showGenerationDetails={false}
-        onCopy={jest.fn()}
-        onRetry={jest.fn()}
-        onEdit={jest.fn()}
-        onGenerateImage={jest.fn()}
-        onImagePress={jest.fn()}
-      />,
-    );
+    const view = renderItem(item);
 
     const bubble = view.getByTestId('message-bubble');
     const result = within(bubble);
@@ -84,5 +96,31 @@ describe('<ChatMessage/> supporting context', () => {
     expect(tree.indexOf('generated-image')).toBeLessThan(
       tree.indexOf('Generated image for: a lighthouse in a winter storm'),
     );
+  });
+
+  it('shows an image loader in the result bubble until synced image bytes arrive', () => {
+    const imageResult: Message = {
+      id: 'image-result',
+      uuid: 'image-result-uuid',
+      role: 'assistant',
+      content: 'Generated image for: a lighthouse in a winter storm',
+      timestamp: Date.UTC(2026, 7, 13, 9, 1, 0),
+    };
+    const [item] = getDisplayMessages([enhancedPrompt, imageResult], {
+      isThinking: false,
+      streamingMessage: '',
+      streamingReasoningContent: '',
+      isStreamingForThisConversation: false,
+    });
+
+    const view = renderItem(item);
+    const result = within(view.getByTestId('message-bubble'));
+
+    expect(result.getByText('Enhanced prompt')).toBeTruthy();
+    expect(result.getByTestId('attachment-pending-0')).toBeTruthy();
+    expect(
+      result.getByText('Generated image for: a lighthouse in a winter storm'),
+    ).toBeTruthy();
+    expect(view.getAllByTestId('assistant-message')).toHaveLength(1);
   });
 });

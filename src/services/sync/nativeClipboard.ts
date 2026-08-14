@@ -61,7 +61,9 @@ export const nativeClipboardBoundary: NativeClipboardBoundary = {
         if (typeof change.text !== 'string' || typeof change.ts !== 'number') {
           return;
         }
-        listener({ text: change.text, ts: change.ts });
+        const timestamp = Math.trunc(change.ts);
+        if (!Number.isSafeInteger(timestamp)) return;
+        listener({ text: change.text, ts: timestamp });
       },
     );
     nativeModule.setEnabled(true);

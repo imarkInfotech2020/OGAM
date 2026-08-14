@@ -119,6 +119,7 @@ describe('Pro mobile knowledge document sync journey', () => {
 
     const remoteProjectId = '11111111-1111-4111-8111-111111111111';
     const remoteDocumentId = '22222222-2222-4222-8222-222222222222';
+    const prePairProjectId = '33333333-3333-4333-8333-333333333333';
     const createdAt = '2026-07-28T08:00:00.000Z';
     const remoteBytes = Buffer.from(
       'The OGAD launch brief says the private beta begins on Thursday.',
@@ -151,6 +152,12 @@ describe('Pro mobile knowledge document sync journey', () => {
     );
     resetDiscoveryBoundaries();
     await AsyncStorage.clear();
+    // An older build could persist Projects as off. The shared catalogue now owns this rule, so that
+    // obsolete host value must neither survive loading nor stop the document bytes below.
+    await AsyncStorage.setItem(
+      'offgrid-sync-preferences-v1',
+      JSON.stringify({ projects: false }),
+    );
     _clearHooksForTesting();
     useSyncStore.getState().reset();
     useChatStore.getState().clearAllConversations();
@@ -213,6 +220,7 @@ describe('Pro mobile knowledge document sync journey', () => {
       onAppMessage: (deviceId: string, channel: string, data: unknown) => {
         if (channel === 'state') remoteState.onMessage(deviceId, data);
       },
+      onPaired: (device: { id: string }) => remoteState.onConnect(device.id),
     });
     remoteState = new StateSync({
       oplog: remoteLog,
@@ -251,7 +259,6 @@ describe('Pro mobile knowledge document sync journey', () => {
     knowledgeDocumentSyncService.start({
       recordStateMutation: (mutation: unknown) =>
         stateSyncService.recordMutation(mutation),
-      canShareDocuments: () => stateSyncService.preferences().projects,
     });
 
     let view: ReturnType<typeof rtl.render> | undefined;
@@ -259,7 +266,19 @@ describe('Pro mobile knowledge document sync journey', () => {
       await remote.engine.start(0);
       remoteDevice.port = remote.transport.boundPort ?? 0;
       await stateSyncService.start();
+      expect(stateSyncService.preferences().projects).toBe(true);
       await syncService.start();
+
+      const prePairPath = '/docs/phone-before-pair.txt';
+      const prePairText =
+        'This knowledge document existed on the phone before the desktop paired.';
+      await RNFS.writeFile(prePairPath, prePairText, 'utf8');
+      await ragService.indexDocument({
+        projectId: prePairProjectId,
+        filePath: prePairPath,
+        fileName: 'phone-before-pair.txt',
+        fileSize: Buffer.byteLength(prePairText),
+      });
 
       const mobile = useSyncStore.getState().thisDevice;
       const discovery = getDiscoveryBoundaries().at(-1);
@@ -289,6 +308,27 @@ describe('Pro mobile knowledge document sync journey', () => {
             ),
         'Mobile and Desktop did not reach connected state',
       );
+      await waitForCondition(
+        () =>
+          receivedByDesktop.some(
+            transfer =>
+              transfer.request.payload.metadata.name ===
+              'phone-before-pair.txt',
+          ),
+        'Desktop did not receive the knowledge document that existed before pairing',
+      );
+      const prePairTransfer = receivedByDesktop.find(
+        transfer =>
+          transfer.request.payload.metadata.name === 'phone-before-pair.txt',
+      );
+      expect(prePairTransfer?.bytes.toString('utf8')).toBe(prePairText);
+      await waitForCondition(
+        () =>
+          [...remoteRecords.values()].some(
+            fields => fields.name === 'phone-before-pair.txt',
+          ),
+        'Desktop did not receive the durable control for the pre-pair document',
+      );
 
       const remoteChecksum = new IncrementalChecksum();
       remoteChecksum.update(remoteBytes);
@@ -301,7 +341,12 @@ describe('Pro mobile knowledge document sync journey', () => {
         read: async (offset: number, length: number) =>
           new Uint8Array(remoteBytes.subarray(offset, offset + length)),
       });
-      expect(await ragService.getAllDocumentsForSync()).toHaveLength(0);
+      expect(
+        (await ragService.getAllDocumentsForSync()).some(
+          (document: { syncId: string }) =>
+            document.syncId === remoteDocumentId,
+        ),
+      ).toBe(false);
 
       const projectOp = remoteLog.record('project', remoteProjectId, 'put', {
         name: 'OGAD',
@@ -324,7 +369,11 @@ describe('Pro mobile knowledge document sync journey', () => {
       });
 
       await waitForCondition(
-        async () => (await ragService.getAllDocumentsForSync()).length === 1,
+        async () =>
+          (await ragService.getAllDocumentsForSync()).some(
+            (document: { syncId: string }) =>
+              document.syncId === remoteDocumentId,
+          ),
         'Mobile did not index the streamed Desktop document',
       );
       expect(await ragService.getDocumentsByProject(remoteProjectId)).toEqual([
@@ -352,7 +401,12 @@ describe('Pro mobile knowledge document sync journey', () => {
       // Reconnect backfill may offer a document again. The receiver proves it already has the same
       // checksum and resumes at the end, so no payload crosses the mesh and no document is re-indexed.
       expect(repeatedReads).toBe(0);
-      expect(await ragService.getAllDocumentsForSync()).toHaveLength(1);
+      expect(
+        (await ragService.getAllDocumentsForSync()).filter(
+          (document: { syncId: string }) =>
+            document.syncId === remoteDocumentId,
+        ),
+      ).toHaveLength(1);
 
       view = renderApp();
       rtl.fireEvent.press(view.getByTestId('projects-tab'));

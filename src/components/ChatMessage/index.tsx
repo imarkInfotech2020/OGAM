@@ -365,8 +365,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   }
   if (isSupportingContext) {
     const supportingContextView = (
-      <View style={[styles.container, styles.assistantContainer]}>
-        <View style={styles.toolCallReplyContent}>
+      <View
+        testID="assistant-message"
+        style={[styles.container, styles.assistantContainer]}
+      >
+        <View testID="message-bubble" style={bubbleStyle}>
           <ThinkingBlock
             parsedContent={parsedContent}
             showThinking={showThinking}

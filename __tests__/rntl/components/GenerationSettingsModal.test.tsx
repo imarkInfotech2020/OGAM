@@ -247,7 +247,7 @@ describe('GenerationSettingsModal', () => {
       imageWidth: 256,
       imageHeight: 256,
       imageGuidanceScale: 7.5,
-      imageSteps: 8,
+      imageSteps: 50,
     });
   });
 

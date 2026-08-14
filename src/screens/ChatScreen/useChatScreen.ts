@@ -2,25 +2,59 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
-import { useAppStore, useChatStore, useProjectStore, useRemoteServerStore } from '../../stores';
+import {
+  useAppStore,
+  useChatStore,
+  useProjectStore,
+  useRemoteServerStore,
+} from '../../stores';
 import { useSyncIdentityStore } from '../../stores/syncIdentityStore';
 import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
 import { useActiveTextModel } from '../../hooks/useActiveTextModel';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
-  llmService, generationService, imageGenerationService,
-  ImageGenerationState, hardwareService, QueuedMessage,
+  llmService,
+  generationService,
+  imageGenerationService,
+  ImageGenerationState,
+  hardwareService,
+  QueuedMessage,
   contextCompactionService,
 } from '../../services';
 import { effectiveCacheType } from '../../services/llmHelpers';
 import { generationSession } from '../../services/generationSession';
 import { useGeneratingConversationId } from '../../hooks/useGenerationSession';
-import { Message, MediaAttachment, Project, DownloadedModel, DebugInfo, RemoteModel } from '../../types';
+import {
+  Message,
+  MediaAttachment,
+  Project,
+  DownloadedModel,
+  DebugInfo,
+  RemoteModel,
+} from '../../types';
 import { RootStackParamList } from '../../navigation/types';
-import { ensureModelLoadedFn, ensureTextModelForChatFn, handleModelSelectFn, handleUnloadModelFn, useChatImageModelEffects, useChatModelStateSync } from './useChatModelActions';
+import {
+  ensureModelLoadedFn,
+  ensureTextModelForChatFn,
+  handleModelSelectFn,
+  handleUnloadModelFn,
+  useChatImageModelEffects,
+  useChatModelStateSync,
+} from './useChatModelActions';
 import { reloadTextModel } from './reloadTextModel';
-import { startGenerationFn, handleSendFn, handleStopFn, handleSelectProjectFn, dispatchGenerationFn } from './useChatGenerationActions';
-import { handleRetryMessageFn, handleEditMessageFn, handleDeleteConversationFn, handleGenerateImageFromMsgFn } from './useChatMessageHandlers';
+import {
+  startGenerationFn,
+  handleSendFn,
+  handleStopFn,
+  handleSelectProjectFn,
+  dispatchGenerationFn,
+} from './useChatGenerationActions';
+import {
+  handleRetryMessageFn,
+  handleEditMessageFn,
+  handleDeleteConversationFn,
+  handleGenerateImageFromMsgFn,
+} from './useChatMessageHandlers';
 import { getDisplayMessages } from './types';
 import { saveImageToGallery } from './useSaveImage';
 import { needsVisionRepair } from '../../utils/visionRepair';
@@ -59,21 +93,32 @@ export function computePendingSettings(
 ): boolean {
   if (!loadedSettings) return false;
   // Pending only if BOTH sides are defined AND differ.
-  const changed = (live: unknown, loaded: unknown) => loaded !== undefined && live !== loaded;
+  const changed = (live: unknown, loaded: unknown) =>
+    loaded !== undefined && live !== loaded;
   if (engine === 'litert') {
     // Compare the EFFECTIVE token budget (unset = native default 4096) so an
     // undefined→explicit change still flags a reload (mirror of the false-positive fix).
     const liveTokens = (settings.liteRTMaxTokens as number | undefined) ?? 4096;
-    const loadedTokens = (loadedSettings.liteRTMaxTokens as number | undefined) ?? 4096;
-    return changed(settings.liteRTBackend, loadedSettings.liteRTBackend) ||
-           (loadedSettings.liteRTBackend !== undefined && liveTokens !== loadedTokens);
+    const loadedTokens =
+      (loadedSettings.liteRTMaxTokens as number | undefined) ?? 4096;
+    return (
+      changed(settings.liteRTBackend, loadedSettings.liteRTBackend) ||
+      (loadedSettings.liteRTBackend !== undefined &&
+        liveTokens !== loadedTokens)
+    );
   }
   // Compare the EFFECTIVE cache on BOTH sides (OpenCL + HTP coerce to f16). Comparing the
   // effective live value against the RAW stored value falsely flagged "settings changed"
   // right after every accelerated load (live f16 vs stored q8_0). Symmetric via the single
   // llmHelpers source — also robust to snapshots persisted before this fix.
-  const effCache = effectiveCacheType(settings.inferenceBackend as string | undefined, settings.cacheType as string | undefined);
-  const loadedEffCache = effectiveCacheType(loadedSettings.inferenceBackend as string | undefined, loadedSettings.cacheType as string | undefined);
+  const effCache = effectiveCacheType(
+    settings.inferenceBackend as string | undefined,
+    settings.cacheType as string | undefined,
+  );
+  const loadedEffCache = effectiveCacheType(
+    loadedSettings.inferenceBackend as string | undefined,
+    loadedSettings.cacheType as string | undefined,
+  );
   return (
     changed(settings.nThreads, loadedSettings.nThreads) ||
     changed(settings.nBatch, loadedSettings.nBatch) ||
@@ -94,7 +139,9 @@ export const useChatScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<ChatScreenRouteProp>();
   const [isModelLoading, setIsModelLoading] = useState(false);
-  const [loadingModel, setLoadingModel] = useState<DownloadedModel | null>(null);
+  const [loadingModel, setLoadingModel] = useState<DownloadedModel | null>(
+    null,
+  );
   const [supportsVision, setSupportsVision] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
@@ -108,16 +155,23 @@ export const useChatScreen = () => {
   const [queueCount, setQueueCount] = useState(0);
   const [queuedTexts, setQueuedTexts] = useState<string[]>([]);
   const [viewerImageUri, setViewerImageUri] = useState<string | null>(null);
-  const [imageGenState, setImageGenState] = useState<ImageGenerationState>(imageGenerationService.getState());
+  const [imageGenState, setImageGenState] = useState<ImageGenerationState>(
+    imageGenerationService.getState(),
+  );
   const [supportsToolCalling, setSupportsToolCalling] = useState(false);
   const [supportsThinking, setSupportsThinking] = useState(false);
   const [isCompacting, setIsCompacting] = useState(false);
-  const [pendingProjectId, setPendingProjectId] = useState<string | undefined>(route.params?.projectId);
+  const [pendingProjectId, setPendingProjectId] = useState<string | undefined>(
+    route.params?.projectId,
+  );
   const lastMessageCountRef = useRef(0);
   // Owned by the generationSession service (single owner); observed reactively here.
   const generatingConversationId = useGeneratingConversationId();
   // Stashed when the model selector opens with no text model; replayed on pick.
-  const pendingMessageRef = useRef<{ text: string; attachments?: MediaAttachment[] } | null>(null);
+  const pendingMessageRef = useRef<{
+    text: string;
+    attachments?: MediaAttachment[];
+  } | null>(null);
 
   // The text model is intentionally NOT loaded on chat open. It loads lazily on
   // send, when the generation path recognizes a local text model is needed
@@ -135,43 +189,71 @@ export const useChatScreen = () => {
     const unsubRemove = navigation.addListener('beforeRemove', () => {
       callHook(HOOKS.audioStop);
     });
-    const appStateSub = AppState.addEventListener('change', (nextState) => {
+    const appStateSub = AppState.addEventListener('change', nextState => {
       if (nextState !== 'active') {
         callHook(HOOKS.audioOnAppBackground);
       } else {
         callHook(HOOKS.audioOnAppForeground);
       }
     });
-    return () => { unsubBlur(); unsubRemove(); appStateSub.remove(); };
+    return () => {
+      unsubBlur();
+      unsubRemove();
+      appStateSub.remove();
+    };
   }, [navigation]);
   const modelLoadStartTimeRef = useRef<number | null>(null);
-  const startGenerationRef = useRef<(id: string, text: string) => Promise<void>>(null as any);
+  const startGenerationRef = useRef<
+    (id: string, text: string) => Promise<void>
+  >(null as any);
   // Always-current genDeps for the queue drain (avoids a stale-closure capture).
   const genDepsRef = useRef<any>(null);
 
   const {
-    activeModelId, downloadedModels, settings, activeImageModelId,
-    downloadedImageModels, setDownloadedImageModels,
+    activeModelId,
+    downloadedModels,
+    settings,
+    activeImageModelId,
+    downloadedImageModels,
+    setDownloadedImageModels,
     setIsGeneratingImage: setAppIsGeneratingImage,
     setImageGenerationStatus: setAppImageGenerationStatus,
-    removeImagesByConversationId, loadedSettings, textModelEvicted,
+    removeImagesByConversationId,
+    loadedSettings,
+    textModelEvicted,
   } = useAppStore();
 
   // Remote model state - use proper selectors for reactivity
-  const activeServerId = useRemoteServerStore((s) => s.activeServerId);
-  const activeRemoteTextModelId = useRemoteServerStore((s) => s.activeRemoteTextModelId);
-  const discoveredModels = useRemoteServerStore((s) => s.discoveredModels);
+  const activeServerId = useRemoteServerStore(s => s.activeServerId);
+  const activeRemoteTextModelId = useRemoteServerStore(
+    s => s.activeRemoteTextModelId,
+  );
+  const discoveredModels = useRemoteServerStore(s => s.discoveredModels);
 
   const {
-    activeConversationId, conversations, createConversation, addMessage,
-    updateMessageContent, updateMessageTurnKind, deleteMessagesAfter, streamingMessage, streamingReasoningContent,
-    streamingForConversationId, isStreaming, isThinking, clearStreamingMessage,
-    deleteConversation, setActiveConversation, setConversationProject,
+    activeConversationId,
+    conversations,
+    createConversation,
+    addMessage,
+    updateMessageContent,
+    updateMessageTurnKind,
+    deleteMessagesAfter,
+    streamingMessage,
+    streamingReasoningContent,
+    streamingForConversationId,
+    isStreaming,
+    isThinking,
+    clearStreamingMessage,
+    deleteConversation,
+    setActiveConversation,
+    setConversationProject,
   } = useChatStore();
 
   const { projects, getProject } = useProjectStore();
 
-  const activeConversation = conversations.find(c => c.id === activeConversationId);
+  const activeConversation = conversations.find(
+    c => c.id === activeConversationId,
+  );
 
   // Which text model is active, from the ONE hook that answers it (remote preferred over local, local
   // resolved by activeModelService). This screen used to re-derive it with its own copy of the rule,
@@ -179,17 +261,27 @@ export const useChatScreen = () => {
   const activeModelInfo: ActiveModelInfo = useActiveTextModel();
 
   // activeModel is for LOCAL models only (for file path, memory checks, etc.)
-  const activeModel = activeModelInfo.isRemote ? undefined : (activeModelInfo.model as DownloadedModel | undefined);
-  const activeRemoteModel = activeModelInfo.isRemote ? (activeModelInfo.model as RemoteModel | null) : null;
+  const activeModel = activeModelInfo.isRemote
+    ? undefined
+    : (activeModelInfo.model as DownloadedModel | undefined);
+  const activeRemoteModel = activeModelInfo.isRemote
+    ? (activeModelInfo.model as RemoteModel | null)
+    : null;
   const hasTextModel = activeModelInfo.modelId !== null;
   const hasActiveModel = hasTextModel || !!activeImageModelId;
   const activeModelName = activeModelInfo.modelName;
   const availableDownloadedTextModels = useMemo(
-    () => downloadedModels.filter(model => !isSuspiciousRecoveredTextModel(model)),
+    () =>
+      downloadedModels.filter(model => !isSuspiciousRecoveredTextModel(model)),
     [downloadedModels],
   );
   const availableDownloadedImageModels = useMemo(
-    () => downloadedImageModels.filter(model => !isSuspiciousRecoveredImageModel(model) && !isUnsupportedJetsamImageModel(model)),
+    () =>
+      downloadedImageModels.filter(
+        model =>
+          !isSuspiciousRecoveredImageModel(model) &&
+          !isUnsupportedJetsamImageModel(model),
+      ),
     [downloadedImageModels],
   );
   const hasAvailableModels =
@@ -198,22 +290,59 @@ export const useChatScreen = () => {
     discoveredModels[activeServerId || '']?.length > 0 ||
     Object.values(discoveredModels).some(models => models.length > 0);
 
-  const effectiveProjectId = activeConversation ? activeConversation.projectId : pendingProjectId;
-  const activeProject = effectiveProjectId ? getProject(effectiveProjectId) : null;
-  const activeImageModel = downloadedImageModels.find(m => m.id === activeImageModelId);
+  const effectiveProjectId = activeConversation
+    ? activeConversation.projectId
+    : pendingProjectId;
+  const activeProject = effectiveProjectId
+    ? getProject(effectiveProjectId)
+    : null;
+  const activeImageModel = downloadedImageModels.find(
+    m => m.id === activeImageModelId,
+  );
   const imageModelLoaded = !!activeImageModel;
   const isGeneratingImage = imageGenState.isGenerating;
-  const isStreamingForThisConversation = streamingForConversationId === activeConversationId;
+  const isStreamingForThisConversation =
+    streamingForConversationId === activeConversationId;
 
   const genDeps = {
-    activeModelId: activeModelInfo.modelId, activeModel, activeModelInfo, hasActiveModel, hasTextModel, supportsToolCalling, activeConversationId, activeConversation, activeProject,
-    activeImageModel, imageModelLoaded, isStreaming, isGeneratingImage, imageGenState, settings,
-    downloadedModels, setAlertState, setIsClassifying, setAppImageGenerationStatus,
-    setAppIsGeneratingImage, addMessage, clearStreamingMessage, deleteConversation,
-    setActiveConversation, removeImagesByConversationId, navigation, setShowSettingsPanel,
-    ensureModelLoaded: async (onLoadedResume?: () => void) => ensureModelLoadedFn(modelDeps, onLoadedResume),
-    ensureTextModelForChat: () => ensureTextModelForChatFn({ setShowModelSelector, setLoadingModel, setIsModelLoading }),
-    setPendingMessage: (text: string, attachments?: MediaAttachment[]) => { pendingMessageRef.current = { text, attachments }; },
+    activeModelId: activeModelInfo.modelId,
+    activeModel,
+    activeModelInfo,
+    hasActiveModel,
+    hasTextModel,
+    supportsToolCalling,
+    activeConversationId,
+    activeConversation,
+    activeProject,
+    activeImageModel,
+    imageModelLoaded,
+    isStreaming,
+    isGeneratingImage,
+    imageGenState,
+    settings,
+    downloadedModels,
+    setAlertState,
+    setIsClassifying,
+    setAppImageGenerationStatus,
+    setAppIsGeneratingImage,
+    addMessage,
+    clearStreamingMessage,
+    deleteConversation,
+    setActiveConversation,
+    removeImagesByConversationId,
+    navigation,
+    setShowSettingsPanel,
+    ensureModelLoaded: async (onLoadedResume?: () => void) =>
+      ensureModelLoadedFn(modelDeps, onLoadedResume),
+    ensureTextModelForChat: () =>
+      ensureTextModelForChatFn({
+        setShowModelSelector,
+        setLoadingModel,
+        setIsModelLoading,
+      }),
+    setPendingMessage: (text: string, attachments?: MediaAttachment[]) => {
+      pendingMessageRef.current = { text, attachments };
+    },
     updateMessageTurnKind,
     createConversation,
     pendingProjectId,
@@ -221,16 +350,34 @@ export const useChatScreen = () => {
   genDepsRef.current = genDeps;
 
   const modelDeps = {
-    activeModel, activeModelId: activeModelInfo.modelId, activeModelInfo, hasActiveModel, activeConversationId, isStreaming, settings,
-    clearStreamingMessage, createConversation, addMessage,
-    setIsModelLoading, setLoadingModel, setSupportsVision, setShowModelSelector,
-    setAlertState, modelLoadStartTimeRef,
+    activeModel,
+    activeModelId: activeModelInfo.modelId,
+    activeModelInfo,
+    hasActiveModel,
+    activeConversationId,
+    isStreaming,
+    settings,
+    clearStreamingMessage,
+    createConversation,
+    addMessage,
+    setIsModelLoading,
+    setLoadingModel,
+    setSupportsVision,
+    setShowModelSelector,
+    setAlertState,
+    modelLoadStartTimeRef,
   };
 
   useEffect(() => {
-    const unsub1 = imageGenerationService.subscribe(state => setImageGenState(state));
-    const unsub2 = contextCompactionService.subscribeCompacting(setIsCompacting);
-    return () => { unsub1(); unsub2(); };
+    const unsub1 = imageGenerationService.subscribe(state =>
+      setImageGenState(state),
+    );
+    const unsub2 =
+      contextCompactionService.subscribeCompacting(setIsCompacting);
+    return () => {
+      unsub1();
+      unsub2();
+    };
   }, []);
 
   useEffect(() => {
@@ -244,8 +391,16 @@ export const useChatScreen = () => {
   const handleQueuedSend = useCallback(async (item: QueuedMessage) => {
     // Pass the queued send's forced modality (imageMode) so a message the user forced to image mode
     // is dispatched as image, not re-decided at 'auto' by resolveTurnKind (#510).
-    await dispatchGenerationFn(genDepsRef.current,
-      { text: item.text, attachments: item.attachments, conversationId: item.conversationId, imageMode: item.imageMode }, startGenerationRef.current);
+    await dispatchGenerationFn(
+      genDepsRef.current,
+      {
+        text: item.text,
+        attachments: item.attachments,
+        conversationId: item.conversationId,
+        imageMode: item.imageMode,
+      },
+      startGenerationRef.current,
+    );
   }, []);
 
   useEffect(() => {
@@ -255,8 +410,11 @@ export const useChatScreen = () => {
 
   useEffect(() => {
     const { conversationId } = route.params || {};
-    if (conversationId) { setActiveConversation(conversationId); }
-    else { setActiveConversation(null); }
+    if (conversationId) {
+      setActiveConversation(conversationId);
+    } else {
+      setActiveConversation(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.conversationId]);
 
@@ -266,31 +424,74 @@ export const useChatScreen = () => {
 
   useEffect(() => {
     // Switched away from the conversation that was generating → end its session.
-    if (generationSession.getConversationId() && !generationSession.isGeneratingFor(activeConversationId)) {
+    if (
+      generationSession.getConversationId() &&
+      !generationSession.isGeneratingFor(activeConversationId)
+    ) {
       generationSession.end('conversation-switch');
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      if (!cancelled && llmService.isModelLoaded()) { llmService.clearKVCache(false).catch(() => { }); }
+      if (!cancelled && llmService.isModelLoaded()) {
+        llmService.clearKVCache(false).catch(() => {});
+      }
     }, 0);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [activeConversationId]);
 
-  useChatImageModelEffects({ setDownloadedImageModels, settings, activeImageModelId, downloadedModels });
-  useChatModelStateSync({ activeModelInfo, activeModelId, activeModel, modelDeps, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking });
+  useChatImageModelEffects({
+    setDownloadedImageModels,
+    settings,
+    activeImageModelId,
+    downloadedModels,
+  });
+  useChatModelStateSync({
+    activeModelInfo,
+    activeModelId,
+    activeModel,
+    modelDeps,
+    activeRemoteModel,
+    activeRemoteTextModelId,
+    isModelLoading,
+    setSupportsVision,
+    setSupportsToolCalling,
+    setSupportsThinking,
+  });
 
-  const isGeneratingForThisConversation = generatingConversationId != null && generatingConversationId === activeConversationId;
+  const isGeneratingForThisConversation =
+    generatingConversationId != null &&
+    generatingConversationId === activeConversationId;
   // Replies generating on paired devices. Empty unless Pro's chat-stream service is running.
   const remotePreviews = useRemoteChatStreamPreviews(activeConversationId);
   const localDeviceId = useSyncIdentityStore(s => s.localDeviceId);
-  const displayMessages = getDisplayMessages(activeConversation?.messages || [], { isThinking, streamingMessage, streamingReasoningContent, isStreamingForThisConversation, isModelLoading, loadingModelName: loadingModel?.name, isGeneratingForThisConversation, remotePreviews, localDeviceId });
+  const displayMessages = getDisplayMessages(
+    activeConversation?.messages || [],
+    {
+      isThinking,
+      streamingMessage,
+      streamingReasoningContent,
+      isStreamingForThisConversation,
+      isModelLoading,
+      loadingModelName: loadingModel?.name,
+      isGeneratingForThisConversation,
+      remotePreviews,
+      localDeviceId,
+    },
+  );
 
   useEffect(() => {
-    const prev = lastMessageCountRef.current, curr = displayMessages.length;
+    const prev = lastMessageCountRef.current,
+      curr = displayMessages.length;
     if (curr > prev && prev > 0) setAnimateLastN(curr - prev);
     lastMessageCountRef.current = curr;
   }, [displayMessages.length]);
-  useEffect(() => { lastMessageCountRef.current = 0; setAnimateLastN(0); }, [activeConversationId]);
+  useEffect(() => {
+    lastMessageCountRef.current = 0;
+    setAnimateLastN(0);
+  }, [activeConversationId]);
   const prevStreamingRef = useRef(false);
 
   // NOTE: stopping stale TTS on a new turn is done in handleSendFn (and retry/
@@ -309,14 +510,27 @@ export const useChatScreen = () => {
     callHook(HOOKS.audioOnStreamingEnd, activeConversationId);
   }, [isStreamingForThisConversation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startGeneration = async (targetConversationId: string, messageText: string) => {
-    await startGenerationFn(genDeps, { setDebugInfo, targetConversationId, messageText });
+  const startGeneration = async (
+    targetConversationId: string,
+    messageText: string,
+  ) => {
+    await startGenerationFn(genDeps, {
+      setDebugInfo,
+      targetConversationId,
+      messageText,
+    });
   };
   startGenerationRef.current = startGeneration;
-  const enabledTools = supportsToolCalling ? (settings.enabledTools || []) : [];
+  const enabledTools = supportsToolCalling ? settings.enabledTools || [] : [];
   const handleToggleTool = (toolId: string) => {
     const cur = settings.enabledTools || [];
-    useAppStore.getState().updateSettings({ enabledTools: cur.includes(toolId) ? cur.filter((id: string) => id !== toolId) : [...cur, toolId] });
+    useAppStore
+      .getState()
+      .updateSettings({
+        enabledTools: cur.includes(toolId)
+          ? cur.filter((id: string) => id !== toolId)
+          : [...cur, toolId],
+      });
   };
   // Whether settings changed since the model was loaded (drives the reload banner).
   //
@@ -324,9 +538,11 @@ export const useChatScreen = () => {
   // model: with nothing selected the banner still appeared, and its tap correctly refused
   // ("[ModelReload] ignored: modelId=none"), which reads as a dead button. One predicate for the
   // offer and the action, so they cannot disagree. Nothing else consults this flag.
-  const canReloadTextModel = Boolean(activeModelInfo.modelId) && !activeModelInfo.isRemote;
+  const canReloadTextModel =
+    Boolean(activeModelInfo.modelId) && !activeModelInfo.isRemote;
   const hasPendingSettings =
-    canReloadTextModel && computePendingSettings(activeModel?.engine, settings, loadedSettings);
+    canReloadTextModel &&
+    computePendingSettings(activeModel?.engine, settings, loadedSettings);
 
   const handleReloadTextModel = useCallback(
     () =>
@@ -337,11 +553,26 @@ export const useChatScreen = () => {
         setAlertState,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeModelInfo.modelId, activeModelInfo.isRemote, settings, activeModel?.engine],
+    [
+      activeModelInfo.modelId,
+      activeModelInfo.isRemote,
+      settings,
+      activeModel?.engine,
+    ],
   );
 
-  const handleSend = (text: string, attachments?: MediaAttachment[], imageMode?: 'auto' | 'force' | 'disabled') =>
-    handleSendFn(genDeps, { text, attachments, imageMode, startGeneration, setDebugInfo });
+  const handleSend = (
+    text: string,
+    attachments?: MediaAttachment[],
+    imageMode?: 'auto' | 'force' | 'disabled',
+  ) =>
+    handleSendFn(genDeps, {
+      text,
+      attachments,
+      imageMode,
+      startGeneration,
+      setDebugInfo,
+    });
 
   // After picking a text model, replay the stashed message (no retype needed).
   const handleModelSelect = async (model: DownloadedModel) => {
@@ -353,50 +584,120 @@ export const useChatScreen = () => {
     }
   };
 
-
   return {
-    isModelLoading, loadingModel, supportsVision,
-    showProjectSelector, setShowProjectSelector,
-    showDebugPanel, setShowDebugPanel,
-    showModelSelector, setShowModelSelector,
-    showSettingsPanel, setShowSettingsPanel,
-    supportsToolCalling, supportsThinking,
-    debugInfo, alertState, setAlertState,
-    showScrollToBottom, setShowScrollToBottom,
-    isClassifying, animateLastN, queueCount, queuedTexts,
-    viewerImageUri, setViewerImageUri, imageGenState,
-    enabledTools, handleToggleTool,
-    activeModelId: activeModelInfo.modelId, activeConversationId, activeConversation, activeModel,
-    activeModelInfo, hasActiveModel, hasTextModel, activeRemoteModel, activeModelName,
-    activeProject, activeImageModel, imageModelLoaded, isGeneratingImage,
+    isModelLoading,
+    loadingModel,
+    supportsVision,
+    showProjectSelector,
+    setShowProjectSelector,
+    showDebugPanel,
+    setShowDebugPanel,
+    showModelSelector,
+    setShowModelSelector,
+    showSettingsPanel,
+    setShowSettingsPanel,
+    supportsToolCalling,
+    supportsThinking,
+    debugInfo,
+    alertState,
+    setAlertState,
+    showScrollToBottom,
+    setShowScrollToBottom,
+    isClassifying,
+    animateLastN,
+    queueCount,
+    queuedTexts,
+    viewerImageUri,
+    setViewerImageUri,
+    imageGenState,
+    enabledTools,
+    handleToggleTool,
+    activeModelId: activeModelInfo.modelId,
+    activeConversationId,
+    activeConversation,
+    activeModel,
+    activeModelInfo,
+    hasActiveModel,
+    hasTextModel,
+    activeRemoteModel,
+    activeModelName,
+    activeProject,
+    activeImageModel,
+    imageModelLoaded,
+    isGeneratingImage,
     imageGenerationProgress: imageGenState.progress,
     imageGenerationStatus: imageGenState.status,
     imagePreviewPath: imageGenState.previewPath,
-    isStreaming, isThinking, isCompacting, isGeneratingForThisConversation, hasPendingSettings, handleReloadTextModel, textModelEvicted, displayMessages, downloadedModels, hasAvailableModels, projects, settings,
+    isStreaming,
+    isThinking,
+    isCompacting,
+    isGeneratingForThisConversation,
+    hasPendingSettings,
+    handleReloadTextModel,
+    textModelEvicted,
+    displayMessages,
+    downloadedModels,
+    hasAvailableModels,
+    projects,
+    settings,
     // The chat knows the active model IS a vision model but is missing its projector — surface repair, not a crash.
-    visionNeedsRepair: !activeModelInfo.isRemote && needsVisionRepair(activeModel),
-    navigation, hardwareService,
+    visionNeedsRepair:
+      !activeModelInfo.isRemote && needsVisionRepair(activeModel),
+    navigation,
+    hardwareService,
     handleSend,
     handleStop: () => handleStopFn(genDeps),
     handleModelSelect,
     handleUnloadModel: () => handleUnloadModelFn(modelDeps),
     handleDeleteConversation: () =>
-      handleDeleteConversationFn(genDeps, { activeConversationId, activeConversation, setAlertState }),
-    handleCopyMessage: (_content: string) => { },
+      handleDeleteConversationFn(genDeps, {
+        activeConversationId,
+        activeConversation,
+        setAlertState,
+      }),
+    handleCopyMessage: (content: string) => {
+      callHook(HOOKS.clipboardRecordLocalText, content, Date.now());
+    },
     handleRetryMessage: (message: Message) =>
-      handleRetryMessageFn(message, genDeps, { activeConversationId, hasActiveModel, activeConversation, deleteMessagesAfter, setDebugInfo }),
+      handleRetryMessageFn(message, genDeps, {
+        activeConversationId,
+        hasActiveModel,
+        activeConversation,
+        deleteMessagesAfter,
+        setDebugInfo,
+      }),
     handleEditMessage: (message: Message, newContent: string) =>
-      handleEditMessageFn(genDeps, { message, newContent, activeConversationId, hasActiveModel, activeConversation, updateMessageContent, deleteMessagesAfter, setDebugInfo }),
+      handleEditMessageFn(genDeps, {
+        message,
+        newContent,
+        activeConversationId,
+        hasActiveModel,
+        activeConversation,
+        updateMessageContent,
+        deleteMessagesAfter,
+        setDebugInfo,
+      }),
     handleSelectProject: (project: Project | null) => {
       setPendingProjectId(project?.id);
       if (!activeConversationId) {
         setShowProjectSelector(false);
       } else {
-        handleSelectProjectFn({ activeConversationId, setConversationProject, setShowProjectSelector }, project);
+        handleSelectProjectFn(
+          {
+            activeConversationId,
+            setConversationProject,
+            setShowProjectSelector,
+          },
+          project,
+        );
       }
     },
     handleGenerateImageFromMessage: (prompt: string) =>
-      handleGenerateImageFromMsgFn(prompt, genDeps, { activeConversationId, activeImageModel, setAlertState }),
+      handleGenerateImageFromMsgFn(prompt, genDeps, {
+        activeConversationId,
+        activeImageModel,
+        setAlertState,
+      }),
     handleImagePress: (uri: string) => setViewerImageUri(uri),
     handleSaveImage: () => {
       // Close the fullscreen viewer FIRST. The "Image Saved" confirmation is an AppSheet
@@ -410,7 +711,9 @@ export const useChatScreen = () => {
       // AppSheet presents, so the two modals never overlap on iOS. Named + given headroom over the
       // fade duration so the coupling is explicit (Gitar).
       const VIEWER_FADE_OUT_MS = 350;
-      setTimeout(() => { saveImageToGallery(uri, setAlertState).catch(() => {}); }, VIEWER_FADE_OUT_MS);
+      setTimeout(() => {
+        saveImageToGallery(uri, setAlertState).catch(() => {});
+      }, VIEWER_FADE_OUT_MS);
     },
   };
 };

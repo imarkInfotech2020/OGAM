@@ -935,6 +935,11 @@ final class SyncClipboardObserverTests: XCTestCase {
       earliestReasonableUnixMilliseconds,
       "Clipboard events must use Unix milliseconds like the shared clipboard protocol"
     )
+    XCTAssertEqual(
+      observedTimestamp?.rounded(.down),
+      observedTimestamp,
+      "Clipboard protocol timestamps must be whole milliseconds"
+    )
   }
 
   func testRejectsInvalidNativeClipboardTimestamps() {

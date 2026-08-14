@@ -107,6 +107,7 @@ describe('sharing a file to another device without being asked', () => {
     });
     await ambientShareService.start(PREFERENCES, {
       destinations: () => destinations,
+      files: () => [...files.values()],
       getFile: (syncId: string) => files.get(syncId),
       // Made on this device, so there is no origin to keep it away from.
       originOf: () => undefined,
@@ -441,6 +442,60 @@ describe('sharing a file to another device without being asked', () => {
   });
 
   describe('the other device not being there', () => {
+    it('sends older chat files when their first destination pairs later', async () => {
+      const harness = await launch();
+      harness.destinations.splice(0);
+      const generated = screenshot('generated-before-pair', {
+        kind: 'generated_media',
+      });
+      const attachment = screenshot('attachment-before-pair', {
+        kind: 'message_attachment',
+      });
+      harness.files.set(generated.syncId, generated);
+      harness.files.set(attachment.syncId, attachment);
+
+      await harness.service.handleCapture(generated);
+      await harness.service.handleCapture(attachment);
+      expect(harness.scheduled).toEqual([]);
+
+      harness.destinations.push({
+        deviceId: THE_MAC,
+        deviceName: "Mac's MacBook Pro",
+        connected: true,
+      });
+      await harness.service.connected(THE_MAC);
+
+      expect(harness.scheduled.map(item => item.file.syncId)).toEqual([
+        generated.syncId,
+        attachment.syncId,
+      ]);
+      expect(harness.service.allowsState(THE_MAC, generated.syncId)).toBe(
+        true,
+      );
+      expect(harness.service.allowsState(THE_MAC, attachment.syncId)).toBe(
+        true,
+      );
+    });
+
+    it('does not turn a new pairing into screenshot history backfill', async () => {
+      const harness = await launch();
+      harness.destinations.splice(0);
+      const olderScreenshot = screenshot('screenshot-before-pair');
+      harness.files.set(olderScreenshot.syncId, olderScreenshot);
+
+      harness.destinations.push({
+        deviceId: THE_MAC,
+        deviceName: "Mac's MacBook Pro",
+        connected: true,
+      });
+      await harness.service.connected(THE_MAC);
+
+      expect(harness.scheduled).toEqual([]);
+      expect(
+        harness.service.allowsState(THE_MAC, olderScreenshot.syncId),
+      ).toBe(false);
+    });
+
     it('waits for it when the user asked for that', async () => {
       const harness = await launch();
       harness.destinations[0]!.connected = false;

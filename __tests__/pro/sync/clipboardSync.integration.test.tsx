@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  FlatList,
   NativeEventEmitter,
   NativeModules,
   type EmitterSubscription,
@@ -525,6 +526,9 @@ describe('mobile clipboard Sync journey', () => {
 
     fireEvent.press(ui.getByTestId('open-clipboard-history'));
     await waitFor(() => expect(ui!.getByText('copied on iPhone')).toBeTruthy());
+    const clipboardList = ui.UNSAFE_getByType(FlatList);
+    expect(clipboardList.props.initialNumToRender).toBe(8);
+    expect(clipboardList.props.windowSize).toBe(7);
     expect(ui.getAllByText('This phone')).toHaveLength(1);
     expect(ui.getByText('copied on Mac')).toBeTruthy();
     expect(ui.getByText('From Off Grid AI Desktop')).toBeTruthy();

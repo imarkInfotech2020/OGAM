@@ -38,6 +38,29 @@ function hasImageAttachment(message: Message): boolean {
   );
 }
 
+function isGeneratedImageResult(message: Message): boolean {
+  return (
+    message.role === 'assistant' &&
+    /^Generated image for:/i.test(message.content.trim())
+  );
+}
+
+function withPendingGeneratedImage(message: Message): Message {
+  if (hasImageAttachment(message)) return message;
+  return {
+    ...message,
+    attachments: [
+      {
+        id: `pending-image:${message.uuid ?? message.id}`,
+        type: 'image',
+        uri: '',
+        pending: true,
+        fileName: 'Image arriving',
+      },
+    ],
+  };
+}
+
 /**
  * Keep durable chat records unchanged, but present an image turn as one assistant result.
  *
@@ -52,7 +75,7 @@ function groupSupportingContextWithImage(
   for (const message of messages) {
     const supportingContext = grouped.at(-1);
     if (
-      hasImageAttachment(message) &&
+      (hasImageAttachment(message) || isGeneratedImageResult(message)) &&
       supportingContext &&
       isSupportingContextMessage(supportingContext)
     ) {
@@ -62,7 +85,10 @@ function groupSupportingContextWithImage(
         grouped.push(cached.item);
         continue;
       }
-      const item: ChatMessageItem = { ...message, supportingContext };
+      const item: ChatMessageItem = {
+        ...withPendingGeneratedImage(message),
+        supportingContext,
+      };
       groupedImageCache.set(message, { supportingContext, item });
       grouped.push(item);
       continue;
@@ -115,9 +141,31 @@ function withRemotePreviews(
   return [
     ...base,
     ...remotePreviews
-      .filter(preview => !durableMessageIds.has(preview.messageId))
+      .filter(
+        preview =>
+          !durableMessageIds.has(preview.messageId) &&
+          !base.some(message => sameRemoteAnswer(message, preview)),
+      )
       .map(remotePreviewMessage),
   ];
+}
+
+function sameRemoteAnswer(
+  message: Message | ChatMessageItem,
+  preview: RemoteStreamItem,
+): boolean {
+  if (
+    message.role !== 'assistant' ||
+    message.provenance?.originDeviceId !== preview.deviceId ||
+    !chatStreamPreviewHasMessageBody(preview)
+  ) {
+    return false;
+  }
+  return (
+    message.content.trim() === preview.content.trim() &&
+    (message.reasoningContent ?? '').trim() ===
+      (preview.reasoning ?? '').trim()
+  );
 }
 
 function remotePreviewMessage(preview: RemoteStreamItem): ChatMessageItem {

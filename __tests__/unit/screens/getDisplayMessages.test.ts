@@ -196,4 +196,34 @@ describe('getDisplayMessages', () => {
     expect(out).toHaveLength(2);
     expect(out.at(-1)).toBe(durableMessage);
   });
+
+  it('removes the same remote answer when an older sender used a different preview id', () => {
+    const durableMessage = {
+      id: 'local-record-id',
+      uuid: 'durable-message-id',
+      role: 'assistant',
+      content: 'The complete reply.',
+      timestamp: 2,
+      provenance: {
+        originDeviceId: 'the-iphone',
+        originDeviceName: 'iPhone',
+      },
+    } as Message;
+
+    const out = getDisplayMessages([...msgs, durableMessage], {
+      ...base(),
+      remotePreviews: [
+        {
+          id: 'remote-stream:legacy-preview-id',
+          messageId: 'legacy-preview-id',
+          deviceId: 'the-iphone',
+          content: 'The complete reply.',
+          phase: 'answering',
+        },
+      ],
+    });
+
+    expect(out).toHaveLength(2);
+    expect(out.at(-1)).toBe(durableMessage);
+  });
 });

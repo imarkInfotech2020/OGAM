@@ -372,6 +372,10 @@ export const useChatStore = create<ChatState>()(
         const parsed = parseModelOutput(streamingMessage, streamReasoning);
         const reasoningContent = parsed.reasoning ?? undefined;
         const sanitizedMessage = parsed.answer;
+        // End the ephemeral reply before the durable mutation leaves this device. Both use the same
+        // peer link. This order guarantees a receiver sees the final stream frame first and then the
+        // record that replaces it, never the reverse order that could recreate a retired preview.
+        set(NO_REPLY_FORMING);
         if (
           streamingForConversationId === conversationId &&
           (sanitizedMessage || reasoningContent)
@@ -387,7 +391,6 @@ export const useChatStore = create<ChatState>()(
             ...(streamingMessageUuid ? { uuid: streamingMessageUuid } : {}),
           });
         }
-        set(NO_REPLY_FORMING);
       },
 
       clearStreamingMessage: () => {

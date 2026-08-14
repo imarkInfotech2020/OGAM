@@ -44,6 +44,7 @@ import { SyncNotificationsScreen } from '../../../pro/ui/SyncNotificationsScreen
 import { HomeNotificationsButton } from '../../../pro/ui/HomeNotificationsButton';
 import { SyncHomeCard } from '../../../pro/ui/SyncHomeCard';
 import { useAppStore } from '../../../src/stores/appStore';
+import { useChatStore } from '../../../src/stores/chatStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { stateSyncService } from '../../../pro/sync/stateSyncService';
 import { sharedFileSyncService } from '../../../pro/sync/sharedFileSyncService';
@@ -181,6 +182,8 @@ describe('mobile ambient sharing journey', () => {
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);
+    useAppStore.getState().clearGeneratedImages();
+    useChatStore.getState().clearAllConversations();
     useSyncStore.getState().reset();
     // A licensed phone with its own machine activated: the saved-device list is built from the licence
     // roster, so without both the desktop pairs and appears nowhere.
@@ -297,6 +300,63 @@ describe('mobile ambient sharing journey', () => {
       },
     });
 
+    const existingGeneratedId = '33333333-3333-4333-8333-333333333333';
+    const existingAttachmentId = '44444444-4444-4444-8444-444444444444';
+    const generatedPath = `${modelTransferFsBoundary.DocumentDirectoryPath}/generated/late-pair-generated.png`;
+    const attachmentPath = `${modelTransferFsBoundary.DocumentDirectoryPath}/attachments/late-pair-attachment.jpg`;
+    await modelTransferFsBoundary.module.writeFile(
+      generatedPath,
+      'generated before pairing',
+      'utf8',
+    );
+    await modelTransferFsBoundary.module.writeFile(
+      attachmentPath,
+      'attached before pairing',
+      'utf8',
+    );
+    const existingConversationId = useChatStore
+      .getState()
+      .createConversation('off-grid/text', 'Files made before pairing');
+    useChatStore.getState().addMessage(existingConversationId, {
+      role: 'user',
+      content: 'Keep this attachment with the chat.',
+      attachments: [
+        {
+          id: existingAttachmentId,
+          type: 'image',
+          uri: `file://${attachmentPath}`,
+          mimeType: 'image/jpeg',
+          fileName: 'late-pair-attachment.jpg',
+        },
+      ],
+    });
+    useChatStore.getState().addMessage(existingConversationId, {
+      role: 'assistant',
+      content: 'Generated image for: "a lighthouse before pairing"',
+      attachments: [
+        {
+          id: existingGeneratedId,
+          type: 'image',
+          uri: `file://${generatedPath}`,
+          mimeType: 'image/png',
+          fileName: 'late-pair-generated.png',
+        },
+      ],
+    });
+    useAppStore.getState().addGeneratedImage({
+      id: existingGeneratedId,
+      prompt: 'a lighthouse before pairing',
+      imagePath: generatedPath,
+      fileName: 'late-pair-generated.png',
+      width: 512,
+      height: 512,
+      steps: 8,
+      seed: 17,
+      modelId: 'off-grid/image',
+      createdAt: '2026-07-28T09:00:00.000Z',
+      conversationId: existingConversationId,
+    });
+
     await remote.engine.start(0);
     desktopDevice.port = remote.transport.boundPort ?? 0;
     await sharedFileSyncService.start({
@@ -347,6 +407,96 @@ describe('mobile ambient sharing journey', () => {
         ),
       ).toBeTruthy(),
     );
+
+    // Both files existed before this device was known. The connection must create the first delivery
+    // grants, publish each durable control through StateSync, and move the real bytes through the file
+    // manager. A store-only assertion would miss the production gap this journey protects.
+    await waitFor(() => {
+      expect(receivedFiles.map(file => file.name)).toEqual(
+        expect.arrayContaining([
+          'late-pair-generated.png',
+          'late-pair-attachment.jpg',
+        ]),
+      );
+    });
+    expect(
+      receivedFiles.find(file => file.name === 'late-pair-generated.png')
+        ?.bytes,
+    ).toEqual(Buffer.from('generated before pairing'));
+    expect(
+      receivedFiles.find(file => file.name === 'late-pair-attachment.jpg')
+        ?.bytes,
+    ).toEqual(Buffer.from('attached before pairing'));
+    await waitFor(() => {
+      expect(
+        remoteRecords.has(`${SHARED_FILE_ENTITY}:${existingGeneratedId}`),
+      ).toBe(true);
+      expect(
+        remoteRecords.has(`${SHARED_FILE_ENTITY}:${existingAttachmentId}`),
+      ).toBe(true);
+    });
+    receivedFiles.splice(0);
+
+    // A new image follows the same order as production: Gallery is written first, then the chat
+    // message that owns the attachment. The first store notification must not publish a gallery-only
+    // record. The second must send one linked control and the real bytes to the connected Desktop.
+    const liveGeneratedId = '55555555-5555-4555-8555-555555555555';
+    const liveMessageId = '66666666-6666-4666-8666-666666666666';
+    const liveGeneratedPath = `${modelTransferFsBoundary.DocumentDirectoryPath}/generated/live-generated.png`;
+    await modelTransferFsBoundary.module.writeFile(
+      liveGeneratedPath,
+      'generated after connection',
+      'utf8',
+    );
+    const liveConversationId = useChatStore
+      .getState()
+      .createConversation('off-grid/text', 'Files made after connection');
+    useAppStore.getState().addGeneratedImage({
+      id: liveGeneratedId,
+      prompt: 'a lighthouse after connection',
+      imagePath: liveGeneratedPath,
+      fileName: 'live-generated.png',
+      width: 512,
+      height: 512,
+      steps: 8,
+      seed: 23,
+      modelId: 'off-grid/image',
+      createdAt: '2026-07-28T10:00:00.000Z',
+      conversationId: liveConversationId,
+    });
+    useChatStore.getState().addMessage(liveConversationId, {
+      uuid: liveMessageId,
+      role: 'assistant',
+      content: 'Generated image for: "a lighthouse after connection"',
+      attachments: [
+        {
+          id: liveGeneratedId,
+          type: 'image',
+          uri: `file://${liveGeneratedPath}`,
+          mimeType: 'image/png',
+          fileName: 'live-generated.png',
+        },
+      ],
+    });
+
+    await waitFor(() =>
+      expect(
+        receivedFiles.some(file => file.name === 'live-generated.png'),
+      ).toBe(true),
+    );
+    expect(
+      receivedFiles.find(file => file.name === 'live-generated.png')?.bytes,
+    ).toEqual(Buffer.from('generated after connection'));
+    await waitFor(() =>
+      expect(
+        remoteRecords.get(`${SHARED_FILE_ENTITY}:${liveGeneratedId}`),
+      ).toMatchObject({
+        kind: 'generated_media',
+        conversation_id: liveConversationId,
+        message_id: liveMessageId,
+      }),
+    );
+    receivedFiles.splice(0);
 
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
     fireEvent.press(
@@ -470,7 +620,7 @@ describe('mobile ambient sharing journey', () => {
     expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
     // One line says where it went, instead of an origin ("This phone") and a count ("Shared with 1
     // device") that the reader had to put together.
-    expect(ui.getByText(`Sent to ${desktopDevice.name}`)).toBeTruthy();
+    expect(ui.getAllByText(`Sent to ${desktopDevice.name}`).length).toBe(4);
 
     // Filters are behind a disclosure on this screen, the same two taps a user makes.
     fireEvent.press(ui.getByTestId('sync-files-open-filters'));
