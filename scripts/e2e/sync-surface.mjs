@@ -101,6 +101,20 @@ const rnSurface = (client, platform) => {
   return {
     platform,
     family: 'rn',
+    /** Low-level UI verbs shared by feature journeys. Feature rules stay in their own adapter. */
+    ui: {
+      source: () => client.source(),
+      labels: () => client.labels(),
+      findByLabel: (label) => client.findByLabel(label),
+      tapLabel: (label) => client.tapLabel(label),
+      tapWhenReady: (label, options) => client.tapWhenReady(label, options),
+      waitForLabel: (label, options) => client.waitForLabel(label, options),
+      waitForGone: (label, options) => client.waitForGone(label, options),
+      scrollAndTap: (label, options) => client.scrollAndTap(label, options),
+      type: (value) => client.type(value),
+      back: () => client.back(),
+      waitFor: (check, options) => client.waitFor(() => check(), options),
+    },
 
     /**
      * Reach the Devices screen from wherever the app happens to be. Idempotent on purpose.
@@ -422,14 +436,34 @@ const electronSurface = async (spec) => {
     const waiting = pending.get(message.id);
     if (!waiting) return;
     pending.delete(message.id);
+    clearTimeout(waiting.timer);
     if (message.error) waiting.reject(new Error(message.error.message));
     else waiting.resolve(message.result);
   });
+  const rejectPending = (reason) => {
+    for (const waiting of pending.values()) {
+      clearTimeout(waiting.timer);
+      waiting.reject(reason);
+    }
+    pending.clear();
+  };
+  socket.addEventListener('close', () => rejectPending(new Error('the debugging socket closed')));
+  socket.addEventListener('error', () => rejectPending(new Error('the debugging socket failed')));
   const send = (method, params = {}) =>
     new Promise((resolve, reject) => {
       const id = (nextId += 1);
-      pending.set(id, { resolve, reject });
-      socket.send(JSON.stringify({ id, method, params }));
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`${method} did not answer within 10000ms`));
+      }, 10_000);
+      pending.set(id, { resolve, reject, timer });
+      try {
+        socket.send(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        clearTimeout(timer);
+        pending.delete(id);
+        reject(error);
+      }
     });
 
   const evaluate = async (expression) => {
@@ -477,6 +511,13 @@ const electronSurface = async (spec) => {
     family: 'electron',
     /** Escape hatch for diagnosing a surface, and for capabilities not yet in the vocabulary. */
     evaluate,
+    /** Low-level UI verbs shared by feature journeys. Feature rules stay in their own adapter. */
+    ui: {
+      evaluate,
+      text: () => evaluate('return document.body.innerText;'),
+      click,
+      waitFor: (check, options) => waitUntil(check, options),
+    },
 
     async openDevices() {
       if (/PAIRING CODE/i.test((await this.text()) ?? '')) return;

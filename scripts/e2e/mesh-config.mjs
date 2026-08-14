@@ -50,12 +50,12 @@ export const MESH = {
   }),
   macos: () => ({
     kind: 'macos',
-    ...endpoint(flag('mac', process.env.E2E_MAC ?? '192.168.1.64:9222'), 9222),
+    ...endpoint(flag('mac', process.env.E2E_MAC ?? '127.0.0.1:9222'), 9222),
     offline: OFFLINE.macos,
   }),
   windows: () => ({
     kind: 'windows',
-    ...endpoint(flag('win', process.env.E2E_WIN ?? '192.168.1.94:9224'), 9224),
+    ...endpoint(flag('win', process.env.E2E_WIN ?? '127.0.0.1:9224'), 9224),
     offline: OFFLINE.windows,
   }),
 };

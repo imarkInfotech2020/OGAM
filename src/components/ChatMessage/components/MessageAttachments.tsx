@@ -29,7 +29,9 @@ interface FadeInImageProps {
 
 function FadeInImage({ uri, imageStyle, testID, wrapperTestID, onPress }: FadeInImageProps) {
   const opacity = useSharedValue(0);
+  const [loaded, setLoaded] = React.useState(false);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const isGeneratedImage = wrapperTestID === 'generated-image';
   return (
     <Animated.View style={[fadeInImageStyles.wrapper, fadeStyle]}>
       <TouchableOpacity
@@ -37,13 +39,20 @@ function FadeInImage({ uri, imageStyle, testID, wrapperTestID, onPress }: FadeIn
         style={fadeInImageStyles.wrapper}
         onPress={onPress}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={
+          isGeneratedImage ? `Generated image ${loaded ? 'loaded' : 'loading'}` : undefined
+        }
       >
         <Image
           testID={testID}
           source={{ uri }}
           style={imageStyle}
           resizeMode="cover"
-          onLoad={() => { opacity.value = withTiming(1, { duration: 300 }); }}
+          onLoad={() => {
+            setLoaded(true);
+            opacity.value = withTiming(1, { duration: 300 });
+          }}
         />
       </TouchableOpacity>
     </Animated.View>
