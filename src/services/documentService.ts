@@ -251,7 +251,13 @@ class DocumentService {
         throw new Error(`File not found: ${name}`);
       }
 
-      const fileSize = (await statFile(resolvedPath))?.size ?? 0;
+      const facts = await statFile(resolvedPath);
+      if (!facts) {
+        throw new Error(
+          'Could not determine file size. Please try selecting the file again.',
+        );
+      }
+      const fileSize = facts.size;
       console.log(`[DocumentService] File size: ${fileSize} bytes`);
       if (fileSize > MAX_FILE_SIZE) {
         throw new Error(

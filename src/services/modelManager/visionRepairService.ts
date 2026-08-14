@@ -51,7 +51,9 @@ export interface VisionRepairContext {
   repairMmProj(target: MmProjTarget, opts?: RepairOpts): Promise<void>;
 }
 
-export async function linkOrphanMmProj(ctx: VisionRepairContext): Promise<void> {
+export async function linkOrphanMmProj(
+  ctx: VisionRepairContext,
+): Promise<void> {
   const models = await ctx.getDownloadedModels();
   let dirFiles: RNFS.ReadDirResItemT[] = [];
   try {
@@ -67,20 +69,35 @@ export async function linkOrphanMmProj(ctx: VisionRepairContext): Promise<void> 
     if (m.engine !== 'llama') continue;
     // Strict match (shared rule): the projector must belong to THIS model by name+variant. This is the
     // SAME rule the loader uses, so link-time and load-time can no longer disagree (the E2B↔E4B split).
-    const chosenName = pickMmProjForModel(m.fileName, mmProjFiles.map(f => f.name));
-    const match = chosenName ? mmProjFiles.find(f => f.name === chosenName) : undefined;
+    const chosenName = pickMmProjForModel(
+      m.fileName,
+      mmProjFiles.map(f => f.name),
+    );
+    const match = chosenName
+      ? mmProjFiles.find(f => f.name === chosenName)
+      : undefined;
 
     if (m.mmProjPath) {
       // Clear the link if the stored file no longer exists OR doesn't belong to this model (strict).
-      const belongs = mmProjBelongsToModel(m.fileName, m.mmProjPath.split('/').pop() ?? '');
+      const belongs = mmProjBelongsToModel(
+        m.fileName,
+        m.mmProjPath.split('/').pop() ?? '',
+      );
       const fileExists = await RNFS.exists(m.mmProjPath).catch(() => false);
       if (!fileExists || !belongs) {
-        logger.log(`[linkOrphanMmProj] ${m.id} — clearing bad link: ${m.mmProjPath}`);
+        logger.log(
+          `[linkOrphanMmProj] ${m.id} — clearing bad link: ${m.mmProjPath}`,
+        );
         // Clear only the dead/wrong on-disk pointer — KEEP isVisionModel + mmProjFileName so the model is
         // still recognized as a vision model that NEEDS REPAIR (needsVisionRepair → true → the wrench and
         // the "download the vision file" prompt appear). Wiping the vision flag made it look like a plain
         // text model, hiding the repair path entirely (device 2026-07-14).
-        toSave.push({ ...m, mmProjPath: undefined, mmProjFileSize: undefined, isVisionModel: true });
+        toSave.push({
+          ...m,
+          mmProjPath: undefined,
+          mmProjFileSize: undefined,
+          isVisionModel: true,
+        });
       }
       // If link is valid, leave it alone
     } else if (match) {
@@ -91,7 +108,9 @@ export async function linkOrphanMmProj(ctx: VisionRepairContext): Promise<void> 
 
   if (toSave.length > 0) {
     const current = await ctx.getDownloadedModels();
-    await commitModelsList(current.map(m => toSave.find(s => s.id === m.id) ?? m));
+    await commitModelsList(
+      current.map(m => toSave.find(s => s.id === m.id) ?? m),
+    );
   }
 }
 
@@ -115,19 +134,31 @@ export async function repairVision(
 
   // A projector already next to the weights needs no network and no identification at all.
   await ctx.linkOrphanMmProj();
-  const relinked = (await ctx.getDownloadedModels()).find(m => m.id === model.id);
-  if (relinked?.engine === 'llama' && relinked.mmProjPath) return { kind: 'linked' };
+  const relinked = (await ctx.getDownloadedModels()).find(
+    m => m.id === model.id,
+  );
+  if (relinked?.engine === 'llama' && relinked.mmProjPath)
+    return { kind: 'linked' };
 
   const source = await resolveVisionRepairSource(
-    { origin: model.origin, fileName: model.fileName, fileSize: model.fileSize },
+    {
+      origin: model.origin,
+      fileName: model.fileName,
+      fileSize: model.fileSize,
+    },
     fileName => huggingFaceService.findReposPublishing(fileName),
   );
-  if (source.kind === 'ambiguous') return { kind: 'ambiguous', candidates: source.candidates };
+  if (source.kind === 'ambiguous')
+    return { kind: 'ambiguous', candidates: source.candidates };
   if (source.kind === 'unknown') return { kind: 'unknown' };
 
-  const files = await huggingFaceService.getModelFiles(source.origin.repoId);
+  const files = await huggingFaceService.getModelFiles(
+    source.origin.repoId,
+    source.origin.revision,
+  );
   const file = files.find(f => f.name === model.fileName);
-  if (!file?.mmProjFile) return { kind: 'noProjectorPublished', repoId: source.origin.repoId };
+  if (!file?.mmProjFile)
+    return { kind: 'noProjectorPublished', repoId: source.origin.repoId };
 
   await ctx.repairMmProj({ modelId: source.origin.repoId, file }, opts);
   return { kind: 'repaired', repoId: source.origin.repoId };
@@ -151,7 +182,10 @@ export async function repairMmProj(
   // determinate progress bar lights up during the ~900MB fetch — BUG OD2), moves the
   // file, and tears the transient row down. We just persist the resolved path.
   const resolvedPath = await performMmProjRepairDownload({
-    modelId, file, modelsDir: ctx.modelsDir, ...opts,
+    modelId,
+    file,
+    modelsDir: ctx.modelsDir,
+    ...opts,
   });
   await ctx.saveModelWithMmproj(`${modelId}/${file.name}`, resolvedPath);
 }
@@ -168,8 +202,10 @@ export async function markVisionModel(
 ): Promise<boolean> {
   const models = await ctx.getDownloadedModels();
   const target = models.find(m => m.id === modelId);
-  if (!target || target.engine !== 'llama' || target.isVisionModel) return false;
-  await commitModelsList(models.map(m => (m.id === modelId ? { ...m, isVisionModel: true } : m)));
+  if (target?.engine !== 'llama' || target.isVisionModel) return false;
+  await commitModelsList(
+    models.map(m => (m.id === modelId ? { ...m, isVisionModel: true } : m)),
+  );
   return true;
 }
 
@@ -184,7 +220,15 @@ export async function saveModelWithMmproj(
   const models = await ctx.getDownloadedModels();
   await commitModelsList(
     models.map(m =>
-      m.id === modelId ? { ...m, mmProjPath, mmProjFileName, mmProjFileSize, isVisionModel: true } : m
+      m.id === modelId
+        ? {
+            ...m,
+            mmProjPath,
+            mmProjFileName,
+            mmProjFileSize,
+            isVisionModel: true,
+          }
+        : m,
     ),
   );
 }
@@ -197,8 +241,14 @@ export async function clearMmProjLink(
   await commitModelsList(
     models.map(m =>
       m.id === modelId
-        ? { ...m, mmProjPath: undefined, mmProjFileName: undefined, mmProjFileSize: undefined, isVisionModel: false }
-        : m
+        ? {
+            ...m,
+            mmProjPath: undefined,
+            mmProjFileName: undefined,
+            mmProjFileSize: undefined,
+            isVisionModel: false,
+          }
+        : m,
     ),
   );
 }

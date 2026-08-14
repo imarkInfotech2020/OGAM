@@ -13,7 +13,12 @@ export function sizeToBytes(
   size: string | number | undefined | null,
   fallback = 0,
 ): number {
-  if (typeof size === 'number') return size;
-  if (typeof size === 'string') return Number.parseInt(size, 10);
+  if (typeof size === 'number') {
+    return Number.isSafeInteger(size) && size >= 0 ? size : fallback;
+  }
+  if (typeof size === 'string' && /^[0-9]+$/.test(size)) {
+    const parsed = Number(size);
+    return Number.isSafeInteger(parsed) ? parsed : fallback;
+  }
   return fallback;
 }

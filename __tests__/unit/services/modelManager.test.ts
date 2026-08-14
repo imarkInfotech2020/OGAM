@@ -1343,7 +1343,9 @@ describe('ModelManager', () => {
       ];
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockResolvedValue({ size: 300000000 } as any);
+      mockedRNFS.readDir.mockResolvedValue([
+        { name: 'mmproj.gguf', path: '/models/mmproj.gguf', size: 300000000, isFile: () => true, isDirectory: () => false },
+      ] as any);
 
       await modelManager.saveModelWithMmproj('model1', '/models/mmproj.gguf');
 
@@ -1362,7 +1364,9 @@ describe('ModelManager', () => {
       ];
       mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
       mockedRNFS.exists.mockResolvedValue(true);
-      mockedRNFS.stat.mockResolvedValue({ size: 300000000 } as any);
+      mockedRNFS.readDir.mockResolvedValue([
+        { name: 'mmproj.gguf', path: '/models/mmproj.gguf', size: 300000000, isFile: () => true, isDirectory: () => false },
+      ] as any);
 
       await modelManager.saveModelWithMmproj('model1', '/models/mmproj.gguf');
 
@@ -2676,11 +2680,13 @@ describe('ModelManager', () => {
           { name: 'sd_v15_coreml', path: `${IMAGE_MODELS_DIR}/sd_v15_coreml`, size: 0, isFile: () => false, isDirectory: () => true },
         ] as any)
         .mockResolvedValueOnce([
+          { name: 'sd_v15_coreml.zip', path: `${IMAGE_MODELS_DIR}/sd_v15_coreml.zip`, size: 400000000, isFile: () => true, isDirectory: () => false },
+        ] as any)
+        .mockResolvedValueOnce([
           { name: 'model.mlpackage', path: `${IMAGE_MODELS_DIR}/sd_v15_coreml/model.mlpackage`, size: 500000000, isFile: () => true, isDirectory: () => false },
         ] as any);
 
       mockedRNFS.readFile = jest.fn().mockResolvedValueOnce('sd_v15_coreml.zip');
-      mockedRNFS.stat = jest.fn().mockResolvedValue({ size: 400000000, isFile: () => true } as any);
       mockedRNFS.read = jest.fn().mockResolvedValue('PK\x03\x04');
       mockedRNFS.writeFile = jest.fn().mockResolvedValue(undefined as any);
       (mockedUnzip as jest.Mock).mockResolvedValueOnce(undefined);

@@ -17,9 +17,7 @@ import logger from '../utils/logger';
 
 /** Declared state says the model may see this image. Pure: no filesystem, so it is cheap and total. */
 function isModelVisibleImage(attachment: MediaAttachment): boolean {
-  return (
-    attachment.type === 'image' && !attachment.pending && !!attachment.uri
-  );
+  return attachment.type === 'image' && !attachment.pending && !!attachment.uri;
 }
 
 /** The image attachments of one message that the model may see, by declaration alone. */
@@ -27,6 +25,45 @@ export function modelImageAttachments(
   attachments: MediaAttachment[] | undefined,
 ): MediaAttachment[] {
   return (attachments ?? []).filter(isModelVisibleImage);
+}
+
+async function attachmentStillAvailable(
+  attachment: MediaAttachment,
+): Promise<boolean> {
+  if (attachment.type !== 'image') return true;
+  if (attachment.pending) {
+    logger.log(
+      `[LLM] skipping an attachment still arriving: ${
+        attachment.fileName ?? attachment.id
+      }`,
+    );
+    return false;
+  }
+  const path = (attachment.uri || '').replace(/^file:\/\//, '');
+  const exists =
+    path.length > 0 && (await RNFS.exists(path).catch(() => false));
+  if (!exists) {
+    logger.warn(
+      `[LLM] dropping missing image attachment (file gone): ${attachment.uri}`,
+    );
+  }
+  return exists;
+}
+
+async function dropMissingImagesFromMessage(
+  message: Message,
+): Promise<Message> {
+  const attachments = message.attachments;
+  if (!attachments?.some(attachment => attachment.type === 'image')) {
+    return message;
+  }
+  const availability = await Promise.all(
+    attachments.map(attachmentStillAvailable),
+  );
+  const kept = attachments.filter((_attachment, index) => availability[index]);
+  return kept.length === attachments.length
+    ? message
+    : { ...message, attachments: kept };
 }
 
 /**
@@ -39,40 +76,5 @@ export function modelImageAttachments(
 export async function dropMissingImageAttachments(
   messages: Message[],
 ): Promise<Message[]> {
-  const out: Message[] = [];
-  for (const message of messages) {
-    const attachments = message.attachments;
-    if (!attachments?.some(a => a.type === 'image')) {
-      out.push(message);
-      continue;
-    }
-    const kept: MediaAttachment[] = [];
-    for (const attachment of attachments) {
-      if (attachment.type !== 'image') {
-        kept.push(attachment);
-        continue;
-      }
-      // Not yet ARRIVED is not the same as gone. Calling a transfer in flight "file gone" sends the
-      // next reader looking for a deletion that never happened.
-      if (attachment.pending) {
-        logger.log(
-          `[LLM] skipping an attachment still arriving: ${attachment.fileName ?? attachment.id}`,
-        );
-        continue;
-      }
-      const path = (attachment.uri || '').replace(/^file:\/\//, '');
-      const exists =
-        path.length > 0 && (await RNFS.exists(path).catch(() => false));
-      if (exists) kept.push(attachment);
-      else {
-        logger.warn(
-          `[LLM] dropping missing image attachment (file gone): ${attachment.uri}`,
-        );
-      }
-    }
-    out.push(
-      kept.length === attachments.length ? message : { ...message, attachments: kept },
-    );
-  }
-  return out;
+  return Promise.all(messages.map(dropMissingImagesFromMessage));
 }

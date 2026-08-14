@@ -52,7 +52,7 @@ describe('validateModelFile', () => {
   it('returns invalid when the safe directory lookup cannot find the file', async () => {
     const result = await validateModelFile('/models/missing.gguf');
     expect(result.valid).toBe(false);
-    expect(result.reason).toContain('too small');
+    expect(result.reason).toContain('not found');
   });
 
   it('handles string file size from stat', async () => {

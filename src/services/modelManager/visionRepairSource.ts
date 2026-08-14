@@ -27,9 +27,9 @@ interface RepoFileCandidate {
 }
 
 /** Injected so the decision below is pure and testable with no network. */
-export interface HuggingFaceSearch {
-  (fileName: string): Promise<RepoFileCandidate[]>;
-}
+export type HuggingFaceSearch = (
+  fileName: string,
+) => Promise<RepoFileCandidate[]>;
 
 export interface RepairSourceInput {
   origin?: ModelOrigin;
@@ -65,7 +65,11 @@ export async function resolveVisionRepairSource(
       // The search told us nothing about which commit these bytes came from, and pinning a guess
       // would be a second invention. `main` is the honest read of "whatever that repo publishes
       // now", and the size check already proved the file we want is there.
-      origin: { repoId: matches[0].repoId, revision: 'main', path: input.fileName },
+      origin: {
+        repoId: matches[0].repoId,
+        revision: 'main',
+        path: input.fileName,
+      },
     };
   }
   if (matches.length > 1) {

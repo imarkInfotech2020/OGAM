@@ -38,10 +38,16 @@ function withoutScheme(path: string): string {
 }
 
 function splitParent(path: string): { parent: string; name: string } | null {
-  const cleaned = withoutScheme(path).replace(/\/+$/, '');
+  const value = withoutScheme(path);
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
+  const cleaned = value.slice(0, end);
   const cut = cleaned.lastIndexOf('/');
-  if (cut <= 0) return null;
-  return { parent: cleaned.slice(0, cut), name: cleaned.slice(cut + 1) };
+  if (cut < 0) return null;
+  return {
+    parent: cut === 0 ? '/' : cleaned.slice(0, cut),
+    name: cleaned.slice(cut + 1),
+  };
 }
 
 /**
@@ -51,9 +57,9 @@ function splitParent(path: string): { parent: string; name: string } | null {
  * whether a rejection meant "absent" or "broken", and most guessed by catching everything.
  */
 export async function statFile(path: string): Promise<FileFacts | null> {
-  const split = splitParent(path);
-  if (!split) return null;
   try {
+    const split = splitParent(path);
+    if (!split) return null;
     const entries = await RNFS.readDir(split.parent);
     const entry = entries.find(item => item.name === split.name);
     if (!entry) return null;

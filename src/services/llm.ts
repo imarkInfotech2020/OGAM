@@ -217,7 +217,9 @@ class LLMService {
   /** Multimodal init on a NOT-YET-PUBLISHED context (the load pipeline) — no instance-state writes. */
   private async deriveMultimodalFromProjector(context: LlamaContext, modelPath: string, mmProjPath: string): Promise<{ initialized: boolean; support: MultimodalSupport }> {
     try {
-      const sizeMB = ((await statFile(mmProjPath))?.size ?? 0) / (1024 * 1024);
+      const facts = await statFile(mmProjPath);
+      if (!facts) throw new Error('Projector file metadata is unavailable');
+      const sizeMB = facts.size / (1024 * 1024);
       logger.log(`[LLM] mmproj file size: ${sizeMB.toFixed(1)} MB`);
       if (sizeMB < 100) console.warn(`[LLM] WARNING: mmproj file seems too small (${sizeMB.toFixed(1)} MB)`);
     } catch (statErr) { console.error('[LLM] Failed to stat mmproj file:', statErr); }
@@ -290,10 +292,11 @@ class LLMService {
     const ctx = this.context;
     const completionWork = (async () => {
       const managed = await this.manageContextWindow(messages);
-      const hasImages = managed.some(m => modelImageAttachments(m.attachments).length > 0);
+      const usable = await this.dropMissingImageAttachments(managed);
+      const hasImages = usable.some(m => modelImageAttachments(m.attachments).length > 0);
       if (hasImages && !this.multimodalInitialized) logger.warn('[LLM] Images attached but multimodal not initialized - falling back to text-only');
-      logger.log('[LLM] Generation mode:', this.hasVisionInputs(managed) ? 'VISION' : 'TEXT-ONLY');
-      const oaiMessages = await this.convertToOAIMessages(managed);
+      logger.log('[LLM] Generation mode:', this.hasVisionInputs(usable) ? 'VISION' : 'TEXT-ONLY');
+      const oaiMessages = this.convertToOAIMessages(usable);
       const { settings } = useAppStore.getState();
       const startTime = Date.now();
       let firstTokenMs = 0, tokenCount = 0, firstReceived = false;
@@ -344,7 +347,8 @@ class LLMService {
       disableCtxShift: this.shouldDisableCtxShift(),
       contextLength: this.currentSettings.contextLength,
       manageContextWindow: (msgs, extra?) => this.manageContextWindow(msgs, extra),
-      convertToOAIMessages: (msgs) => this.convertToOAIMessages(msgs),
+      convertToOAIMessages: async msgs =>
+        this.convertToOAIMessages(await this.dropMissingImageAttachments(msgs)),
       setPerformanceStats: (s) => { this.performanceStats = s; },
       setIsGenerating: (v) => { this.isGenerating = v; },
     }, messages, {
@@ -389,7 +393,9 @@ class LLMService {
     if (!this.context) throw new Error('No model loaded');
     if (this.isGenerating) throw new Error('Generation already in progress');
     this.isGenerating = true;
-    const oaiMessages = await this.convertToOAIMessages(messages);
+    const oaiMessages = this.convertToOAIMessages(
+      await this.dropMissingImageAttachments(messages),
+    );
     const { settings } = useAppStore.getState();
     let fullResponse = '';
     const ctx = this.context;
@@ -444,19 +450,12 @@ class LLMService {
   }
   isCurrentlyGenerating(): boolean { return this.isGenerating; }
   private formatMessages(messages: Message[]): string { return formatLlamaMessages(messages, this.supportsVision(), this.multimodalSupport?.audio ?? false); }
-  /**
-   * The ONE conversion from our messages to model input, and therefore the one place that can
-   * guarantee every image handed to the runtime exists.
-   *
-   * The existence check used to live in `completion`, one caller of three. The tool path and the
-   * capped-token path converted directly, so a stale attachment reached llama.rn there and it
-   * refused the whole turn with "File does not exist or cannot be opened" - a plain text message
-   * failed because a PHOTO from an earlier turn pointed into an app container that no longer exists.
-   * A guard a caller has to remember is a guard the next caller forgets, so it lives here now.
-   */
-  private async convertToOAIMessages(messages: Message[]): Promise<RNLlamaOAICompatibleMessage[]> {
-    const usable = await dropMissingImageAttachments(messages);
-    return buildOAIMessages(usable, this.multimodalSupport?.audio ?? false);
+  /** Native file checks stay at this service boundary; conversion stays pure. */
+  private dropMissingImageAttachments(messages: Message[]): Promise<Message[]> {
+    return dropMissingImageAttachments(messages);
+  }
+  private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] {
+    return buildOAIMessages(messages, this.multimodalSupport?.audio ?? false);
   }
   async getModelInfo() { return this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null; }
   async tokenize(text: string) {
