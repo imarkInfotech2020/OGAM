@@ -416,7 +416,7 @@ describe('Pro mobile knowledge document sync journey', () => {
       rtl.fireEvent.press(view.getByText('OGAD'));
       await rtl.waitFor(() => {
         expect(view!.queryByText('launch-brief.txt')).not.toBeNull();
-        expect(view!.queryByLabelText('Use launch-brief.txt')).not.toBeNull();
+        expect(view!.queryByLabelText('Use launch-brief.txt, ON')).not.toBeNull();
         expect(
           view!.queryByLabelText('Remove launch-brief.txt'),
         ).not.toBeNull();
@@ -439,7 +439,7 @@ describe('Pro mobile knowledge document sync journey', () => {
       await rtl.waitFor(
         () => {
           expect(view!.queryByText('phone-notes.txt')).not.toBeNull();
-          expect(view!.queryByLabelText('Use phone-notes.txt')).not.toBeNull();
+          expect(view!.queryByLabelText('Use phone-notes.txt, ON')).not.toBeNull();
           expect(
             view!.queryByLabelText('Remove phone-notes.txt'),
           ).not.toBeNull();
