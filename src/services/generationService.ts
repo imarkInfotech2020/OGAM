@@ -14,10 +14,12 @@ import {
   buildToolLoopHandlersImpl,
   prepareGenerationImpl,
   generateResponseImpl,
-  generateRemoteResponseImpl,
-  generateRemoteWithToolsImpl,
   type GenerationWithToolsRequest,
 } from './generationServiceHelpers';
+import {
+  generateRemoteResponseImpl,
+  generateRemoteWithToolsImpl,
+} from './generationRemoteHelpers';
 
 const SHARE_PROMPT_DELAY_MS = 1500;
 type StreamChunk = string | { content?: string; reasoningContent?: string };

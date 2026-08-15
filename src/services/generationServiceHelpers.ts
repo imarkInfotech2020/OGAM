@@ -460,9 +460,3 @@ export async function generateResponseImpl(
     throw error;
   }
 }
-
-// The remote paths live in their own module; re-exported so callers keep one import site.
-export {
-  generateRemoteResponseImpl,
-  generateRemoteWithToolsImpl,
-} from './generationRemoteHelpers';

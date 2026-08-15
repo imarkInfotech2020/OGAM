@@ -3,10 +3,17 @@
 // Every function here repairs state written by an OLDER build, and each is idempotent: once a value
 // no longer matches the shape it is looking for, it does nothing. `DEFAULT_SETTINGS` is passed IN
 // rather than imported, so the store owns its defaults and this module stays a pure transform of
-// whatever it is handed.
+// whatever it is handed. It names no store type either, so nothing here imports the store back.
+
+/** Only the settings fields these repairs actually read. The store's own type is a superset. */
+interface PersistedSettings {
+  contextLength: number;
+  maxTokens: number;
+  liteRTMaxTokens: number;
+  [key: string]: unknown;
+}
 import { Platform } from 'react-native';
 import { INFERENCE_BACKENDS } from '../types';
-import type { AppState, AppSettings } from './appStore';
 
 export function migrateEnabledTools(merged: any): void {
   if (
@@ -28,7 +35,7 @@ const MCP_BOOST_CTX_CEILING = 32768;
 const MCP_BOOST_MAX_OUTPUT_TOKENS = 8192;
 export function migrateBoostedContext(
   merged: any,
-  DEFAULT_SETTINGS: AppSettings,
+  DEFAULT_SETTINGS: PersistedSettings,
 ): void {
   const s = merged.settings;
   if (!s) return;
@@ -47,11 +54,11 @@ export function migrateBoostedContext(
     s.liteRTMaxTokens = DEFAULT_SETTINGS.liteRTMaxTokens;
   }
 }
-export function migratePersistedState(
+export function migratePersistedState<TState>(
   persistedState: any,
-  currentState: AppState,
-  DEFAULT_SETTINGS: AppSettings,
-): AppState {
+  currentState: TState,
+  DEFAULT_SETTINGS: PersistedSettings,
+): TState {
   const merged = {
     ...currentState,
     ...persistedState,
@@ -95,7 +102,7 @@ export function migratePersistedState(
   migrateEnabledTools(merged);
   migrateBoostedContext(merged, DEFAULT_SETTINGS);
   migrateGeneratedImageTimestamps(merged);
-  return merged as AppState;
+  return merged as TState;
 }
 
 /**
