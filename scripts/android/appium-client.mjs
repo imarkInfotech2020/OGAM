@@ -93,6 +93,19 @@ export class AppiumAndroidClient {
     return { elementId, resourceId, className, clickable, enabled, displayed, rect };
   }
 
+  /**
+   * One attribute of a control, read from the device.
+   *
+   * A switch's truth is `checked`, not its label: `describeElement` reports geometry and identity,
+   * and a toggle asked only what it is CALLED cannot be told on from off.
+   */
+  async attributeTestId(testId, name) {
+    const elementId = await this.findByTestId(testId);
+    return this.#request(
+      `/session/${this.#sessionId}/element/${elementId}/attribute/${name}`,
+    ).catch(() => undefined);
+  }
+
   async replaceTestId(testId, text) {
     const elementId = await this.findByTestId(testId);
     await this.#request(`/session/${this.#sessionId}/element/${elementId}/click`, 'POST', {});
