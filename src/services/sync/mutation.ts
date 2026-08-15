@@ -66,6 +66,10 @@ const MODEL_SETTING_DESCRIPTORS: Readonly<
     accepts: finiteInRange(0, 2),
   },
   maxTokens: { localKey: 'maxTokens', accepts: integerInRange(1, 1_048_576) },
+  maxToolCalls: {
+    localKey: 'maxToolCalls',
+    accepts: integerInRange(1, 100),
+  },
   systemPrompt: {
     localKey: 'systemPrompt',
     accepts: value => typeof value === 'string',

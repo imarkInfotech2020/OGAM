@@ -13,8 +13,10 @@ import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
-import { useWhisperStore } from '../../stores/whisperStore';
-import { WHISPER_MODELS } from '../../services/whisperService';
+import {
+  NO_TRANSCRIPTION_MODEL_LABEL,
+  useTranscriptionModelSetting,
+} from '../../hooks/useTranscriptionModelSetting';
 
 export const ModelSettingsScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -32,9 +34,7 @@ export const ModelSettingsScreen: React.FC = () => {
   // TTS is a pro feature injected via a slot (same as the in-chat generation settings). Free builds have no
   // slot → the section is not shown at all.
   const TtsSection = getSlot(SLOTS.generationSettingsTts);
-  // Active transcription (STT/whisper) model — the single source is the whisper store (same as the picker).
-  const sttModelId = useWhisperStore((s) => s.downloadedModelId);
-  const sttModelName = WHISPER_MODELS.find((m) => m.id === sttModelId)?.name ?? null;
+  const { modelName: sttModelName } = useTranscriptionModelSetting();
 
 
   const handleReset = () => {
@@ -135,7 +135,7 @@ export const ModelSettingsScreen: React.FC = () => {
             >
               <View style={styles.toggleInfo}>
                 <Text style={styles.toggleLabel}>Transcription model</Text>
-                <Text style={styles.toggleDesc}>{sttModelName ?? 'None selected — tap to choose'}</Text>
+                <Text style={styles.toggleDesc}>{sttModelName ?? NO_TRANSCRIPTION_MODEL_LABEL}</Text>
               </View>
               <Icon name="chevron-right" size={18} color={colors.textMuted} />
             </TouchableOpacity>
@@ -167,7 +167,9 @@ export const ModelSettingsScreen: React.FC = () => {
           style={styles.resetButton}
         />
       </ScrollView>
-      <WhisperPickerSheet visible={whisperOpen} onClose={() => setWhisperOpen(false)} />
+      {whisperOpen ? (
+        <WhisperPickerSheet visible onClose={() => setWhisperOpen(false)} />
+      ) : null}
       <CustomAlert
         visible={alertState.visible}
         title={alertState.title}
