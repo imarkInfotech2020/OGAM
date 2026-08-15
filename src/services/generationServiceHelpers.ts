@@ -5,15 +5,14 @@ import { liteRTService } from './litert';
 import { getActiveEngineService } from './engines';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import type { Message, GenerationMeta } from '../types';
-import { runToolLoop, buildLiteRTHistory } from './generationToolLoop';
+import { buildLiteRTHistory } from './generationToolLoop';
 import { effectiveCacheType } from './llmHelpers';
 import { modelInputImageUris, modelInputAudioUris } from './modelMedia';
 import { clearModelFailure } from './modelFailureHandler';
 import type { ToolResult } from './tools/types';
-import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
 
-const FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
+export const FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
 
 /**
  * Keep whatever the user has ALREADY seen when a generation errors mid-stream — never discard shown output
@@ -22,7 +21,7 @@ const FLUSH_INTERVAL_MS = 50; // ~20 updates/sec
  * reasoning and resets the streaming state either way (a strict superset of clearStreamingMessage; an empty
  * stream just resets, adding no message). Mirrors GenerationService.keepShownPartialOrClear on the stop path.
  */
-function keepShownPartialOnError(svc: any, conversationId: string): void {
+export function keepShownPartialOnError(svc: any, conversationId: string): void {
   if (svc.flushTimer) {
     clearTimeout(svc.flushTimer);
     svc.flushTimer = null;
@@ -462,175 +461,8 @@ export async function generateResponseImpl(
   }
 }
 
-export async function generateRemoteResponseImpl(
-  svc: any,
-  req: GenerationRequest,
-): Promise<void> {
-  const { conversationId, messages, onFirstToken } = req;
-  if (!(await prepareGenerationImpl(svc, conversationId))) return;
-  const chatStore = useChatStore.getState();
-  const provider = svc.getCurrentProvider();
-
-  if (!provider) {
-    svc.resetState();
-    throw new Error('No remote provider available');
-  }
-  let firstTokenReceived = false;
-  svc.remoteTimeToFirstToken = undefined;
-
-  svc.currentRemoteAbortController = new AbortController();
-  // Capture signal per-generation so callbacks stay guarded even after
-  // abortRequested is reset by the next generation's prepareGeneration().
-  const { signal: generationSignal } = svc.currentRemoteAbortController;
-
-  const { temperature, maxTokens, topP, thinkingEnabled } =
-    useAppStore.getState().settings;
-  const options: GenerationOptions = {
-    temperature,
-    maxTokens,
-    topP,
-    stopSequences: [],
-    enableThinking: thinkingEnabled && provider.capabilities.supportsThinking,
-  };
-
-  try {
-    await provider.generate(messages, options, {
-      onToken: (token: string) => {
-        if (generationSignal.aborted) return;
-        if (!firstTokenReceived) {
-          firstTokenReceived = true;
-          svc.remoteTimeToFirstToken = svc.state.startTime
-            ? (Date.now() - svc.state.startTime) / 1000
-            : undefined;
-          svc.updateState({ isThinking: false });
-          onFirstToken?.();
-        }
-        svc.state.streamingContent += token;
-        svc.tokenBuffer += token;
-        if (!svc.flushTimer) {
-          svc.flushTimer = setTimeout(
-            () => svc.flushTokenBuffer(),
-            FLUSH_INTERVAL_MS,
-          );
-        }
-      },
-      onReasoning: (content: string) => {
-        if (generationSignal.aborted) return;
-        svc.reasoningBuffer += content;
-        svc.totalReasoningLength += content.length;
-        if (!svc.flushTimer) {
-          svc.flushTimer = setTimeout(
-            () => svc.flushTokenBuffer(),
-            FLUSH_INTERVAL_MS,
-          );
-        }
-      },
-      onComplete: (_result: CompletionResult) => {
-        if (generationSignal.aborted) return;
-        svc.forceFlushTokens();
-        const generationTime = svc.state.startTime
-          ? Date.now() - svc.state.startTime
-          : undefined;
-        chatStore.finalizeStreamingMessage(
-          conversationId,
-          generationTime,
-          buildGenerationMetaImpl(svc),
-        );
-        svc.checkSharePrompt();
-        svc.resetState();
-      },
-      onError: (error: Error) => {
-        if (generationSignal.aborted) return;
-        logger.error('[GenerationService] Remote generation error:', error);
-        keepShownPartialOnError(svc, conversationId);
-        throw error;
-      },
-    });
-  } catch (error) {
-    if (generationSignal.aborted) return;
-    logger.error('[GenerationService] Remote generation error:', error);
-    // Mark server as offline so the Remote Servers screen reflects the failure
-    const failedServerId = useRemoteServerStore.getState().activeServerId;
-    if (failedServerId)
-      useRemoteServerStore.getState().updateServerHealth(failedServerId, false);
-    keepShownPartialOnError(svc, conversationId);
-    throw error;
-  } finally {
-    svc.currentRemoteAbortController = null;
-  }
-}
-
-export async function generateRemoteWithToolsImpl(
-  svc: any,
-  req: GenerationWithToolsRequest,
-): Promise<void> {
-  const { conversationId, messages, options } = req;
-  logger.log(
-    `[GenService][DEBUG] generateRemoteWithToolsImpl — conv=${conversationId}, messages=${
-      messages.length
-    }, enabledToolIds=[${options.enabledToolIds.join(', ')}]`,
-  );
-  if (!(await prepareGenerationImpl(svc, conversationId))) {
-    logger.log(
-      `[GenService][DEBUG] prepareGeneration returned false, aborting`,
-    );
-    return;
-  }
-  const provider = svc.getCurrentProvider();
-
-  if (!provider) {
-    svc.resetState();
-    throw new Error('No remote provider available');
-  }
-  logger.log(
-    `[GenService][DEBUG] Provider ready — type=${
-      provider.type
-    }, capabilities=${JSON.stringify(provider.capabilities)}`,
-  );
-
-  const { enabledToolIds, projectId, ...callbacks } = options;
-
-  try {
-    // Use the same tool loop but with remote provider
-    await runToolLoop({
-      conversationId,
-      messages,
-      enabledToolIds,
-      projectId,
-      callbacks,
-      ...buildToolLoopHandlersImpl(svc),
-      forceRemote: true,
-    });
-
-    if (svc.abortRequested) {
-      logger.log(
-        `[GenService][DEBUG] Generation was aborted, skipping finalize`,
-      );
-    } else {
-      svc.forceFlushTokens();
-      const generationTime = svc.state.startTime
-        ? Date.now() - svc.state.startTime
-        : undefined;
-      logger.log(
-        `[GenService][DEBUG] Finalizing — streamingContent length=${
-          svc.state.streamingContent?.length || 0
-        }, generationTime=${generationTime}ms`,
-      );
-      useChatStore
-        .getState()
-        .finalizeStreamingMessage(
-          conversationId,
-          generationTime,
-          buildGenerationMetaImpl(svc),
-        );
-      svc.checkSharePrompt();
-      svc.resetState();
-    }
-  } catch (error) {
-    if (svc.abortRequested) return;
-    logger.error('[GenerationService] Remote tool generation error:', error);
-    // Reset generating state on error, else isGenerating stays stuck → red stop, next send blocked (2026-07-14).
-    keepShownPartialOnError(svc, conversationId);
-    throw error;
-  }
-}
+// The remote paths live in their own module; re-exported so callers keep one import site.
+export {
+  generateRemoteResponseImpl,
+  generateRemoteWithToolsImpl,
+} from './generationRemoteHelpers';

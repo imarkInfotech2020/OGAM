@@ -1,0 +1,119 @@
+// One-time migrations for the persisted app store.
+//
+// Every function here repairs state written by an OLDER build, and each is idempotent: once a value
+// no longer matches the shape it is looking for, it does nothing. `DEFAULT_SETTINGS` is passed IN
+// rather than imported, so the store owns its defaults and this module stays a pure transform of
+// whatever it is handed.
+import { Platform } from 'react-native';
+import { INFERENCE_BACKENDS } from '../types';
+import type { AppState, AppSettings } from './appStore';
+
+export function migrateEnabledTools(merged: any): void {
+  if (
+    merged.settings?.enabledTools &&
+    !merged.settings.enabledTools.includes('search_knowledge_base')
+  ) {
+    merged.settings = {
+      ...merged.settings,
+      enabledTools: [...merged.settings.enabledTools, 'search_knowledge_base'],
+    };
+  }
+}
+
+// The removed MCP context auto-boost pinned context to 32768 (and maxTokens to 8192 /
+// liteRTMaxTokens to 32768) on MCP enable and never restored it, causing OOM crashes
+// and tanked tok/s on flagship devices. Reset anyone left at the boost ceiling back to
+// the device-safe defaults. Idempotent: once reset, the values no longer match.
+const MCP_BOOST_CTX_CEILING = 32768;
+const MCP_BOOST_MAX_OUTPUT_TOKENS = 8192;
+export function migrateBoostedContext(
+  merged: any,
+  DEFAULT_SETTINGS: AppSettings,
+): void {
+  const s = merged.settings;
+  if (!s) return;
+  // Match the EXACT values the boost wrote, not `>=`. The boost set these to
+  // precise constants; a `>=` test also clobbers a user who legitimately chose a
+  // large context/maxTokens above the default, which this one-time migration must
+  // not touch.
+  if (s.contextLength === MCP_BOOST_CTX_CEILING) {
+    s.contextLength = DEFAULT_SETTINGS.contextLength;
+    // maxTokens was raised alongside contextLength by the boost; only reset it when the
+    // boost's exact value is present, so a legitimately-large user maxTokens isn't clobbered.
+    if (s.maxTokens === MCP_BOOST_MAX_OUTPUT_TOKENS)
+      s.maxTokens = DEFAULT_SETTINGS.maxTokens;
+  }
+  if (s.liteRTMaxTokens === MCP_BOOST_CTX_CEILING) {
+    s.liteRTMaxTokens = DEFAULT_SETTINGS.liteRTMaxTokens;
+  }
+}
+export function migratePersistedState(
+  persistedState: any,
+  currentState: AppState,
+  DEFAULT_SETTINGS: AppSettings,
+): AppState {
+  const merged = {
+    ...currentState,
+    ...persistedState,
+    settings: { ...DEFAULT_SETTINGS, ...persistedState?.settings },
+  };
+  // Drop legacy download tracking fields. The unified downloadStore (backed
+  // by the native Room DB) is now the source of truth. Persisted entries
+  // from old versions are silently ignored on rehydrate.
+  delete merged.downloadProgress;
+  delete merged.activeBackgroundDownloads;
+  delete merged.imageModelDownloading;
+  delete merged.imageModelDownloadIds;
+  delete merged.imageModelDownloadId;
+  // modelLoadingStrategy was removed (the residency manager owns swapping now).
+  if (merged.settings?.modelLoadingStrategy !== undefined) {
+    delete merged.settings.modelLoadingStrategy;
+  }
+  if (persistedState?.settings && !persistedState.settings.cacheType) {
+    merged.settings = {
+      ...merged.settings,
+      cacheType: persistedState.settings.flashAttn ? 'q8_0' : 'f16',
+      flashAttn: true,
+    };
+  }
+  if (persistedState?.settings && !persistedState.settings.inferenceBackend) {
+    merged.settings = {
+      ...merged.settings,
+      inferenceBackend:
+        Platform.OS === 'ios'
+          ? INFERENCE_BACKENDS.METAL
+          : INFERENCE_BACKENDS.CPU,
+    };
+  }
+
+  if (
+    merged.checklistDismissed &&
+    merged.onboardingChecklist &&
+    !Object.values(merged.onboardingChecklist).every(Boolean)
+  )
+    merged.checklistDismissed = false;
+  migrateEnabledTools(merged);
+  migrateBoostedContext(merged, DEFAULT_SETTINGS);
+  migrateGeneratedImageTimestamps(merged);
+  return merged as AppState;
+}
+
+/**
+ * Generated images stamped with epoch milliseconds as text, put right.
+ *
+ * The Android image module wrote `"1786317315833"`, which satisfies `createdAt: string` and is a date
+ * to nobody: the gallery showed it as invalid, and every sync peer refused the image because
+ * `Date.parse` answers NaN. The producers now write ISO-8601, but a phone that has generated images
+ * already holds the old value, and nothing else would ever rewrite it.
+ */
+export function migrateGeneratedImageTimestamps(merged: any): void {
+  if (!Array.isArray(merged.generatedImages)) return;
+  merged.generatedImages = merged.generatedImages.map((image: any) => {
+    const epochMs = Number(image?.createdAt);
+    return typeof image?.createdAt === 'string' &&
+      /^\d+$/.test(image.createdAt) &&
+      Number.isFinite(epochMs)
+      ? { ...image, createdAt: new Date(epochMs).toISOString() }
+      : image;
+  });
+}
