@@ -558,7 +558,7 @@ describe('ModelSettingsScreen', () => {
       }
     });
 
-    it('uses the model context ceiling for both context length and max tokens', () => {
+    it('lets context reach the model ceiling and caps max tokens at the context', () => {
       useAppStore.getState().setModelMaxContext(262144);
       const { UNSAFE_getAllByType } = renderWithSections('text');
       const { View } = require('react-native');
@@ -568,11 +568,14 @@ describe('ModelSettingsScreen', () => {
           view.props.testID?.endsWith('-slider'),
       );
 
+      // The model may not be asked to WRITE more than the context that has to hold it, so the
+      // output slider stops at the chosen context, not at the model's trained ceiling.
+      const contextLength = useAppStore.getState().settings.contextLength;
       expect(
         sliders.find(
           (slider: any) => slider.props.testID === 'llama-max-tokens-slider',
         )?.props.maximumValue,
-      ).toBe(262144);
+      ).toBe(contextLength);
       expect(
         sliders.find(
           (slider: any) =>
@@ -859,8 +862,11 @@ describe('ModelSettingsScreen', () => {
   describe('max tokens display formatting', () => {
     it('shows raw number when maxTokens < 1024', () => {
       useAppStore.getState().updateSettings({ maxTokens: 512, nBatch: 256 });
-      const { getAllByText } = renderWithSections('text');
-      expect(getAllByText('512').length).toBe(1);
+      const { getAllByText, queryByText } = renderWithSections('text');
+      // Under 1024 the value reads as itself rather than a rounded "0K". It appears more than once
+      // because max tokens is capped BY the context, so both controls legitimately show 512.
+      expect(getAllByText('512').length).toBeGreaterThan(0);
+      expect(queryByText('0K')).toBeNull();
     });
 
     it('shows K format when maxTokens >= 1024', () => {
@@ -879,8 +885,11 @@ describe('ModelSettingsScreen', () => {
       useAppStore
         .getState()
         .updateSettings({ contextLength: 512, nBatch: 256 });
-      const { getAllByText } = renderWithSections('text');
-      expect(getAllByText('512').length).toBe(1);
+      const { getAllByText, queryByText } = renderWithSections('text');
+      // Under 1024 the value reads as itself rather than a rounded "0K". It appears more than
+      // once because max tokens is capped BY the context, so both controls show 512.
+      expect(getAllByText('512').length).toBeGreaterThan(0);
+      expect(queryByText('0K')).toBeNull();
     });
   });
 

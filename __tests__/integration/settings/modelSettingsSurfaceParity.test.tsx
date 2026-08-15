@@ -40,8 +40,11 @@ describe('model settings surface parity', () => {
     _clearSlotsForTesting();
   });
 
-  it('uses the same 262K text limit and writes one shared setting state', () => {
+  it('caps output by context on both surfaces and writes one shared setting state', () => {
     useAppStore.getState().setModelMaxContext(262144);
+    // A context wide enough for the output this test chooses. Max tokens is capped BY the context,
+    // so the two must be raised together or the write below is clamped away from what it means.
+    useAppStore.getState().updateSettings({ contextLength: 262144 });
     const chatSettings = render(
       <GenerationSettingsModal visible onClose={() => {}} />,
     );

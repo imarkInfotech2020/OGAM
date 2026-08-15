@@ -21,6 +21,19 @@ const formatContext = (value: number): string =>
 const formatMaxTokens = (value: number): string =>
   value >= 1024 ? `${(value / 1024).toFixed(1)}K` : String(value);
 
+const MIN_MAX_TOKENS = 64;
+
+/**
+ * The most the model may WRITE, which the context it writes into is the ceiling for.
+ *
+ * Both sliders used to stop at the model's trained limit independently, so output could be set
+ * above the context that has to hold it - a setting the engine can never honour, and one that
+ * squeezes the prompt out of its own window. One rule, asked by the slider's ceiling and again when
+ * the context is lowered underneath a value already chosen.
+ */
+export const maxTokensCeiling = (contextLength: number): number =>
+  Math.max(MIN_MAX_TOKENS, contextLength);
+
 /**
  * One headless settings model for both text-generation settings surfaces.
  * The app store owns selected values. Loaded model metadata owns both maxima.
@@ -79,12 +92,19 @@ export function useTextGenerationSettings() {
       key: 'maxTokens',
       label: 'Max Tokens',
       description: 'Maximum length of generated response',
-      value: maxTokens,
-      min: 64,
-      max: llamaModelLimit,
+      // Clamped for DISPLAY too: a value stored by an older build (or before the context came
+      // down) must not render past the end of its own slider.
+      value: Math.min(maxTokens, maxTokensCeiling(contextLength)),
+      min: MIN_MAX_TOKENS,
+      max: Math.min(llamaModelLimit, maxTokensCeiling(contextLength)),
       step: 64,
       formatValue: formatMaxTokens,
-      onChange: (value: number) => updateSettings({ maxTokens: value }),
+      // Clamped on WRITE as well as on display: the slider cannot reach an illegal value, but
+      // nothing else should be able to store one either.
+      onChange: (value: number) =>
+        updateSettings({
+          maxTokens: Math.min(value, maxTokensCeiling(contextLength)),
+        }),
     },
     contextLength: {
       key: 'contextLength',
@@ -99,7 +119,15 @@ export function useTextGenerationSettings() {
         contextLength > 8192
           ? 'High context uses significant RAM and may crash on some devices'
           : null,
-      onChange: (value: number) => updateSettings({ contextLength: value }),
+      // Lowering the context lowers what can be written into it. Without this the stored output
+      // length silently stays above its own ceiling.
+      onChange: (value: number) =>
+        updateSettings({
+          contextLength: value,
+          ...(maxTokens > maxTokensCeiling(value)
+            ? { maxTokens: maxTokensCeiling(value) }
+            : {}),
+        }),
     },
     topP: {
       key: 'topP',

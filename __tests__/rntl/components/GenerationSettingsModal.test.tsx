@@ -216,7 +216,7 @@ describe('GenerationSettingsModal', () => {
     expect(getByText('Max Tokens')).toBeTruthy();
   });
 
-  it('uses the loaded model 262K limit for both in-chat text controls', () => {
+  it('lets context reach the model 262K limit and caps max tokens at the context', () => {
     mockStoreValues.modelMaxContext = 262144;
     const { getByText, getByTestId } = render(
       <GenerationSettingsModal {...defaultProps} />,
@@ -224,7 +224,11 @@ describe('GenerationSettingsModal', () => {
 
     fireEvent.press(getByText('TEXT GENERATION'));
 
-    expect(getByTestId('setting-maxTokens-slider').props.maximumValue).toBe(262144);
+    // Output cannot exceed the context that has to hold it, so this surface stops the max-tokens
+    // slider at the chosen context while context itself may reach the model's trained ceiling.
+    expect(getByTestId('setting-maxTokens-slider').props.maximumValue).toBe(
+      mockStoreValues.settings.contextLength,
+    );
     expect(getByTestId('setting-contextLength-slider').props.maximumValue).toBe(262144);
   });
 
