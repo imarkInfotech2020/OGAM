@@ -180,6 +180,7 @@ export const SettingsScreen: React.FC = () => {
                 title: 'Model Settings',
                 desc: 'System prompt, generation, and performance',
                 screen: 'ModelSettings' as const,
+                testID: 'open-model-settings',
               },
               {
                 icon: 'wifi',

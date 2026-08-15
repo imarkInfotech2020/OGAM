@@ -161,6 +161,8 @@ export const KnowledgeBaseScreen: React.FC = () => {
       style={styles.docRow}
       onPress={() => navigation.navigate('DocumentPreview', { filePath: item.path, fileName: item.name, fileSize: item.size })}
       activeOpacity={0.7}
+      accessibilityLabel={`Knowledge document ${item.name}`}
+      testID={`knowledge-document-row-${item.sync_id}`}
     >
       <View style={styles.docInfo}>
         <Text style={styles.docName} numberOfLines={1}>{item.name}</Text>
@@ -169,6 +171,8 @@ export const KnowledgeBaseScreen: React.FC = () => {
       <Switch
         value={item.enabled === 1}
         onValueChange={(val) => handleToggleDocument(item.id, val)}
+        accessibilityLabel={`Use ${item.name}, ${item.enabled === 1 ? 'ON' : 'OFF'}`}
+        testID={`knowledge-document-toggle-${item.sync_id}`}
         trackColor={{ false: colors.border, true: colors.primary }}
       />
       <TouchableOpacity style={styles.docDelete} onPress={() => handleDeleteDocument(item)}>
@@ -178,7 +182,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} testID="knowledge-base-screen">
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Icon name="arrow-left" size={20} color={colors.text} />
