@@ -33,9 +33,46 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     paddingBottom: 6,
     width: '100%' as any,
   },
+  /**
+   * ONE rhythm for every tool row, whatever produced it.
+   *
+   * A requested call, a synced artifact and a finished result are the same thing at three moments,
+   * so they get the same container: one row per container, the same 8px above and below, left
+   * aligned in the assistant column. They used to disagree. A turn's requested calls were grouped
+   * N-to-a-container at 2px apart, centred and inset 16px INSIDE the 85% assistant column, while a
+   * result stood alone, centred and inset 16px from the SCREEN - two left edges and two gaps, which
+   * read as tool calls nested inside one another and as rows bunching mid-stream.
+   */
+  toolRow: {
+    alignSelf: 'stretch' as const,
+    alignItems: 'flex-start' as const,
+    paddingVertical: 4,
+  },
+  /**
+   * The head of a call/result pair: the "Using X" row, which is always followed by the row carrying
+   * that same call's duration. They are one event, so they sit closer to each other than to the next
+   * call - otherwise a transcript reads as a flat list of unrelated rows at identical spacing.
+   */
+  toolRowPaired: {
+    alignSelf: 'stretch' as const,
+    alignItems: 'flex-start' as const,
+    paddingTop: 4,
+    paddingBottom: 0,
+  },
+  /**
+   * The gutter a standalone tool-result message sits in: the same left edge as `container`, and
+   * deliberately NO vertical margin. `container` carries `marginVertical: 8`, which on top of the
+   * row's own 8px padding would space two results 32px apart while the requested calls inside one
+   * assistant turn sat at 16px - the same unequal rhythm, reintroduced from the other side.
+   */
+  toolMessageRow: {
+    paddingHorizontal: 16,
+    alignItems: 'flex-start' as const,
+  },
   toolStatusRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    alignSelf: 'stretch' as const,
     gap: 6,
     paddingVertical: 2,
   },
@@ -206,6 +243,9 @@ const createThinkingStyles = (colors: ThemeColors) => ({
    *  visible preview. Stretch fills the parent width in both collapsed and expanded states. */
   thinkingBlockWrapper: {
     alignSelf: 'stretch' as const,
+    // The same padding a tool row carries, so a thinking block joins the same rhythm instead of
+    // sitting flush against the row above it.
+    paddingVertical: 4,
   },
   thinkingHeader: {
     flexDirection: 'row' as const,
