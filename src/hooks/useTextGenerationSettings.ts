@@ -31,7 +31,7 @@ const MIN_MAX_TOKENS = 64;
  * squeezes the prompt out of its own window. One rule, asked by the slider's ceiling and again when
  * the context is lowered underneath a value already chosen.
  */
-export const maxTokensCeiling = (contextLength: number): number =>
+const maxTokensCeiling = (contextLength: number): number =>
   Math.max(MIN_MAX_TOKENS, contextLength);
 
 /**
