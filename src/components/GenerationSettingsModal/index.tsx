@@ -108,6 +108,7 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
           ]}
           onPress={() => setImageSettingsOpen(!imageSettingsOpen)}
           activeOpacity={0.7}
+          testID="modal-image-accordion"
         >
           <Text style={styles.accordionTitle}>IMAGE GENERATION</Text>
           <Icon
