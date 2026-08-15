@@ -126,6 +126,30 @@ describe('getDisplayMessages', () => {
     });
   });
 
+  it('projects a peer loading its TEXT model as status, not as "Preparing reply..."', () => {
+    // The phone says "Loading Qwen3.5 2B" for tens of seconds before it can write a word. That state
+    // had no phase, so the frame fell through to `waiting` and this device told the user the peer
+    // was "Preparing reply..." for the whole wait - the one part of a slow reply worth explaining.
+    const out = getDisplayMessages(msgs, {
+      ...base(),
+      remotePreviews: [
+        {
+          id: 'remote-text-turn',
+          messageId: 'message-1',
+          deviceId: 'the-phone',
+          content: '',
+          phase: 'loading_model',
+        },
+      ],
+    });
+
+    expect(out.at(-1)).toMatchObject({
+      statusText: 'Loading model...',
+      suppressMessageBubble: true,
+      isStreaming: true,
+    });
+  });
+
   it('projects a lifecycle-only remote image frame as status without a sentinel bubble', () => {
     const out = getDisplayMessages(msgs, {
       ...base(),

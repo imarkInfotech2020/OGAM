@@ -1,4 +1,5 @@
 import {
+  chatStreamPhaseIsStatus,
   chatStreamPhaseLabel,
   chatStreamPreviewHasMessageBody,
   isSupportingChatContext,
@@ -171,8 +172,12 @@ function sameRemoteAnswer(
 function remotePreviewMessage(preview: RemoteStreamItem): ChatMessageItem {
   const phaseLabel = chatStreamPhaseLabel(preview.phase, preview.progress);
   const hasMessageBody = chatStreamPreviewHasMessageBody(preview);
+  // One rule, asked three times, instead of three hand-kept lists of phase names. A status phase
+  // renders BESIDE whatever arrived, so it only becomes the whole row when nothing else has.
+  const isStatusPhase = chatStreamPhaseIsStatus(preview.phase);
   const isStatusOnly =
     preview.phase === 'waiting' ||
+    (isStatusPhase && !hasMessageBody && !preview.reasoning) ||
     (preview.phase === 'thinking' && !preview.reasoning && !preview.content);
   return {
     // The id comes from the shared projection, so it is stable across frames.
@@ -183,10 +188,7 @@ function remotePreviewMessage(preview: RemoteStreamItem): ChatMessageItem {
     timestamp: Date.now(),
     isThinking: isStatusOnly,
     isStreaming: true,
-    suppressMessageBubble:
-      (preview.phase === 'loading_image_model' ||
-        preview.phase === 'generating_image') &&
-      !hasMessageBody,
+    suppressMessageBubble: isStatusPhase && !hasMessageBody,
     ...(preview.tools?.length
       ? {
           toolArtifacts: preview.tools.map(tool => ({
@@ -196,11 +198,7 @@ function remotePreviewMessage(preview: RemoteStreamItem): ChatMessageItem {
           })),
         }
       : {}),
-    ...((preview.phase === 'loading_image_model' ||
-      preview.phase === 'generating_image') &&
-    phaseLabel
-      ? { statusText: phaseLabel }
-      : {}),
+    ...(isStatusPhase && phaseLabel ? { statusText: phaseLabel } : {}),
   };
 }
 
