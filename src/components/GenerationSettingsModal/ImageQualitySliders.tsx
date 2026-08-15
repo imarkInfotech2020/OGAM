@@ -88,6 +88,10 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
           <View style={styles.settingHeader}>
             <Text style={styles.settingLabel}>GPU Acceleration</Text>
             <Switch
+              testID="image-gpu-acceleration"
+              accessibilityLabel={`GPU Acceleration, ${
+                (settings.imageUseOpenCL ?? true) ? 'ON' : 'OFF'
+              }`}
               value={settings.imageUseOpenCL ?? true}
               onValueChange={(value) => updateSettings({ imageUseOpenCL: value })}
               trackColor={{ false: colors.surfaceLight, true: colors.primary }}
