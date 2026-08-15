@@ -159,6 +159,23 @@ describe('ChatMessage', () => {
         tree.indexOf('tool-message'),
       );
     });
+
+    it('keeps active thinking below synced tool rows', () => {
+      const message = createMessage({
+        role: 'assistant',
+        content: '',
+        reasoningContent: 'I am deciding which source to use next.',
+        isStreaming: true,
+        toolArtifacts: [{ name: 'web_search', result: 'Search complete.' }],
+      });
+      const view = render(<ChatMessage message={message} isStreaming />);
+      const tree = JSON.stringify(view.toJSON());
+
+      expect(view.getAllByText('Thinking...').length).toBeGreaterThan(0);
+      expect(tree.indexOf('tool-message')).toBeLessThan(
+        tree.indexOf('message-bubble'),
+      );
+    });
   });
 
   // ============================================================================

@@ -318,6 +318,18 @@ export interface CompletionMeta {
   tokens_predicted?: number; // == n_predict at the cap (device saw 1024)
 }
 
+export interface LlamaCompletionScript {
+  text?: string;
+  toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+  throwMessage?: string;
+  throwAfter?: string;
+  pauseAfter?: string;
+  holdBeforeStream?: boolean;
+  thinkingText?: string;
+  reasoning?: string;
+  completionMeta?: CompletionMeta;
+}
+
 export interface LlamaFake {
   /** Set the result the NEXT context.completion() resolves with (text drives the text tool-call parser).
    *  Pass { throwMessage } to make completion REJECT (e.g. a native context-overflow error).
@@ -325,17 +337,9 @@ export interface LlamaFake {
    *  enable_thinking===true the completion emits `thinkingText` (the model's reasoning-style output, as
    *  device B30 showed) instead of `text` — so a caller that fails to disable thinking gets the reasoning
    *  dump, EMERGENT from its own enable_thinking decision. With enable_thinking!==true it emits `text`. */
-  scriptCompletion(result: {
-    text?: string;
-    toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
-    throwMessage?: string;
-    throwAfter?: string;
-    pauseAfter?: string;
-    holdBeforeStream?: boolean;
-    thinkingText?: string;
-    reasoning?: string;
-    completionMeta?: CompletionMeta;
-  }): void;
+  scriptCompletion(result: LlamaCompletionScript): void;
+  /** Queue one scripted result per native completion for a multi-round tool turn. */
+  scriptCompletions(results: LlamaCompletionScript[]): void;
   /** Release a stream held via scriptCompletion({ pauseAfter }). No-op if not paused. */
   releaseStream(): void;
   /** Make every GPU/HTP context init (initLlama with n_gpu_layers > 0) REJECT, as a real hung/timed-out
@@ -363,17 +367,17 @@ function makeLlamaFake(
   chatTemplate?: string,
 ): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [] };
-  let pending: {
+  type PreparedCompletion = Omit<LlamaCompletionScript, 'text'> & {
     text: string;
-    toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
-    throwMessage?: string;
-    throwAfter?: string;
-    pauseAfter?: string;
-    holdBeforeStream?: boolean;
-    thinkingText?: string;
-    reasoning?: string;
-    completionMeta?: CompletionMeta;
-  } = { text: '' };
+  };
+  const prepareCompletion = (
+    result: LlamaCompletionScript,
+  ): PreparedCompletion => ({
+    ...result,
+    text: result.text ?? '',
+  });
+  let pending: PreparedCompletion = { text: '' };
+  const completionQueue: PreparedCompletion[] = [];
   let releaseFn: (() => void) | null = null; // resolves a mid-stream pause
   // Faithful llama.rn stop semantics: stopCompletion() aborts the IN-FLIGHT completion — it stops
   // streaming further tokens, releases a held pause, and the completion RESOLVES with
@@ -403,8 +407,8 @@ function makeLlamaFake(
         }) => void,
       ) => {
         calls.completion.push([params]);
-        const scripted = pending;
-        pending = { text: '' };
+        const scripted = completionQueue.shift() ?? pending;
+        if (completionQueue.length === 0) pending = { text: '' };
         stopRequested = false; // per-completion abort flag — a fresh completion starts un-stopped
         if (scripted.throwMessage) throw new Error(scripted.throwMessage);
         // holdBeforeStream models PREFILL-in-progress: the completion is in flight but has emitted ZERO
@@ -610,17 +614,13 @@ function makeLlamaFake(
     module,
     calls,
     scriptCompletion: r => {
-      pending = {
-        text: r.text ?? '',
-        toolCalls: r.toolCalls,
-        throwMessage: r.throwMessage,
-        throwAfter: r.throwAfter,
-        pauseAfter: r.pauseAfter,
-        holdBeforeStream: r.holdBeforeStream,
-        thinkingText: r.thinkingText,
-        reasoning: r.reasoning,
-        completionMeta: r.completionMeta,
-      };
+      completionQueue.length = 0;
+      pending = prepareCompletion(r);
+    },
+    scriptCompletions: results => {
+      completionQueue.length = 0;
+      completionQueue.push(...results.map(prepareCompletion));
+      pending = { text: '' };
     },
     releaseStream: () => {
       const f = releaseFn;

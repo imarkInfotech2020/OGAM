@@ -155,82 +155,108 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onToggleSupportingContext,
   onLongPress,
   onMenuOpen,
-}) => (
-  <TouchableOpacity
-    testID={isUser ? 'user-message' : 'assistant-message'}
-    style={[
-      styles.container,
-      isUser ? styles.userContainer : styles.assistantContainer,
-    ]}
-    activeOpacity={0.8}
-    onLongPress={onLongPress}
-    delayLongPress={300}
-  >
-    <View testID="message-bubble" style={bubbleStyle}>
-      {!!supportingContextParsedContent?.thinking && (
-        <ThinkingBlock
-          parsedContent={supportingContextParsedContent}
-          showThinking={showSupportingContext}
-          onToggle={onToggleSupportingContext}
-          styles={styles}
-        />
-      )}
+}) => {
+  const toolsBeforeActiveThinking = Boolean(
+    isStreaming &&
+      message.toolArtifacts?.length &&
+      (message.isThinking ||
+        (parsedContent.thinking && !parsedContent.response.trim())),
+  );
 
-      {hasAttachments && (
-        <MessageAttachments
-          attachments={message.attachments!}
-          isUser={isUser}
+  return (
+    <TouchableOpacity
+      testID={isUser ? 'user-message' : 'assistant-message'}
+      style={[
+        styles.container,
+        isUser ? styles.userContainer : styles.assistantContainer,
+      ]}
+      activeOpacity={0.8}
+      onLongPress={onLongPress}
+      delayLongPress={300}
+    >
+      {toolsBeforeActiveThinking && (
+        <SyncedToolArtifacts
+          message={message}
           styles={styles}
           colors={colors}
-          onImagePress={onImagePress}
         />
       )}
 
-      <MessageContent
-        isUser={isUser}
-        isThinking={message.isThinking}
-        content={message.content}
-        isStreaming={isStreaming}
-        parsedContent={parsedContent}
-        showThinking={showThinking}
-        onToggleThinking={onToggleThinking}
-        styles={styles}
-      />
-    </View>
+      <View testID="message-bubble" style={bubbleStyle}>
+        {!!supportingContextParsedContent?.thinking && (
+          <ThinkingBlock
+            parsedContent={supportingContextParsedContent}
+            showThinking={showSupportingContext}
+            onToggle={onToggleSupportingContext}
+            styles={styles}
+          />
+        )}
 
-    <SyncedToolArtifacts message={message} styles={styles} colors={colors} />
+        {hasAttachments && (
+          <MessageAttachments
+            attachments={message.attachments!}
+            isUser={isUser}
+            styles={styles}
+            colors={colors}
+            onImagePress={onImagePress}
+          />
+        )}
 
-    <RoutedToolsRow
-      message={message}
-      isUser={isUser}
-      isStreaming={isStreaming}
-      styles={styles}
-      colors={colors}
-    />
-
-    {!isUser && !isStreaming && message.generationMeta?.truncated && (
-      <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
-        <Icon name="alert-triangle" size={12} color={colors.textMuted} />
-        <Text style={styles.toolStatusText}>
-          Reply cut off at the token limit. Retry to continue.
-        </Text>
+        <MessageContent
+          isUser={isUser}
+          isThinking={message.isThinking}
+          content={message.content}
+          isStreaming={isStreaming}
+          parsedContent={parsedContent}
+          showThinking={showThinking}
+          onToggleThinking={onToggleThinking}
+          styles={styles}
+        />
       </View>
-    )}
 
-    <MessageMetaRow
-      message={message}
-      styles={styles}
-      isStreaming={isStreaming}
-      showActions={showActions}
-      onMenuOpen={onMenuOpen}
-      metaExtra={metaExtra}
-    />
+      {!toolsBeforeActiveThinking && (
+        <SyncedToolArtifacts
+          message={message}
+          styles={styles}
+          colors={colors}
+        />
+      )}
 
-    {showGenerationDetails && !isUser && message.generationMeta && (
-      <GenerationMeta generationMeta={message.generationMeta} styles={styles} />
-    )}
-  </TouchableOpacity>
-);
+      <RoutedToolsRow
+        message={message}
+        isUser={isUser}
+        isStreaming={isStreaming}
+        styles={styles}
+        colors={colors}
+      />
+
+      {!isUser && !isStreaming && message.generationMeta?.truncated && (
+        <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
+          <Icon name="alert-triangle" size={12} color={colors.textMuted} />
+          <Text style={styles.toolStatusText}>
+            Reply cut off at the token limit. Retry to continue.
+          </Text>
+        </View>
+      )}
+
+      <MessageMetaRow
+        message={message}
+        styles={styles}
+        isStreaming={isStreaming}
+        showActions={showActions}
+        onMenuOpen={onMenuOpen}
+        metaExtra={metaExtra}
+      />
+
+      {showGenerationDetails && !isUser && message.generationMeta && (
+        <GenerationMeta
+          generationMeta={message.generationMeta}
+          styles={styles}
+        />
+      )}
+    </TouchableOpacity>
+  );
+};
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
