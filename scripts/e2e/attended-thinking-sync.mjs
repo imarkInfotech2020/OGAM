@@ -793,7 +793,7 @@ const setAndroidToolToggle = async (surface, tool) => {
   }
 };
 
-const prepareAndroidGuidedTools = async (surface, projectName) => {
+const prepareGuidedTools = async (surface, projectName) => {
   if (projectName && flag('fresh-chat', 'false') === 'true') {
     await openNewAndroidProjectChat(surface, projectName);
   } else if (projectName) await openAndroidProjectChat(surface, projectName);
@@ -939,6 +939,31 @@ const readAndroidGuidedToolEvidence = async token => {
     overused,
     finalOutput: outputs.at(-1)?.trim() ?? '',
   };
+};
+
+/**
+ * Send the prompt from iOS, through the surface rather than Appium.
+ *
+ * Appium here is the Android driver; iOS is driven over WebDriverAgent, so the send path cannot be
+ * shared. What IS shared is the vocabulary - both phones are the same app, so the input and the send
+ * button carry the same handles - and the check that matters is identical: the prompt is not sent
+ * until the device shows it as a user message.
+ */
+const dispatchIosPrompt = async ({ surface, prompt, token, beforeClick }) => {
+  await surface.ui.tapLabel('chat-input');
+  await sleep(500);
+  await surface.ui.type(prompt);
+  await sleep(800);
+  const sendVisible = (await surface.ui.labels()).includes('send-button');
+  if (!sendVisible) throw new Error('iOS shows no send control for the typed prompt');
+  await beforeClick({ platform: 'ios', control: 'send-button' });
+  await surface.ui.tapLabel('send-button');
+  await waitUntil(
+    async () => mobileMessageHasMarker(await surface.ui.source(), 'user-message', token),
+    'iOS pending message',
+    60_000,
+  );
+  return { kind: 'sent' };
 };
 
 const dispatchAndroidPrompt = async ({
@@ -1355,10 +1380,12 @@ if (step === 'snapshot') {
 } else if (step === 'prepare-guided-tools') {
   const state = await readState();
   state.projectName ??= flag('project-name', '') || undefined;
-  const surface = await connect('android');
+  // Whichever device is producing. The preparation itself speaks only the surface vocabulary, and
+  // both phones are the same React Native app, so the controls carry the same handles on each.
+  const surface = await connectDriving(primaryKind);
   try {
     const before = await capture(surface, 'before');
-    const result = await prepareAndroidGuidedTools(surface, state.projectName);
+    const result = await prepareGuidedTools(surface, state.projectName);
     const after = await capture(surface, 'after');
     const next = await readState();
     next.projectName ??= state.projectName;
@@ -1406,7 +1433,7 @@ if (step === 'snapshot') {
       `Reference: ${state.guidedToolToken}.`;
   await saveState(state);
 
-  const android = await connect('android');
+  const android = await connectDriving(primaryKind);
   let appium;
   try {
     const before = await capture(android, 'before');
@@ -1429,18 +1456,28 @@ if (step === 'snapshot') {
         `${state.guidedToolToken} is already visible; refusing a duplicate`,
       );
     }
-    appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
-    await dispatchAndroidPrompt({
-      appium,
-      prompt: state.guidedToolPrompt,
-      token: state.guidedToolToken,
-      beforeClick: async description => {
-        const reserved = await readState();
-        reserved.guidedToolSendReservedAt = new Date().toISOString();
-        reserved.guidedToolSendTarget = description;
-        await saveState(reserved);
-      },
-    });
+    const reserve = async description => {
+      const reserved = await readState();
+      reserved.guidedToolSendReservedAt = new Date().toISOString();
+      reserved.guidedToolSendTarget = description;
+      await saveState(reserved);
+    };
+    if (primaryKind === 'ios') {
+      await dispatchIosPrompt({
+        surface: android,
+        prompt: state.guidedToolPrompt,
+        token: state.guidedToolToken,
+        beforeClick: reserve,
+      });
+    } else {
+      appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
+      await dispatchAndroidPrompt({
+        appium,
+        prompt: state.guidedToolPrompt,
+        token: state.guidedToolToken,
+        beforeClick: reserve,
+      });
+    }
     await appium.close();
     appium = undefined;
     await waitUntil(
@@ -1478,21 +1515,56 @@ if (step === 'snapshot') {
   if (!state.guidedToolSent || !state.guidedToolToken) {
     throw new Error('there is no completed guided-tool send to verify');
   }
-  const android = await connect('android');
+  const android = await connect(primaryKind);
   try {
     // Poll the lossless model wire log while generation is active. Repeated UIAutomator dumps during
     // a long, rapidly changing transcript can fail before the model finishes and turn a product pass
     // into an automation-read failure. Touch the UI only after the model has emitted a final answer.
-    const evidence = await waitUntil(
-      async () => {
-        const current = await readAndroidGuidedToolEvidence(
-          state.guidedToolToken,
-        );
-        return current.finalOutput.length > 0 ? current : false;
-      },
-      'Android guided tool final output in wire log',
-      timeoutMs,
-    );
+    // The wire log is the strongest evidence there is - the model's OWN record of what it called -
+    // but it is read off the device with adb, so it exists for Android only. An iOS run is verified
+    // from the transcript instead: weaker, because the UI shows what was drawn rather than what was
+    // asked, and said so in the result rather than quietly claiming the same proof.
+    const evidence =
+      primaryKind === 'android'
+        ? await waitUntil(
+            async () => {
+              const current = await readAndroidGuidedToolEvidence(
+                state.guidedToolToken,
+              );
+              return current.finalOutput.length > 0 ? current : false;
+            },
+            'Android guided tool final output in wire log',
+            timeoutMs,
+          )
+        : await waitUntil(
+            async () => {
+              const labels = await android.ui.labels();
+              const called = GUIDED_REQUIRED_TOOL_CALLS.filter(name =>
+                labels.some(label => label.includes(name)),
+              );
+              const settled = !labels.some(
+                label =>
+                  ['stop-button', 'thinking-indicator'].includes(label) ||
+                  /Thinking\.\.\./i.test(label),
+              );
+              if (!settled || called.length === 0) return false;
+              return {
+                source: 'transcript',
+                thinkingEnabled: labels.some(label =>
+                  /thinking-block|Thought process/i.test(label),
+                ),
+                calls: called,
+                callCounts: Object.fromEntries(called.map(name => [name, 1])),
+                missing: GUIDED_REQUIRED_TOOL_CALLS.filter(
+                  name => !called.includes(name),
+                ),
+                overused: [],
+                finalOutput: labels.join('\n'),
+              };
+            },
+            `${primaryKind} guided tool rows in the transcript`,
+            timeoutMs,
+          );
     const completed = await waitUntil(
       async () => {
         try {
