@@ -94,6 +94,20 @@ export class AppiumAndroidClient {
   }
 
   /**
+   * A control located by XPath, for surfaces that carry no testID of ours.
+   *
+   * The system photo picker is another app: it has its own view tree and none of our handles, so a
+   * journey that has to attach a real photo can only name what Android itself exposes.
+   */
+  async findByXPath(expression) {
+    return this.#find('xpath', expression);
+  }
+
+  async clickByXPath(expression) {
+    await this.clickElement(await this.findByXPath(expression));
+  }
+
+  /**
    * One attribute of a control, read from the device.
    *
    * A switch's truth is `checked`, not its label: `describeElement` reports geometry and identity,
