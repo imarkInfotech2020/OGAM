@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, useCallback } from 'react';
 import {
   NavigationProp,
   useNavigation,
@@ -56,9 +56,20 @@ type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;
 export const useChatScreen = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<ChatScreenRouteProp>();
-  const [isModelLoading, setIsModelLoading] = useState(false);
-  const [loadingModel, setLoadingModel] = useState<DownloadedModel | null>(
-    null,
+  // The store owns "the text model is loading", not this component. The live-stream service
+  // subscribes to that store, so a paired device learns about the wait by construction instead of
+  // sitting on "Preparing reply..." while this phone says "Loading Qwen3.5 2B".
+  const isModelLoading = useChatStore(state => state.isModelLoading);
+  const setIsModelLoading = useChatStore(state => state.setIsModelLoading);
+  const setLoadingModelName = useChatStore(state => state.setLoadingModelName);
+  const [loadingModel, setLoadingModelState] =
+    useState<DownloadedModel | null>(null);
+  const setLoadingModel = useCallback(
+    (model: DownloadedModel | null) => {
+      setLoadingModelState(model);
+      setLoadingModelName(model?.name ?? null);
+    },
+    [setLoadingModelName],
   );
   const [supportsVision, setSupportsVision] = useState(false);
   const [showProjectSelector, setShowProjectSelector] = useState(false);
