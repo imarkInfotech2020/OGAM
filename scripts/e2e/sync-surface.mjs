@@ -23,6 +23,7 @@ import { promisify } from 'node:util';
 import { AdbClient } from '../android/adb-client.mjs';
 import { WdaClient } from '../ios/wda-client.mjs';
 import { ANDROID_PACKAGE, IOS_BUNDLE_ID } from './device.mjs';
+import { selectMainOffGridPage } from './desktop-target.mjs';
 import {
   CANCEL,
   CONFIRM_DESTRUCTIVE,
@@ -110,8 +111,10 @@ const rnSurface = (client, platform) => {
       tapWhenReady: (label, options) => client.tapWhenReady(label, options),
       waitForLabel: (label, options) => client.waitForLabel(label, options),
       waitForGone: (label, options) => client.waitForGone(label, options),
+      scrollToLabel: (label, options) => client.scrollToLabel(label, options),
       scrollAndTap: (label, options) => client.scrollAndTap(label, options),
       type: (value) => client.type(value),
+      replaceTestId: client.replaceTestId ? (testId, value) => client.replaceTestId(testId, value) : undefined,
       back: () => client.back(),
       waitFor: (check, options) => client.waitFor(() => check(), options),
     },
@@ -417,7 +420,7 @@ const electronSurface = async (spec) => {
   const { host, port = 9222, platform } = spec;
 
   const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
-  const page = targets.find((t) => t.type === 'page' && /Off Grid/i.test(t.title ?? ''));
+  const page = selectMainOffGridPage(targets);
   if (!page) {
     throw new Error(
       `no Off Grid page on ${host}:${port}. Start the app with --remote-debugging-port=${port}.`,
@@ -826,7 +829,7 @@ export async function connectSurface(spec) {
     // wrong when something only wants to LOOK: it killed a model transfer that was mid-flight,
     // because the observer relaunched the app it was observing. Passive attaches to whatever is
     // already on screen and touches nothing.
-    else if (passive) await client.session();
+    else if (passive) await client.attach();
     else await client.session(IOS_BUNDLE_ID);
     return rnSurface(client, 'ios');
   }

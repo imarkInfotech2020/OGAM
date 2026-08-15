@@ -1,0 +1,2088 @@
+/**
+ * Attended Android -> mesh Thinking journey.
+ *
+ * This runner is intentionally staged. Each command performs one visible action, records the state
+ * before and after it, and then exits. The send stage is guarded by durable state so rerunning a
+ * command after a UI or control-channel failure cannot submit the same prompt twice.
+ *
+ *   npm run e2e:thinking-sync -- --step snapshot --run meshproof... --ios http://...:8100
+ *   npm run e2e:thinking-sync -- --step open-chat --run meshproof... --ios http://...:8100
+ *   npm run e2e:thinking-sync -- --step open-settings --run meshproof... --ios http://...:8100
+ */
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { AdbClient } from '../android/adb-client.mjs';
+import { AppiumAndroidClient } from '../android/appium-client.mjs';
+import { EVIDENCE_DIR, flag, specFor } from './mesh-config.mjs';
+import { connectSurface } from './sync-surface.mjs';
+
+const KINDS = ['android', 'ios', 'macos', 'windows'];
+const step = flag('step', 'snapshot');
+const run = flag('run', '');
+const requestedPlatform = flag('platform', 'all').toLowerCase();
+const primaryKind = flag('primary', 'android').toLowerCase();
+if (!run) throw new Error('--run must contain the existing checkpoint marker');
+if (requestedPlatform !== 'all' && !KINDS.includes(requestedPlatform)) {
+  throw new Error(`--platform must be all or one of ${KINDS.join(', ')}`);
+}
+if (!['android', 'ios'].includes(primaryKind)) {
+  throw new Error('--primary must be android or ios');
+}
+
+const evidenceDir = resolve(
+  flag(
+    'evidence',
+    join(EVIDENCE_DIR, 'generated-image-sync', `attended-${run}`),
+  ),
+);
+const statePath = join(evidenceDir, 'thinking-state.json');
+const logPath = join(evidenceDir, 'thinking-actions.ndjson');
+const safe = value => value.replace(/[^a-z0-9-]+/gi, '-').replace(/^-|-$/g, '');
+const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
+const THINKING_LIVE =
+  /thinking(?:\.{2,}|\s+for\s+|\s*\()|analyzing|generating response/i;
+const count = (text, token) =>
+  text.toLowerCase().split(token.toLowerCase()).length - 1;
+const timeoutMs = Number(flag('timeout-minutes', '5')) * 60_000;
+const appiumUrl = flag(
+  'appium',
+  process.env.APPIUM_URL ?? 'http://127.0.0.1:4723',
+);
+const projectFixtureDir = resolve('scripts/e2e/fixtures/off-grid-ai-project');
+const QWEN_ROW_TEST_ID =
+  'text-model-row-unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q4_K_M.gguf';
+const GUIDED_REQUIRED_TOOL_CALLS = [
+  'search_knowledge_base',
+  'web_search',
+  'read_url',
+  'read_wiki_structure',
+  'read_wiki_contents',
+  'ask_question',
+];
+const thinkingPrompt = token =>
+  flag('thinking-prompt', '') ||
+  `${run} What is 2 + 2? Reply with only the number.`;
+
+const mobileMessageHasMarker = (root, role, token) => {
+  const visit = node => {
+    if (!node) return { text: '', matched: false };
+    const children = (node.children ?? []).map(visit);
+    const own = [node.label, node.name, node.value]
+      .map(value => `${value ?? ''}`)
+      .join('\n');
+    const text = [own, ...children.map(child => child.text)].join('\n');
+    const matched =
+      children.some(child => child.matched) ||
+      (own.toLowerCase().includes(role.toLowerCase()) &&
+        text.toLowerCase().includes(token.toLowerCase()));
+    return { text, matched };
+  };
+  return visit(root).matched;
+};
+
+const mobileAssistantResponseEndsWithMarker = (root, token) => {
+  const nodeText = node =>
+    [node?.label, node?.name, node?.value]
+      .map(value => `${value ?? ''}`)
+      .filter(Boolean)
+      .join('\n');
+  const subtreeText = node =>
+    [nodeText(node), ...(node?.children ?? []).map(subtreeText)]
+      .filter(Boolean)
+      .join('\n');
+  const hasId = (node, id) =>
+    [node?.label, node?.name, node?.value].some(
+      value => `${value ?? ''}`.toLowerCase() === id,
+    );
+  const responseEndsWithMarker = node => {
+    if (hasId(node, 'message-text') && subtreeText(node).trim().endsWith(token))
+      return true;
+    return (node?.children ?? []).some(responseEndsWithMarker);
+  };
+  const visit = node => {
+    if (!node) return false;
+    if (hasId(node, 'assistant-message') && responseEndsWithMarker(node))
+      return true;
+    return (node.children ?? []).some(visit);
+  };
+  return visit(root);
+};
+
+const mobileAssistantResponseMatches = (root, expected) => {
+  const wanted = expected.trim().toLowerCase();
+  const fields = node =>
+    [node?.label, node?.name, node?.value]
+      .map(value => `${value ?? ''}`.trim())
+      .filter(Boolean);
+  const visit = (node, inAssistant = false) => {
+    if (!node) return false;
+    const values = fields(node);
+    const assistant =
+      inAssistant ||
+      values.some(value => value.toLowerCase() === 'assistant-message');
+    if (assistant) {
+      if (values.some(value => value.toLowerCase() === wanted)) return true;
+      // iOS flattens the visible response into the accessible assistant container instead of
+      // exposing it as a child of message-text. Comma-separated accessibility parts preserve the
+      // response as one exact field between the collapsed thought and the action row.
+      if (
+        values.some(value =>
+          value
+            .split(/,\s*/)
+            .some(part => part.trim().toLowerCase() === wanted),
+        )
+      ) {
+        return true;
+      }
+    }
+    return (node.children ?? []).some(child => visit(child, assistant));
+  };
+  return visit(root);
+};
+
+const mobileHasCompletedAssistantAfterMarker = (root, token) => {
+  const fields = node =>
+    [node?.label, node?.name, node?.value]
+      .map(value => `${value ?? ''}`.trim())
+      .filter(Boolean);
+  const subtreeText = node =>
+    [fields(node).join('\n'), ...(node?.children ?? []).map(subtreeText)]
+      .filter(Boolean)
+      .join('\n');
+  const hasId = (node, id) =>
+    fields(node).some(value => value.toLowerCase() === id);
+  const messages = [];
+  const collect = node => {
+    if (!node) return;
+    if (hasId(node, 'user-message')) {
+      messages.push({ role: 'user', text: subtreeText(node) });
+      return;
+    }
+    if (hasId(node, 'assistant-message')) {
+      messages.push({
+        role: 'assistant',
+        text: subtreeText(node),
+        hasAnswer: (() => {
+          const visit = child => {
+            if (!child) return false;
+            if (hasId(child, 'message-text')) {
+              return (
+                subtreeText(child)
+                  .replace(/message-text/gi, '')
+                  .trim().length > 0
+              );
+            }
+            return (child.children ?? []).some(visit);
+          };
+          return visit(node);
+        })(),
+      });
+      return;
+    }
+    (node.children ?? []).forEach(collect);
+  };
+  collect(root);
+  const userIndex = messages.findLastIndex(
+    message =>
+      message.role === 'user' &&
+      message.text.toLowerCase().includes(token.toLowerCase()),
+  );
+  return (
+    userIndex >= 0 &&
+    messages
+      .slice(userIndex + 1)
+      .some(message => message.role === 'assistant' && message.hasAnswer)
+  );
+};
+
+const finalThinkingResponseIsValid = (result, state) =>
+  state.expectedResponse
+    ? result.responseMatchesExpected
+    : result.finalResponseEndsWithMarker;
+
+const thinkingResult = async (surface, state) => {
+  if (surface.family === 'rn') {
+    const source = await surface.ui.source();
+    const labels = [];
+    const collect = node => {
+      if (!node) return;
+      for (const value of [node.label, node.name, node.value]) {
+        if (`${value ?? ''}`) labels.push(`${value}`);
+      }
+      (node.children ?? []).forEach(collect);
+    };
+    collect(source);
+    const text = labels.join('\n');
+    const has = id => labels.some(label => label.toLowerCase() === id);
+    return {
+      live: [
+        'stop-button',
+        'thinking-indicator',
+        'streaming-thinking-hint',
+      ].some(has),
+      finalResponseEndsWithMarker: mobileAssistantResponseEndsWithMarker(
+        source,
+        state.thinkToken,
+      ),
+      responseMatchesExpected: state.expectedResponse
+        ? mobileAssistantResponseMatches(source, state.expectedResponse)
+        : false,
+      cutoffVisible: /reply cut off at the token limit/i.test(text),
+      savedAssistantVisible: mobileMessageHasMarker(
+        source,
+        'assistant-message',
+        state.thinkToken,
+      ),
+    };
+  }
+
+  return surface.ui.evaluate(`
+    const token = ${JSON.stringify(state.thinkToken)};
+    const visible = (node) => Boolean(node && node.offsetParent !== null);
+    const assistantMessages = [...document.querySelectorAll('[data-testid^="chat-message-"]')]
+      .filter((message) => message.querySelector('button[title="Regenerate"]'));
+    const responses = assistantMessages.map((message) => {
+      const directBubble = [...message.children]
+        .find((child) => child.matches?.('.rounded-md') && !child.matches?.('[data-slot="collapsible"]'));
+      return (directBubble?.innerText || '').trim();
+    });
+    const liveStatus = [...document.querySelectorAll('[role="status"]')]
+      .filter(visible)
+      .map((node) => node.innerText || '');
+    const stopVisible = [...document.querySelectorAll('button, [role="button"]')]
+      .filter(visible)
+      .some((node) => /stop/i.test(node.innerText || node.getAttribute('aria-label') || node.title || ''));
+    return {
+      live: stopVisible || liveStatus.some((status) => /thinking|analyzing|generating response/i.test(status)),
+      finalResponseEndsWithMarker: responses.some((response) => response.endsWith(token)),
+      responseMatchesExpected: ${JSON.stringify(state.expectedResponse ?? '')}
+        ? responses.some((response) => response.trim() === ${JSON.stringify(
+          state.expectedResponse ?? '',
+        )})
+        : false,
+      cutoffVisible: liveStatus.some((status) => /stopped at the configured.*token limit/i.test(status)),
+      savedAssistantVisible: responses.some((response) => response.toLowerCase().includes(token.toLowerCase())),
+    };
+  `);
+};
+
+await mkdir(evidenceDir, { recursive: true });
+
+const readState = async () => {
+  try {
+    return JSON.parse(await readFile(statePath, 'utf8'));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+    return {
+      run,
+      createdAt: new Date().toISOString(),
+      actions: [],
+      sent: false,
+    };
+  }
+};
+
+const saveState = async state => {
+  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`);
+};
+
+const record = async entry => {
+  const event = { at: new Date().toISOString(), step, ...entry };
+  await appendFile(logPath, `${JSON.stringify(event)}\n`);
+  const state = await readState();
+  state.actions.push(event);
+  await saveState(state);
+};
+
+const connect = kind => connectSurface({ ...specFor(kind), passive: true });
+const connectDriving = kind =>
+  connectSurface({ ...specFor(kind), passive: false });
+
+const capture = async (surface, phase) => {
+  const prefix = `${String((await readState()).actions.length).padStart(
+    2,
+    '0',
+  )}-${safe(step)}-${surface.platform}-${phase}`;
+  const text = await surface.text();
+  await writeFile(join(evidenceDir, `${prefix}.txt`), `${text}\n`);
+  const screenshot = join(evidenceDir, `${prefix}.png`);
+  await surface.screenshot(screenshot);
+  return { text, screenshot };
+};
+
+const closeTransientMobileSheet = async surface => {
+  const labels = await surface.ui.labels();
+  if (labels.includes('Done')) {
+    // The currently installed app predates AppSheet's stable close testID. Android Back follows the
+    // sheet's onRequestClose contract and avoids a text or coordinate selector.
+    await surface.ui.back();
+    await sleep(500);
+  }
+};
+
+const openMobileChat = async surface => {
+  await closeTransientMobileSheet(surface);
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const labels = await surface.ui.labels();
+    if (
+      labels.includes('chat-screen') &&
+      labels.some(label => label.includes(run))
+    )
+      return;
+    const markerAt = labels.findIndex(label => label.includes(run));
+    const rows = labels
+      .map((label, index) => ({ label, index }))
+      .filter(({ label }) => /^conversation-item-\d+$/.test(label));
+    const row =
+      markerAt < 0
+        ? undefined
+        : rows.sort(
+            (left, right) =>
+              Math.abs(left.index - markerAt) -
+              Math.abs(right.index - markerAt),
+          )[0]?.label;
+    if (row) {
+      await surface.ui.tapLabel(row);
+    } else if (labels.includes('chats-tab')) {
+      await surface.ui.tapLabel('chats-tab');
+    } else if (labels.includes('Back')) {
+      await surface.ui.tapLabel('Back');
+    } else {
+      await surface.ui.back();
+    }
+    await sleep(700);
+  }
+  throw new Error(
+    `${surface.platform} could not open the existing ${run} chat`,
+  );
+};
+
+const openDesktopChat = async surface => {
+  const desktopChatIsOpen = () =>
+    surface.ui.evaluate(`
+    const wanted = ${JSON.stringify(run.toLowerCase())};
+    const hasMarker = [...document.querySelectorAll('[data-testid^="chat-message-"]')]
+      .some((node) => (node.innerText || '').toLowerCase().includes(wanted));
+    const composer = document.querySelector(
+      'textarea, input[placeholder*="Ask" i], [contenteditable="true"]',
+    );
+    return hasMarker && Boolean(composer && composer.offsetParent !== null);
+  `);
+  const alreadyOpen = await surface.ui.evaluate(`
+    const wanted = ${JSON.stringify(run.toLowerCase())};
+    const hasMarker = [...document.querySelectorAll('[data-testid^="chat-message-"]')]
+      .some((node) => (node.innerText || '').toLowerCase().includes(wanted));
+    const composer = document.querySelector(
+      'textarea, input[placeholder*="Ask" i], [contenteditable="true"]',
+    );
+    return hasMarker && Boolean(composer && composer.offsetParent !== null);
+  `);
+  if (!alreadyOpen) {
+    const markerVisible = await surface.ui.evaluate(`
+      document.body.innerText.toLowerCase().includes(${JSON.stringify(
+        run.toLowerCase(),
+      )})
+    `);
+    if (!markerVisible) {
+      const openedChatView = await surface.ui.evaluate(`
+        const label = [...document.querySelectorAll('button > span')]
+          .find((node) => (node.textContent || '').trim() === 'Chat');
+        const button = label?.closest('button');
+        if (!button) return false;
+        button.click();
+        return true;
+      `);
+      if (!openedChatView)
+        throw new Error(
+          `${surface.platform} does not expose the Chat nav button`,
+        );
+      await surface.ui.waitFor(
+        () =>
+          surface.ui.evaluate(`
+          document.body.innerText.toLowerCase().includes(${JSON.stringify(
+            run.toLowerCase(),
+          )})
+        `),
+        {
+          label: `${surface.platform} checkpoint chat row`,
+          timeoutMs: 20_000,
+          intervalMs: 500,
+        },
+      );
+    }
+    const opened = await surface.ui.evaluate(`
+      const wanted = ${JSON.stringify(run.toLowerCase())};
+      const owner = [...document.querySelectorAll('.cursor-pointer')]
+        .filter((node) => node.offsetParent !== null)
+        .find((node) => (node.innerText || '').toLowerCase().includes(wanted));
+      if (!owner) return false;
+      owner.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      return true;
+    `);
+    if (!opened)
+      throw new Error(
+        `${surface.platform} does not show a clickable ${run} chat row`,
+      );
+  }
+  await surface.ui.waitFor(desktopChatIsOpen, {
+    label: `${surface.platform} checkpoint chat`,
+    timeoutMs: 20_000,
+    intervalMs: 500,
+  });
+};
+
+const openChat = surface =>
+  surface.family === 'rn' ? openMobileChat(surface) : openDesktopChat(surface);
+
+const assertChatOpen = async surface => {
+  const text = await surface.text();
+  if (!text.toLowerCase().includes(run.toLowerCase())) {
+    throw new Error(`${surface.platform} is not on checkpoint chat ${run}`);
+  }
+  if (surface.family === 'rn') {
+    const labels = await surface.ui.labels();
+    if (!labels.includes('chat-screen'))
+      throw new Error(`${surface.platform} checkpoint chat is not open`);
+    return;
+  }
+  const composer = await surface.ui.evaluate(`
+    const wanted = ${JSON.stringify(run.toLowerCase())};
+    const hasMarker = [...document.querySelectorAll('[data-testid^="chat-message-"]')]
+      .some((message) => (message.innerText || '').toLowerCase().includes(wanted));
+    const node = document.querySelector('textarea, input[placeholder*="Ask" i], [contenteditable="true"]');
+    return hasMarker && Boolean(node && node.offsetParent !== null);
+  `);
+  if (!composer)
+    throw new Error(
+      `${surface.platform} checkpoint chat content or composer is not visible`,
+    );
+};
+
+const waitUntil = async (check, label, limitMs = timeoutMs) => {
+  const started = Date.now();
+  while (Date.now() - started < limitMs) {
+    const result = await check();
+    if (result) return result;
+    await sleep(500);
+  }
+  throw new Error(`timed out after ${limitMs}ms waiting for ${label}`);
+};
+
+const openNewAndroidChat = async surface => {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const labels = await surface.ui.labels();
+    if (labels.includes('home-screen')) break;
+    if (labels.includes('home-tab')) {
+      await surface.ui.tapLabel('home-tab');
+    } else if (labels.includes('Back')) {
+      await surface.ui.tapLabel('Back');
+    } else {
+      await surface.ui.back();
+    }
+    await sleep(600);
+  }
+  await surface.ui.waitForLabel('home-screen', {
+    label: 'Android home',
+    timeoutMs: 20_000,
+  });
+  await surface.ui.tapLabel('new-chat-button');
+  await surface.ui.waitForLabel('chat-screen', {
+    label: 'new Android chat',
+    timeoutMs: 20_000,
+  });
+};
+
+const openAndroidProjectChat = async (surface, projectName) => {
+  const current = await surface.ui.labels();
+  if (
+    current.includes('chat-screen') &&
+    current.some(label => label.includes(projectName))
+  )
+    return;
+  await openNewAndroidProjectChat(surface, projectName);
+};
+
+const openNewAndroidProjectChat = async (surface, projectName) => {
+  await openPrimaryProjects(surface);
+  await surface.ui.scrollToLabel(projectName, { maxSwipes: 10 });
+  await surface.ui.tapLabel(projectName);
+  await surface.ui.waitForLabel('project-detail-screen', {
+    label: `${projectName} detail`,
+    timeoutMs: 20_000,
+  });
+  const labels = await surface.ui.labels();
+  const chatControl = labels.includes('project-new-chat')
+    ? 'project-new-chat'
+    : 'project-start-chat';
+  await surface.ui.tapLabel(chatControl);
+  await surface.ui.waitForLabel('chat-screen', {
+    label: `${projectName} new chat`,
+    timeoutMs: 20_000,
+  });
+  await surface.ui.waitForLabel(projectName, {
+    label: `${projectName} selected in chat`,
+    timeoutMs: 20_000,
+  });
+};
+
+const openPrimaryProjects = async surface => {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const labels = await surface.ui.labels();
+    if (labels.includes('projects-screen')) return;
+    if (labels.includes('projects-tab')) {
+      await surface.ui.tapLabel('projects-tab');
+    } else {
+      await surface.ui.back();
+    }
+    await sleep(600);
+  }
+  throw new Error(`${surface.platform} could not open Projects`);
+};
+
+const projectFileAttachments = fixture => [
+  ...fixture.fileAttachments.map(fileName => ({
+    fileName,
+    sourcePath: join(projectFixtureDir, fileName),
+    source: 'repository',
+  })),
+];
+
+const stageProjectFixtures = async (kind, attachments) => {
+  if (kind !== 'android') {
+    throw new Error(
+      `${kind} fixture staging is not configured yet; the shared UI journey already supports --primary ${kind}`,
+    );
+  }
+  const adb = new AdbClient(flag('android', '505b53a0'));
+  const remoteDir = `/sdcard/Download/OffGridE2E/${safe(run)}`;
+  await adb.shell(['mkdir', '-p', remoteDir]);
+  for (const attachment of attachments) {
+    await adb.push(
+      attachment.sourcePath,
+      `${remoteDir}/${attachment.fileName}`,
+    );
+  }
+  return remoteDir;
+};
+
+const fillPrimaryFields = async (surface, fields, submitTestId) => {
+  if (surface.platform === 'android') {
+    const appium = new AppiumAndroidClient(
+      appiumUrl,
+      flag('android', '505b53a0'),
+    );
+    try {
+      for (const [testId, value] of fields) {
+        let actual = '';
+        for (let attempt = 0; attempt < 2 && actual !== value; attempt += 1) {
+          await appium.replaceTestId(testId, value);
+          actual = await appium.textTestId(testId);
+        }
+        if (actual !== value) {
+          throw new Error(
+            `${testId} does not contain the exact fixture value; refusing to submit`,
+          );
+        }
+      }
+      // A multiline field leaves Gboard over the sheet. A semantic tap can then land on Gboard's
+      // settings control at the same screen position instead of the app's Save button underneath.
+      await appium.hideKeyboard();
+    } finally {
+      await appium.close();
+    }
+    // UiAutomator only exposes the current viewport while the soft keyboard is open. Closing the
+    // field session dismisses the keyboard; use the shared semantic surface for the visible action
+    // so a sheet button below a multiline field is found and pressed in the same way as on iOS.
+    await surface.ui.scrollToLabel(submitTestId, { maxSwipes: 4 });
+    await surface.ui.tapLabel(submitTestId);
+    return;
+  }
+  if (!surface.ui.replaceTestId)
+    throw new Error(`${surface.platform} cannot replace text fields`);
+  for (const [testId, value] of fields)
+    await surface.ui.replaceTestId(testId, value);
+  await surface.ui.tapLabel(submitTestId);
+};
+
+const ensurePrimaryProject = async (surface, state, fixture) => {
+  await openPrimaryProjects(surface);
+  const existing = await surface.ui
+    .scrollToLabel(state.projectName, { maxSwipes: 10 })
+    .catch(() => null);
+  if (existing) {
+    await surface.ui.tapLabel(state.projectName);
+    await surface.ui.waitForLabel('project-detail-screen', {
+      label: `${state.projectName} detail`,
+      timeoutMs: 20_000,
+    });
+    return 'existing';
+  }
+
+  const current = await surface.ui.labels();
+  const addControl = current.includes('new-project-button')
+    ? 'new-project-button'
+    : 'new-project-empty-button';
+  await surface.ui.tapLabel(addControl);
+  await surface.ui.waitForLabel('project-edit-screen', {
+    label: 'New Project editor',
+    timeoutMs: 20_000,
+  });
+  const reserved = await readState();
+  reserved.projectCreateReservedAt ??= new Date().toISOString();
+  await saveState(reserved);
+  await fillPrimaryFields(
+    surface,
+    [
+      ['project-edit-name', state.projectName],
+      ['project-edit-description', fixture.description],
+      ['project-edit-system-prompt', fixture.systemPrompt],
+    ],
+    'project-edit-save',
+  );
+  await surface.ui.waitForLabel('projects-screen', {
+    label: 'Projects after save',
+    timeoutMs: 20_000,
+  });
+  await surface.ui.scrollToLabel(state.projectName, { maxSwipes: 10 });
+  await surface.ui.tapLabel(state.projectName);
+  await surface.ui.waitForLabel('project-detail-screen', {
+    label: `${state.projectName} detail`,
+    timeoutMs: 20_000,
+  });
+  const created = await readState();
+  created.projectCreatedAt = new Date().toISOString();
+  await saveState(created);
+  return 'created';
+};
+
+const ensurePrimaryTextAttachment = async (surface, fixture) => {
+  const title = fixture.textAttachment.title;
+  const documentLabel = `Knowledge document ${title}`;
+  if (
+    await surface.ui
+      .scrollToLabel(documentLabel, { maxSwipes: 4 })
+      .catch(() => null)
+  )
+    return 'existing';
+  const text = await readFile(
+    join(projectFixtureDir, fixture.textAttachment.file),
+    'utf8',
+  );
+  await surface.ui.scrollAndTap('kb-paste-text', { maxSwipes: 6 });
+  await surface.ui.waitForLabel('paste-note-text', {
+    label: 'project text attachment sheet',
+    timeoutMs: 20_000,
+  });
+  await fillPrimaryFields(
+    surface,
+    [
+      ['paste-note-title', title],
+      ['paste-note-text', text.trim()],
+    ],
+    'paste-note-save',
+  );
+  await surface.ui.waitForLabel(documentLabel, {
+    label: `${title} indexed`,
+    timeoutMs: 180_000,
+  });
+  await surface.ui.waitForLabel(`Use ${title}, ON`, {
+    label: `${title} enabled`,
+    timeoutMs: 20_000,
+  });
+  return 'added';
+};
+
+const ensurePrimaryFileAttachment = async (surface, fileName) => {
+  const documentLabel = `Knowledge document ${fileName}`;
+  if (
+    await surface.ui
+      .scrollToLabel(documentLabel, { maxSwipes: 4 })
+      .catch(() => null)
+  )
+    return 'existing';
+  await surface.ui.scrollAndTap('kb-add-document', { maxSwipes: 6 });
+  await surface.ui.waitForLabel(fileName, {
+    label: `${fileName} in the system file picker`,
+    timeoutMs: 30_000,
+  });
+  await surface.ui.tapLabel(fileName);
+  await surface.ui.waitForLabel('project-detail-screen', {
+    label: 'project after file selection',
+    timeoutMs: 40_000,
+  });
+  await surface.ui.waitForLabel(documentLabel, {
+    label: `${fileName} indexed`,
+    timeoutMs: 240_000,
+  });
+  await surface.ui.waitForLabel(`Use ${fileName}, ON`, {
+    label: `${fileName} enabled`,
+    timeoutMs: 20_000,
+  });
+  return 'added';
+};
+
+const setAndroidThinking = async (surface, enabled) => {
+  let labels = await surface.ui.labels();
+  if (!labels.includes('quick-thinking-toggle')) {
+    if (!labels.includes('chat-screen'))
+      throw new Error('Android chat is not open');
+    await surface.ui.tapLabel('quick-settings-button');
+    await sleep(500);
+    labels = await surface.ui.labels();
+  }
+  if (!labels.includes('quick-thinking-toggle')) {
+    throw new Error(
+      'Android does not expose the Thinking control for the loaded model',
+    );
+  }
+  const isOn = labels.some(label => /Thinking, ON/i.test(label));
+  if (isOn !== enabled) {
+    await surface.ui.tapLabel('quick-thinking-toggle');
+    await sleep(500);
+    labels = await surface.ui.labels();
+  }
+  const expected = enabled ? /Thinking, ON/i : /Thinking, OFF/i;
+  if (!labels.some(label => expected.test(label))) {
+    throw new Error(
+      `Android Thinking control did not reach ${enabled ? 'ON' : 'OFF'}`,
+    );
+  }
+  await surface.ui.back();
+  await surface.ui.waitForLabel('chat-screen', {
+    label: 'Android chat after Thinking change',
+    timeoutMs: 20_000,
+  });
+};
+
+const GUIDED_STANDARD_TOOLS = [
+  { id: 'web_search', name: 'Web Search', enabled: true },
+  { id: 'calculator', name: 'Calculator', enabled: false },
+  { id: 'get_current_datetime', name: 'Date & Time', enabled: false },
+  { id: 'get_device_info', name: 'Device Info', enabled: false },
+  { id: 'search_knowledge_base', name: 'Knowledge Base', enabled: true },
+  { id: 'read_url', name: 'URL Reader', enabled: true },
+];
+
+const setAndroidToolToggle = async (surface, tool) => {
+  const control = `tool-picker-toggle-${tool.id}`;
+  await surface.ui.scrollToLabel(control, { maxSwipes: 8 });
+  let labels = await surface.ui.labels();
+  const onLabel = `${tool.name}, ON`;
+  const offLabel = `${tool.name}, OFF`;
+  const isOn = labels.includes(onLabel);
+  if (!isOn && !labels.includes(offLabel)) {
+    throw new Error(`Android does not expose a state for ${tool.name}`);
+  }
+  if (isOn !== tool.enabled) {
+    await surface.ui.tapLabel(control);
+    labels = await waitUntil(
+      async () => {
+        const current = await surface.ui.labels();
+        return current.includes(tool.enabled ? onLabel : offLabel)
+          ? current
+          : false;
+      },
+      `${tool.name} ${tool.enabled ? 'ON' : 'OFF'}`,
+      20_000,
+    );
+  }
+  if (!labels.includes(tool.enabled ? onLabel : offLabel)) {
+    throw new Error(
+      `${tool.name} did not reach ${tool.enabled ? 'ON' : 'OFF'}`,
+    );
+  }
+};
+
+const prepareAndroidGuidedTools = async (surface, projectName) => {
+  if (projectName && flag('fresh-chat', 'false') === 'true') {
+    await openNewAndroidProjectChat(surface, projectName);
+  } else if (projectName) await openAndroidProjectChat(surface, projectName);
+  else await openNewAndroidChat(surface);
+  await setAndroidThinking(surface, true);
+
+  await surface.ui.tapLabel('quick-settings-button');
+  await surface.ui.waitForLabel('quick-tools', {
+    label: 'Android quick Tools control',
+    timeoutMs: 20_000,
+  });
+  await surface.ui.tapLabel('quick-tools');
+  await surface.ui.waitForLabel('tools-pro-tools', {
+    label: 'Android Tools screen',
+    timeoutMs: 20_000,
+  });
+
+  for (const tool of GUIDED_STANDARD_TOOLS) {
+    await setAndroidToolToggle(surface, tool);
+  }
+  const toolsConfigured = await capture(surface, 'tools-configured');
+
+  await surface.ui.scrollAndTap('tools-pro-tools', { maxSwipes: 8 });
+  await surface.ui.waitForLabel('mcp-add-server', {
+    label: 'Android MCP add control',
+    timeoutMs: 20_000,
+  });
+  await surface.ui.scrollAndTap('mcp-add-server', { maxSwipes: 8 });
+  await surface.ui.scrollToLabel('mcp-preset-add-deepwiki', { maxSwipes: 8 });
+  let labels = await surface.ui.labels();
+  if (labels.includes('DeepWiki, Added')) {
+    await surface.ui.tapLabel('mcp-add-server-close');
+  } else if (labels.includes('DeepWiki, Add')) {
+    await surface.ui.tapLabel('mcp-preset-add-deepwiki');
+  } else {
+    throw new Error('Android does not expose the DeepWiki preset state');
+  }
+
+  await surface.ui.scrollToLabel('mcp-server-card-deepwiki', { maxSwipes: 8 });
+  labels = await surface.ui.labels();
+  if (labels.includes('DeepWiki, Inactive')) {
+    await surface.ui.tapLabel('mcp-server-toggle-deepwiki');
+  }
+  await waitUntil(
+    async () => {
+      const current = await surface.ui.labels();
+      return current.includes('DeepWiki, Active') &&
+        current.includes('DeepWiki, 3/3 tools')
+        ? current
+        : false;
+    },
+    'DeepWiki Active with 3/3 tools',
+    60_000,
+  );
+  const proToolsConfigured = await capture(surface, 'pro-tools-configured');
+
+  // Hardware Back follows the navigation contract and cannot land on a notification banner that
+  // overlaps a coordinate-based header tap.
+  await surface.ui.back();
+  await surface.ui.waitForLabel('tools-back', {
+    label: 'Android Tools screen after Pro tools',
+    timeoutMs: 20_000,
+  });
+  await surface.ui.back();
+  await surface.ui.waitForLabel('chat-screen', {
+    label: 'Android chat after Tools setup',
+    timeoutMs: 20_000,
+  });
+  await surface.ui.tapLabel('quick-settings-button');
+  labels = await surface.ui.waitFor(
+    async () => {
+      const current = await surface.ui.labels();
+      const ready =
+        current.some(label => /Thinking, ON/i.test(label)) &&
+        current.some(label => /Tools, 3$/i.test(label)) &&
+        current.some(label => /Pro Tools, 3$/i.test(label));
+      return ready ? current : false;
+    },
+    { label: 'Android guided tool badges', timeoutMs: 20_000, intervalMs: 500 },
+  );
+  const ready = await capture(surface, 'guided-tools-ready');
+  await surface.ui.back();
+  await surface.ui.waitForLabel('chat-screen', {
+    label: 'prepared Android chat',
+    timeoutMs: 20_000,
+  });
+
+  return {
+    thinking: 'on',
+    standardTools: GUIDED_STANDARD_TOOLS.filter(tool => tool.enabled).map(
+      tool => tool.id,
+    ),
+    deepWiki: 'active-3-of-3',
+    toolsConfigured: toolsConfigured.screenshot,
+    proToolsConfigured: proToolsConfigured.screenshot,
+    ready: ready.screenshot,
+  };
+};
+
+const readAndroidGuidedToolEvidence = async token => {
+  const adb = new AdbClient(flag('android', '505b53a0'));
+  const wire = await adb.readAppFile(
+    'ai.offgridmobile.dev',
+    'files/offgrid-wire.log',
+  );
+  const calls = [];
+  const outputs = [];
+  let thinkingEnabled = false;
+  for (const line of wire.split('\n')) {
+    const prefix = '[WIRE-LLAMA-TOOL] ';
+    const at = line.indexOf(prefix);
+    if (at < 0 || !line.includes(token)) continue;
+    try {
+      const entry = JSON.parse(line.slice(at + prefix.length));
+      thinkingEnabled ||= entry.input?.enable_thinking === true;
+      const outputCalls = entry.output?.tool_calls ?? [];
+      for (const call of outputCalls) {
+        if (call.function?.name) calls.push(call.function.name);
+      }
+      if (entry.output?.text && outputCalls.length === 0)
+        outputs.push(entry.output.text);
+    } catch {
+      // A partial line can be present while the lossless sink is flushing. The next verification run reads it again.
+    }
+  }
+  const missing = GUIDED_REQUIRED_TOOL_CALLS.filter(
+    name => !calls.includes(name),
+  );
+  const callCounts = Object.fromEntries(
+    GUIDED_REQUIRED_TOOL_CALLS.map(name => [
+      name,
+      calls.filter(call => call === name).length,
+    ]),
+  );
+  const overused = GUIDED_REQUIRED_TOOL_CALLS.filter(
+    name => callCounts[name] > 2,
+  );
+  return {
+    thinkingEnabled,
+    calls,
+    callCounts,
+    missing,
+    overused,
+    finalOutput: outputs.at(-1)?.trim() ?? '',
+  };
+};
+
+const dispatchAndroidPrompt = async ({
+  appium,
+  prompt,
+  token,
+  hasExistingDraft = false,
+  beforeClick,
+}) => {
+  await appium.session();
+  if (!hasExistingDraft) {
+    await appium.replaceTestId('chat-input', prompt);
+  } else {
+    console.log(`DRAFT android  reusing ${token}`);
+  }
+  const sendElementId = await appium.findByTestId('send-button');
+  const sendDescription = await appium.describeElement(sendElementId);
+  if (
+    sendDescription.resourceId !== 'send-button' ||
+    sendDescription.displayed !== true ||
+    sendDescription.enabled !== true ||
+    sendDescription.clickable !== 'true'
+  ) {
+    throw new Error(
+      `Android send element is not actionable: ${JSON.stringify(
+        sendDescription,
+      )}`,
+    );
+  }
+  console.log(`TARGET android  ${JSON.stringify(sendDescription)}`);
+  await beforeClick(sendDescription);
+  await appium.clickElement(sendElementId);
+  const dispatchResult = await waitUntil(
+    async () => {
+      const sentMessage = await appium
+        .findUserMessageContaining(token)
+        .catch(() => undefined);
+      if (sentMessage) return { kind: 'sent', elementId: sentMessage };
+      const pickerRow = await appium
+        .findByTestId(QWEN_ROW_TEST_ID)
+        .catch(() => undefined);
+      return pickerRow ? { kind: 'picker', elementId: pickerRow } : false;
+    },
+    'Android pending message or Qwen model picker',
+    60_000,
+  );
+  if (dispatchResult.kind === 'picker') {
+    const qwenDescription = await appium.describeElement(
+      dispatchResult.elementId,
+    );
+    if (
+      qwenDescription.displayed !== true ||
+      qwenDescription.enabled !== true
+    ) {
+      throw new Error(
+        `Qwen picker row is not actionable: ${JSON.stringify(qwenDescription)}`,
+      );
+    }
+    console.log(`PICK android  testID="${QWEN_ROW_TEST_ID}"`);
+    await appium.clickElement(dispatchResult.elementId);
+    await waitUntil(
+      () => appium.findUserMessageContaining(token).catch(() => false),
+      'pending Android user message after Qwen selection',
+      180_000,
+    );
+  } else {
+    console.log(
+      'SEND android  pending user message visible without a model picker',
+    );
+  }
+  return sendDescription;
+};
+
+const openSyncedChat = surface =>
+  waitUntil(
+    async () => {
+      try {
+        await openChat(surface);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    `${surface.platform} synced chat`,
+    90_000,
+  );
+
+const verifyNormalAcrossMesh = async (surfaces, state) => {
+  await Promise.all(surfaces.map(openSyncedChat));
+  const results = await Promise.all(
+    surfaces.map(async surface => {
+      await assertChatOpen(surface);
+      const finalText = await waitUntil(async () => {
+        const text = await surface.text();
+        if (THINKING_LIVE.test(text)) return false;
+        if (surface.family === 'rn') {
+          const source = await surface.ui.source();
+          return mobileMessageHasMarker(
+            source,
+            'assistant-message',
+            state.normalToken,
+          )
+            ? text
+            : false;
+        }
+        const messageCount = await surface.ui.evaluate(`
+        const token = ${JSON.stringify(state.normalToken.toLowerCase())};
+        return [...document.querySelectorAll('[data-testid^="chat-message-"]')]
+          .filter((message) => (message.innerText || '').toLowerCase().includes(token)).length;
+      `);
+        return messageCount >= 2 ? text : false;
+      }, `${surface.platform} final normal response`);
+      const final = await capture(surface, 'final');
+      console.log(
+        `FINAL ${surface.platform.padEnd(8)} normal response visible`,
+      );
+      return { platform: surface.platform, finalText, final: final.screenshot };
+    }),
+  );
+  for (const result of results) {
+    await record({
+      platform: result.platform,
+      ok: true,
+      action: 'verify-normal',
+      final: result.final,
+    });
+  }
+  console.log(
+    'PASS mesh     final normal response verified on all four devices',
+  );
+};
+
+const runAcrossMesh = async action => {
+  // Run in series. Android UiAutomator permits only one active automation service, and serial
+  // capture also makes the action order explicit in the evidence log.
+  const kinds = requestedPlatform === 'all' ? KINDS : [requestedPlatform];
+  for (const kind of kinds) {
+    const surface = await connect(kind);
+    try {
+      const before = await capture(surface, 'before');
+      await action(surface);
+      const after = await capture(surface, 'after');
+      await record({
+        platform: kind,
+        ok: true,
+        before: before.screenshot,
+        after: after.screenshot,
+      });
+      console.log(`PASS ${kind.padEnd(8)} ${step}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const failed = await capture(surface, 'failed').catch(() => undefined);
+      await record({
+        platform: kind,
+        ok: false,
+        error: message,
+        failed: failed?.screenshot,
+      });
+      throw error;
+    } finally {
+      await Promise.resolve(surface.close()).catch(() => undefined);
+    }
+  }
+};
+
+if (step === 'snapshot') {
+  await runAcrossMesh(async () => undefined);
+} else if (step === 'open-chat') {
+  await runAcrossMesh(openChat);
+} else if (step === 'run-normal') {
+  const state = await readState();
+  if (state.normalSent || state.normalSendReservedAt) {
+    throw new Error(
+      `Normal send is already ${
+        state.normalSent ? 'complete' : 'reserved'
+      }; refusing a duplicate`,
+    );
+  }
+  state.normalToken ??= `normalproof${Date.now()}`;
+  state.normalPrompt ??=
+    `${run} normal sync check. Reply with exactly: ${state.normalToken} received. ` +
+    'Do not add any other text.';
+  await saveState(state);
+
+  const surfaces = [];
+  let appium;
+  try {
+    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const surface of surfaces) {
+      if (count(await surface.text(), state.normalToken) !== 0) {
+        throw new Error(
+          `${surface.platform} already contains ${state.normalToken}; refusing a duplicate`,
+        );
+      }
+    }
+
+    const android = surfaces.find(surface => surface.platform === 'android');
+    const before = await capture(android, 'before');
+    await openNewAndroidChat(android);
+    await setAndroidThinking(android, false);
+    const ready = await capture(android, 'ready');
+
+    appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
+    await dispatchAndroidPrompt({
+      appium,
+      prompt: state.normalPrompt,
+      token: state.normalToken,
+      beforeClick: async description => {
+        const reserved = await readState();
+        reserved.normalSendReservedAt = new Date().toISOString();
+        reserved.normalSendTarget = description;
+        await saveState(reserved);
+      },
+    });
+    await appium.close();
+    appium = undefined;
+
+    await waitUntil(
+      async () => {
+        const source = await android.ui.source();
+        return mobileMessageHasMarker(
+          source,
+          'user-message',
+          state.normalToken,
+        );
+      },
+      'Android sent normal marker',
+      20_000,
+    );
+    const sent = await readState();
+    sent.normalSent = true;
+    sent.normalSentAt = new Date().toISOString();
+    await saveState(sent);
+    await record({
+      platform: 'android',
+      ok: true,
+      action: 'send-normal',
+      token: state.normalToken,
+      before: before.screenshot,
+      ready: ready.screenshot,
+    });
+    console.log(`SEND android  ${state.normalToken}`);
+
+    await verifyNormalAcrossMesh(surfaces, state);
+  } finally {
+    await appium?.close().catch(() => undefined);
+    await Promise.all(
+      surfaces.map(surface =>
+        Promise.resolve(surface.close()).catch(() => undefined),
+      ),
+    );
+  }
+} else if (step === 'verify-normal') {
+  const state = await readState();
+  if (!state.normalSent || !state.normalToken) {
+    throw new Error('there is no completed normal send to verify');
+  }
+  const surfaces = [];
+  try {
+    for (const kind of KINDS) surfaces.push(await connect(kind));
+    await verifyNormalAcrossMesh(surfaces, state);
+  } finally {
+    await Promise.all(
+      surfaces.map(surface =>
+        Promise.resolve(surface.close()).catch(() => undefined),
+      ),
+    );
+  }
+} else if (step === 'open-settings') {
+  const surface = await connect('android');
+  try {
+    const before = await capture(surface, 'before');
+    await openMobileChat(surface);
+    const labels = await surface.ui.labels();
+    if (!labels.includes('quick-settings-button'))
+      throw new Error('Android chat settings control is absent');
+    await surface.ui.tapLabel('quick-settings-button');
+    await sleep(500);
+    const after = await capture(surface, 'after');
+    await record({
+      platform: 'android',
+      ok: true,
+      before: before.screenshot,
+      after: after.screenshot,
+    });
+    console.log('PASS android  open-settings');
+  } finally {
+    await Promise.resolve(surface.close()).catch(() => undefined);
+  }
+} else if (step === 'prepare-thinking') {
+  const surface = await connect('android');
+  try {
+    const before = await capture(surface, 'before');
+    await openMobileChat(surface);
+    await setAndroidThinking(surface, true);
+    const after = await capture(surface, 'after');
+    await record({
+      platform: 'android',
+      ok: true,
+      thinking: 'on',
+      before: before.screenshot,
+      after: after.screenshot,
+    });
+    console.log(
+      'PASS android  prepare-thinking (Thinking ON, checkpoint chat open)',
+    );
+  } finally {
+    await Promise.resolve(surface.close()).catch(() => undefined);
+  }
+} else if (step === 'prepare-new-chat') {
+  const surface = await connect('android');
+  try {
+    const before = await capture(surface, 'before');
+    await openNewAndroidChat(surface);
+    const after = await capture(surface, 'after');
+    await record({
+      platform: 'android',
+      ok: true,
+      action: 'prepare-new-chat',
+      before: before.screenshot,
+      after: after.screenshot,
+    });
+    console.log('PASS android  blank new chat open; no prompt entered or sent');
+  } finally {
+    await Promise.resolve(surface.close()).catch(() => undefined);
+  }
+} else if (step === 'prepare-project') {
+  const fixture = JSON.parse(
+    await readFile(join(projectFixtureDir, 'project-fixture.json'), 'utf8'),
+  );
+  const attachments = projectFileAttachments(fixture);
+  const state = await readState();
+  state.projectName ??=
+    flag('project-name', '') || `${fixture.projectNamePrefix} ${run}`;
+  state.projectPrimary = primaryKind;
+  await saveState(state);
+
+  const surface = await connectDriving(primaryKind);
+  try {
+    const before = await capture(surface, 'project-before');
+    const stagedAt = await stageProjectFixtures(primaryKind, attachments);
+    const project = await ensurePrimaryProject(surface, state, fixture);
+    const textAttachment = await ensurePrimaryTextAttachment(surface, fixture);
+    const fileAttachments = {};
+    for (const attachment of attachments) {
+      fileAttachments[attachment.fileName] = {
+        result: await ensurePrimaryFileAttachment(surface, attachment.fileName),
+        source: attachment.source,
+      };
+    }
+    const expectedDocuments = [
+      fixture.textAttachment.title,
+      ...attachments.map(({ fileName }) => fileName),
+    ];
+    await surface.ui.waitForLabel(
+      `Knowledge Base has ${expectedDocuments.length} documents`,
+      {
+        label: `project Knowledge Base count ${expectedDocuments.length}`,
+        timeoutMs: 30_000,
+      },
+    );
+    await surface.ui.tapLabel('project-knowledge-base-open');
+    await surface.ui.waitForLabel('knowledge-base-screen', {
+      label: 'project Knowledge Base screen',
+      timeoutMs: 20_000,
+    });
+    for (const name of expectedDocuments) {
+      await surface.ui.scrollToLabel(`Knowledge document ${name}`, {
+        maxSwipes: 8,
+      });
+      await surface.ui.waitForLabel(`Use ${name}, ON`, {
+        label: `${name} indexed and enabled`,
+        timeoutMs: 20_000,
+      });
+    }
+    const indexed = await capture(surface, 'project-indexed');
+    await surface.ui.back();
+    await surface.ui.waitForLabel('project-detail-screen', {
+      label: 'project detail after Knowledge Base check',
+      timeoutMs: 20_000,
+    });
+    const after = await capture(surface, 'project-after');
+    const next = await readState();
+    next.projectFixturePreparedAt = new Date().toISOString();
+    next.projectFixture = {
+      name: state.projectName,
+      primary: primaryKind,
+      stagedAt,
+      project,
+      textAttachment,
+      fileAttachments,
+      documents: expectedDocuments,
+      indexed: indexed.screenshot,
+    };
+    await saveState(next);
+    await record({
+      platform: primaryKind,
+      ok: true,
+      action: 'prepare-project',
+      projectName: state.projectName,
+      before: before.screenshot,
+      after: after.screenshot,
+      indexed: indexed.screenshot,
+      documents: expectedDocuments,
+    });
+    console.log(
+      `PASS ${primaryKind.padEnd(8)} ${state.projectName} has ${
+        expectedDocuments.length
+      } indexed, enabled Knowledge Base documents`,
+    );
+  } finally {
+    await Promise.resolve(surface.close()).catch(() => undefined);
+  }
+} else if (step === 'prepare-guided-tools') {
+  const state = await readState();
+  state.projectName ??= flag('project-name', '') || undefined;
+  const surface = await connect('android');
+  try {
+    const before = await capture(surface, 'before');
+    const result = await prepareAndroidGuidedTools(surface, state.projectName);
+    const after = await capture(surface, 'after');
+    const next = await readState();
+    next.projectName ??= state.projectName;
+    next.guidedToolPreparedAt = new Date().toISOString();
+    next.guidedToolPreparation = result;
+    await saveState(next);
+    await record({
+      platform: 'android',
+      ok: true,
+      action: 'prepare-guided-tools',
+      before: before.screenshot,
+      after: after.screenshot,
+      ...result,
+    });
+    console.log(
+      'PASS android  Thinking ON; Web Search, Knowledge Base, URL Reader ON; DeepWiki Active 3/3',
+    );
+  } finally {
+    await Promise.resolve(surface.close()).catch(() => undefined);
+  }
+} else if (step === 'send-guided-tools') {
+  const state = await readState();
+  if (!state.guidedToolPreparedAt) {
+    throw new Error(
+      'Guided tools are not prepared for this run; run --step prepare-guided-tools first',
+    );
+  }
+  if (state.guidedToolSent || state.guidedToolSendReservedAt) {
+    throw new Error(
+      `Guided tool send is already ${
+        state.guidedToolSent ? 'complete' : 'reserved'
+      }; refusing a duplicate`,
+    );
+  }
+  state.guidedToolToken ??= run;
+  state.guidedToolPrompt ??=
+    flag('guided-prompt', '') ||
+    'Give me all the details that you can about https://github.com/off-grid-ai/OGAM and Off Grid AI as a brand. ' +
+      'Use Thinking. Before the final answer, call each enabled source tool: search_knowledge_base for Off Grid AI ' +
+      'private intelligence layer; web_search for Off Grid AI OGAM brand; read_url for ' +
+      'https://github.com/off-grid-ai/OGAM; DeepWiki read_wiki_structure for off-grid-ai/OGAM; DeepWiki ' +
+      'read_wiki_contents for off-grid-ai/OGAM; and DeepWiki ask_question for off-grid-ai/OGAM with the question ' +
+      'What does OGAM do and how does it support the Off Grid AI brand? You must call all six named tools at least once. ' +
+      'You may call any individual tool no more than twice. ' +
+      `Reference: ${state.guidedToolToken}.`;
+  await saveState(state);
+
+  const android = await connect('android');
+  let appium;
+  try {
+    const before = await capture(android, 'before');
+    const labels = await android.ui.labels();
+    if (
+      !labels.includes('chat-screen') ||
+      !labels.includes('quick-settings-button')
+    ) {
+      throw new Error('Android is not on the prepared chat screen');
+    }
+    const beforeSource = await android.ui.source();
+    if (
+      mobileMessageHasMarker(
+        beforeSource,
+        'user-message',
+        state.guidedToolToken,
+      )
+    ) {
+      throw new Error(
+        `${state.guidedToolToken} is already visible; refusing a duplicate`,
+      );
+    }
+    appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
+    await dispatchAndroidPrompt({
+      appium,
+      prompt: state.guidedToolPrompt,
+      token: state.guidedToolToken,
+      beforeClick: async description => {
+        const reserved = await readState();
+        reserved.guidedToolSendReservedAt = new Date().toISOString();
+        reserved.guidedToolSendTarget = description;
+        await saveState(reserved);
+      },
+    });
+    await appium.close();
+    appium = undefined;
+    await waitUntil(
+      async () => {
+        const source = await android.ui.source();
+        return mobileMessageHasMarker(
+          source,
+          'user-message',
+          state.guidedToolToken,
+        );
+      },
+      'Android guided tool message',
+      20_000,
+    );
+    const sent = await readState();
+    sent.guidedToolSent = true;
+    sent.guidedToolSentAt = new Date().toISOString();
+    await saveState(sent);
+    const after = await capture(android, 'after');
+    await record({
+      platform: 'android',
+      ok: true,
+      action: 'send-guided-tools',
+      token: state.guidedToolToken,
+      before: before.screenshot,
+      after: after.screenshot,
+    });
+    console.log(`SEND android  guided tool prompt (${state.guidedToolToken})`);
+  } finally {
+    await appium?.close().catch(() => undefined);
+    await Promise.resolve(android.close()).catch(() => undefined);
+  }
+} else if (step === 'verify-guided-tools') {
+  const state = await readState();
+  if (!state.guidedToolSent || !state.guidedToolToken) {
+    throw new Error('there is no completed guided-tool send to verify');
+  }
+  const android = await connect('android');
+  try {
+    // Poll the lossless model wire log while generation is active. Repeated UIAutomator dumps during
+    // a long, rapidly changing transcript can fail before the model finishes and turn a product pass
+    // into an automation-read failure. Touch the UI only after the model has emitted a final answer.
+    const evidence = await waitUntil(
+      async () => {
+        const current = await readAndroidGuidedToolEvidence(
+          state.guidedToolToken,
+        );
+        return current.finalOutput.length > 0 ? current : false;
+      },
+      'Android guided tool final output in wire log',
+      timeoutMs,
+    );
+    const completed = await waitUntil(
+      async () => {
+        try {
+          const labels = await android.ui.labels();
+          const source = await android.ui.source();
+          const live = labels.some(
+            label =>
+              [
+                'stop-button',
+                'thinking-indicator',
+                'streaming-thinking-hint',
+              ].includes(label) || /Thinking\.\.\./i.test(label),
+          );
+          const finalVisible = mobileHasCompletedAssistantAfterMarker(
+            source,
+            state.guidedToolToken,
+          );
+          return !live && finalVisible ? { live, finalVisible } : false;
+        } catch {
+          return false;
+        }
+      },
+      'Android guided tool final response on screen',
+      90_000,
+    );
+    const { live, finalVisible } = completed;
+    const final = await capture(android, 'guided-tools-final');
+    const result = { ...evidence, live, finalVisible, final: final.screenshot };
+    const ok =
+      evidence.thinkingEnabled &&
+      evidence.missing.length === 0 &&
+      evidence.overused.length === 0 &&
+      !live &&
+      finalVisible;
+    await writeFile(
+      join(evidenceDir, 'guided-tool-evidence.json'),
+      `${JSON.stringify(result, null, 2)}\n`,
+    );
+    const next = await readState();
+    next.guidedToolVerifiedAt = new Date().toISOString();
+    next.guidedToolVerified = ok;
+    next.guidedToolEvidence = result;
+    await saveState(next);
+    await record({
+      platform: 'android',
+      ok,
+      action: 'verify-guided-tools',
+      ...result,
+    });
+    console.log(
+      `${ok ? 'PASS' : 'FAIL'} android  ${JSON.stringify({
+        thinkingEnabled: evidence.thinkingEnabled,
+        calls: evidence.calls,
+        callCounts: evidence.callCounts,
+        missing: evidence.missing,
+        overused: evidence.overused,
+        live,
+        finalVisible,
+      })}`,
+    );
+    if (!ok) {
+      throw new Error(
+        `Guided tool verification failed; missing: ${
+          evidence.missing.join(', ') || 'none'
+        }; ` + `overused: ${evidence.overused.join(', ') || 'none'}`,
+      );
+    }
+  } finally {
+    await Promise.resolve(android.close()).catch(() => undefined);
+  }
+} else if (step === 'run-thinking-clean') {
+  const state = await readState();
+  if (state.sent || state.sendReservedAt) {
+    throw new Error(
+      `Clean Thinking send is already ${
+        state.sent ? 'complete' : 'reserved'
+      }; refusing a duplicate`,
+    );
+  }
+  state.thinkToken ??= `thinkproof${Date.now()}`;
+  state.expectedResponse ??= flag('expected-response', '4');
+  state.prompt ??= thinkingPrompt(state.thinkToken);
+  await saveState(state);
+
+  const surfaces = [];
+  let appium;
+  try {
+    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const surface of surfaces) {
+      if (count(await surface.text(), state.thinkToken) !== 0) {
+        throw new Error(
+          `${surface.platform} already contains ${state.thinkToken}; refusing a duplicate`,
+        );
+      }
+    }
+
+    const android = surfaces.find(surface => surface.platform === 'android');
+    await openNewAndroidChat(android);
+    await setAndroidThinking(android, true);
+    const ready = await capture(android, 'ready');
+    console.log('READY android  clean chat open with Thinking ON');
+
+    const observe = async surface => {
+      if (surface.platform !== 'android') await openSyncedChat(surface);
+      await assertChatOpen(surface);
+      const first = await waitUntil(async () => {
+        const result = await thinkingResult(surface, state);
+        if (result.live) return { phase: 'live', result };
+        if (
+          finalThinkingResponseIsValid(result, state) ||
+          result.savedAssistantVisible
+        ) {
+          return { phase: 'complete', result };
+        }
+        return false;
+      }, `${surface.platform} clean Thinking state`);
+
+      let live;
+      const liveSeen = first.phase === 'live';
+      if (liveSeen) {
+        live = await capture(surface, 'live');
+        console.log(`LIVE ${surface.platform.padEnd(8)} Thinking visible`);
+      }
+      const result =
+        first.phase === 'complete'
+          ? first.result
+          : await waitUntil(async () => {
+              const current = await thinkingResult(surface, state);
+              return !current.live &&
+                (finalThinkingResponseIsValid(current, state) ||
+                  current.savedAssistantVisible)
+                ? current
+                : false;
+            }, `${surface.platform} clean Thinking completion`);
+      const final = await capture(surface, 'final');
+      const ok = liveSeen && finalThinkingResponseIsValid(result, state);
+      console.log(
+        `${ok ? 'PASS' : 'FAIL'} ${surface.platform.padEnd(8)} ${JSON.stringify(
+          { liveSeen, ...result },
+        )}`,
+      );
+      return {
+        platform: surface.platform,
+        ok,
+        liveSeen,
+        result,
+        live: live?.screenshot,
+        final: final.screenshot,
+      };
+    };
+
+    // Start peer observers before Send. They wait for the new synced chat row, then open it.
+    const peerRuns = surfaces
+      .filter(surface => surface.platform !== 'android')
+      .map(surface => observe(surface));
+    await sleep(500);
+
+    appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
+    await dispatchAndroidPrompt({
+      appium,
+      prompt: state.prompt,
+      token: state.thinkToken,
+      beforeClick: async description => {
+        const reserved = await readState();
+        reserved.sendReservedAt = new Date().toISOString();
+        reserved.sendTarget = description;
+        await saveState(reserved);
+      },
+    });
+    await appium.close();
+    appium = undefined;
+
+    await waitUntil(
+      async () => {
+        const source = await android.ui.source();
+        return mobileMessageHasMarker(source, 'user-message', state.thinkToken);
+      },
+      'Android clean Thinking message',
+      20_000,
+    );
+    const sent = await readState();
+    sent.sent = true;
+    sent.sentAt = new Date().toISOString();
+    await saveState(sent);
+    await record({
+      platform: 'android',
+      ok: true,
+      action: 'send-clean-thinking',
+      token: state.thinkToken,
+      ready: ready.screenshot,
+    });
+    console.log(`SEND android  ${state.thinkToken}`);
+
+    const results = await Promise.all([observe(android), ...peerRuns]);
+    const failures = results.filter(result => !result.ok);
+    for (const result of results) {
+      await record({
+        platform: result.platform,
+        ok: result.ok,
+        action: 'verify-clean-thinking',
+        liveSeen: result.liveSeen,
+        result: result.result,
+        live: result.live,
+        final: result.final,
+      });
+    }
+    const verified = await readState();
+    verified.thinkingFinalVerified = failures.length === 0;
+    verified.thinkingFinalCheckedAt = new Date().toISOString();
+    await saveState(verified);
+    if (failures.length > 0) {
+      throw new Error(
+        `Clean Thinking failed on: ${failures
+          .map(failure => failure.platform)
+          .join(', ')}`,
+      );
+    }
+    console.log(
+      'PASS mesh     clean Thinking live state and final response verified on all four devices',
+    );
+  } finally {
+    await appium?.close().catch(() => undefined);
+    await Promise.all(
+      surfaces.map(surface =>
+        Promise.resolve(surface.close()).catch(() => undefined),
+      ),
+    );
+  }
+} else if (step === 'probe-send') {
+  const state = await readState();
+  if (state.sent || state.sendReservedAt) {
+    throw new Error(
+      'Thinking send is guarded; refusing to probe over an active attempt',
+    );
+  }
+  state.thinkToken ??= `thinkproof${Date.now()}`;
+  state.prompt ??= thinkingPrompt(state.thinkToken);
+  await saveState(state);
+  const android = await connect('android');
+  const appium = new AppiumAndroidClient(
+    appiumUrl,
+    flag('android', '505b53a0'),
+  );
+  try {
+    await assertChatOpen(android);
+    const existingText = await android.text();
+    await appium.session();
+    if (!existingText.toLowerCase().includes(state.thinkToken.toLowerCase())) {
+      await appium.replaceTestId('chat-input', state.prompt);
+    }
+    const elementId = await appium.findByTestId('send-button');
+    const description = await appium.describeElement(elementId);
+    const screenshot = join(
+      evidenceDir,
+      `${String(state.actions.length).padStart(2, '0')}-probe-send-android.png`,
+    );
+    await android.screenshot(screenshot);
+    const next = await readState();
+    next.sendProbe = {
+      at: new Date().toISOString(),
+      token: state.thinkToken,
+      description,
+      screenshot,
+    };
+    await saveState(next);
+    await record({
+      platform: 'android',
+      ok: true,
+      action: 'probe-send',
+      description,
+      screenshot,
+    });
+    console.log(
+      JSON.stringify({ testID: 'send-button', ...description }, null, 2),
+    );
+    console.log('PASS android  send element probed; no click performed');
+  } finally {
+    await appium.close().catch(() => undefined);
+    await Promise.resolve(android.close()).catch(() => undefined);
+  }
+} else if (step === 'run-thinking') {
+  const state = await readState();
+  if (state.sent || state.sendReservedAt) {
+    throw new Error(
+      `Thinking send is already ${
+        state.sent ? 'complete' : 'reserved'
+      }; refusing a duplicate`,
+    );
+  }
+  state.thinkToken ??= `thinkproof${Date.now()}`;
+  state.prompt ??= thinkingPrompt(state.thinkToken);
+  await saveState(state);
+
+  const surfaces = [];
+  let appium;
+  try {
+    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const surface of surfaces) await assertChatOpen(surface);
+    const baselines = new Map();
+    for (const surface of surfaces) {
+      const text = await surface.text();
+      baselines.set(surface.platform, {
+        thinking: count(text, 'thinking'),
+        marker: count(text, state.thinkToken),
+      });
+    }
+
+    const observe = async (surface, initialText = '') => {
+      const baseline = baselines.get(surface.platform);
+      const isLive = text => {
+        const thinkingCount = count(text, 'thinking');
+        return THINKING_LIVE.test(text) || thinkingCount > baseline.thinking;
+      };
+      const liveText = isLive(initialText)
+        ? initialText
+        : await waitUntil(async () => {
+            const text = await surface.text();
+            return isLive(text) ? text : false;
+          }, `${surface.platform} live Thinking state`);
+      const live = await capture(surface, 'live');
+      console.log(`LIVE ${surface.platform.padEnd(8)} Thinking visible`);
+      const finalText = await waitUntil(async () => {
+        const text = await surface.text();
+        const thinkingCount = count(text, 'thinking');
+        const liveEnded =
+          !THINKING_LIVE.test(text) && thinkingCount <= baseline.thinking;
+        if (!liveEnded) return false;
+        const result = await thinkingResult(surface, state);
+        return !result.live && finalThinkingResponseIsValid(result, state)
+          ? text
+          : false;
+      }, `${surface.platform} final saved Thinking response`);
+      const final = await capture(surface, 'final');
+      console.log(`FINAL ${surface.platform.padEnd(8)} saved response visible`);
+      return {
+        platform: surface.platform,
+        ok: true,
+        live: live.screenshot,
+        final: final.screenshot,
+        liveText,
+        finalText,
+      };
+    };
+
+    const android = surfaces.find(surface => surface.platform === 'android');
+    // UiAutomator is single-owner. Observe the three peers first, then perform the Android send with
+    // no concurrent Android hierarchy reads. Start the Android observer only after the sent marker is
+    // visible in Android's own chat.
+    const observerRuns = surfaces
+      .filter(surface => surface.platform !== 'android')
+      .map(surface => observe(surface));
+    await sleep(500);
+    const draftText = await android.text();
+    const hasExistingDraft = draftText
+      .toLowerCase()
+      .includes(state.thinkToken.toLowerCase());
+    appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
+    if (hasExistingDraft) baselines.get('android').marker = 0;
+    await dispatchAndroidPrompt({
+      appium,
+      prompt: state.prompt,
+      token: state.thinkToken,
+      hasExistingDraft,
+      beforeClick: async () => {
+        const reserved = await readState();
+        reserved.sendReservedAt = new Date().toISOString();
+        await saveState(reserved);
+      },
+    });
+    await appium.close();
+    appium = undefined;
+    await sleep(500);
+    const androidSentText = await waitUntil(
+      async () => {
+        const source = await android.ui.source();
+        if (!mobileMessageHasMarker(source, 'user-message', state.thinkToken))
+          return false;
+        return android.text();
+      },
+      'Android sent Thinking marker',
+      20_000,
+    );
+    const sent = await readState();
+    sent.sent = true;
+    sent.sentAt = new Date().toISOString();
+    await saveState(sent);
+    await record({
+      platform: 'android',
+      ok: true,
+      action: 'send-thinking',
+      token: state.thinkToken,
+    });
+    console.log(`SEND android  ${state.thinkToken}`);
+
+    const results = await Promise.all([
+      observe(android, androidSentText),
+      ...observerRuns,
+    ]);
+    for (const result of results) {
+      await record({
+        platform: result.platform,
+        ok: result.ok,
+        action: 'verify-thinking',
+        live: result.live,
+        final: result.final,
+      });
+    }
+    console.log(
+      'PASS mesh     live Thinking and final response verified on all four devices',
+    );
+  } finally {
+    await appium?.close().catch(() => undefined);
+    await Promise.all(
+      surfaces.map(surface =>
+        Promise.resolve(surface.close()).catch(() => undefined),
+      ),
+    );
+  }
+} else if (step === 'verify-thinking') {
+  const state = await readState();
+  if (!state.thinkToken || (!state.sent && !state.sendReservedAt)) {
+    throw new Error('there is no guarded Thinking send to verify');
+  }
+  state.expectedResponse ??= flag('expected-response', '') || undefined;
+  const surfaces = [];
+  const failures = [];
+  try {
+    for (const kind of KINDS) surfaces.push(await connect(kind));
+    await Promise.all(surfaces.map(openSyncedChat));
+    for (const surface of surfaces) {
+      await assertChatOpen(surface);
+      const result = await thinkingResult(surface, state);
+      const final = await capture(surface, 'final');
+      const ok = !result.live && finalThinkingResponseIsValid(result, state);
+      await record({
+        platform: surface.platform,
+        ok,
+        action: 'verify-thinking',
+        result,
+        final: final.screenshot,
+      });
+      console.log(
+        `${ok ? 'PASS' : 'FAIL'} ${surface.platform.padEnd(8)} ${JSON.stringify(
+          result,
+        )}`,
+      );
+      if (!ok) failures.push(`${surface.platform}: ${JSON.stringify(result)}`);
+    }
+    const sent = await readState();
+    sent.sent = true;
+    sent.sentAt ??= sent.sendReservedAt;
+    sent.thinkingFinalVerified = failures.length === 0;
+    sent.thinkingFinalCheckedAt = new Date().toISOString();
+    sent.thinkingFinalFailures = failures;
+    await saveState(sent);
+    if (failures.length > 0) {
+      throw new Error(
+        `Thinking final response failed on ${
+          failures.length
+        } device(s): ${failures.join('; ')}`,
+      );
+    }
+    console.log(
+      'PASS mesh     final Thinking response verified on all four devices',
+    );
+  } finally {
+    await Promise.all(
+      surfaces.map(surface =>
+        Promise.resolve(surface.close()).catch(() => undefined),
+      ),
+    );
+  }
+} else if (step === 'recover-unsent') {
+  const state = await readState();
+  if (!state.thinkToken || (!state.sent && !state.sendReservedAt)) {
+    throw new Error('there is no guarded Thinking attempt to recover');
+  }
+  const surfaces = [];
+  try {
+    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const surface of surfaces) {
+      const text = await surface.text();
+      if (count(text, state.thinkToken) !== 0) {
+        throw new Error(
+          `${surface.platform} still contains ${state.thinkToken}; refusing recovery`,
+        );
+      }
+    }
+    const android = surfaces.find(surface => surface.platform === 'android');
+    const labels = await android.ui.labels();
+    if (
+      !labels.includes('chat-screen') ||
+      labels.some(label => label.includes(state.thinkToken))
+    ) {
+      throw new Error('Android chat is not clean; refusing recovery');
+    }
+    const failedAttempt = {
+      token: state.thinkToken,
+      prompt: state.prompt,
+      reservedAt: state.sendReservedAt,
+      recordedSentAt: state.sentAt,
+      recoveredAt: new Date().toISOString(),
+      result: 'marker absent on all four devices; Android composer empty',
+    };
+    state.failedAttempts ??= [];
+    state.failedAttempts.push(failedAttempt);
+    state.sent = false;
+    delete state.sendReservedAt;
+    delete state.sentAt;
+    delete state.thinkToken;
+    delete state.prompt;
+    await saveState(state);
+    await record({
+      platform: 'mesh',
+      ok: true,
+      action: 'recover-unsent',
+      failedAttempt,
+    });
+    console.log(
+      'PASS mesh     guarded unsent attempt recovered after four-device absence proof',
+    );
+  } finally {
+    await Promise.all(
+      surfaces.map(surface =>
+        Promise.resolve(surface.close()).catch(() => undefined),
+      ),
+    );
+  }
+} else if (step === 'recover-draft') {
+  const state = await readState();
+  if (!state.thinkToken || !state.sendReservedAt || state.sent) {
+    throw new Error('there is no reserved unsent Thinking draft to recover');
+  }
+  const surfaces = [];
+  try {
+    for (const kind of KINDS) surfaces.push(await connect(kind));
+    const android = surfaces.find(surface => surface.platform === 'android');
+    const androidSource = await android.ui.source();
+    const androidText = await android.text();
+    if (
+      mobileMessageHasMarker(androidSource, 'user-message', state.thinkToken)
+    ) {
+      throw new Error(
+        `Android already contains a sent ${state.thinkToken} message; refusing draft recovery`,
+      );
+    }
+    if (count(androidText, state.thinkToken) !== 1) {
+      throw new Error(
+        'Android does not contain exactly one unsent marker draft; refusing recovery',
+      );
+    }
+    for (const surface of surfaces.filter(
+      candidate => candidate.platform !== 'android',
+    )) {
+      if (count(await surface.text(), state.thinkToken) !== 0) {
+        throw new Error(
+          `${surface.platform} contains ${state.thinkToken}; refusing draft recovery`,
+        );
+      }
+    }
+    state.misdirectedDrafts ??= [];
+    state.misdirectedDrafts.push({
+      token: state.thinkToken,
+      reservedAt: state.sendReservedAt,
+      recoveredAt: new Date().toISOString(),
+      result:
+        'marker remains only in Android composer; no sent message exists on any device',
+    });
+    delete state.sendReservedAt;
+    await saveState(state);
+    await record({
+      platform: 'mesh',
+      ok: true,
+      action: 'recover-draft',
+      token: state.thinkToken,
+    });
+    console.log(
+      'PASS mesh     reserved draft recovered; same marker is safe to resume',
+    );
+  } finally {
+    await Promise.all(
+      surfaces.map(surface =>
+        Promise.resolve(surface.close()).catch(() => undefined),
+      ),
+    );
+  }
+} else {
+  throw new Error(
+    `unknown --step ${step}; use snapshot, open-chat, open-settings, prepare-thinking, prepare-new-chat, prepare-project, prepare-guided-tools, send-guided-tools, verify-guided-tools, run-thinking-clean, probe-send, run-thinking, verify-thinking, recover-unsent, or recover-draft`,
+  );
+}
+
+console.log(`evidence: ${evidenceDir}`);

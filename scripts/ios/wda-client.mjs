@@ -60,6 +60,15 @@ export class WdaClient {
     return this.#sessionId;
   }
 
+  /** Reuse WDA's active session without relaunching or terminating the foreground app. */
+  async attach() {
+    const status = await this.#get('/status');
+    const sessionId = status.value?.sessionId ?? status.sessionId ?? null;
+    if (!sessionId) throw new Error('WDA has no active session to attach to');
+    this.#sessionId = sessionId;
+    return sessionId;
+  }
+
   #requireSession() {
     if (!this.#sessionId) throw new Error('No WDA session - call session() first');
     return this.#sessionId;
@@ -164,6 +173,20 @@ export class WdaClient {
   /** Send text to the focused field. Tap the field first so it has focus. */
   async type(text) {
     await this.#post(`/session/${this.#requireSession()}/wda/keys`, { value: [...text] });
+  }
+
+  /** Replace a React Native text field by its testID/accessibility identifier. */
+  async replaceTestId(testId, text) {
+    if (!/^[a-z0-9_./-]+$/i.test(testId)) throw new Error(`unsafe iOS testID: ${testId}`);
+    const sid = this.#requireSession();
+    const found = await this.#post(`/session/${sid}/element`, {
+      using: 'accessibility id',
+      value: testId,
+    });
+    const element = found.value?.['element-6066-11e4-a52e-4f735466cecf'] ?? found.value?.ELEMENT;
+    if (!element) throw new Error(`iOS could not find text field ${testId}`);
+    await this.#post(`/session/${sid}/element/${element}/clear`, {});
+    await this.#post(`/session/${sid}/element/${element}/value`, { value: [...text] });
   }
 
   /** Back one screen. iOS has no hardware back, so this is the edge-swipe-from-left gesture. */
