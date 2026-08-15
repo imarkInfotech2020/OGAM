@@ -195,6 +195,31 @@ describe('getDisplayMessages', () => {
     });
   });
 
+  it('does not repeat a peer\'s tool calls under the answer they already appear above', () => {
+    // Every ordinary tool call arrives as its own synced message and is drawn inline, in order,
+    // with the duration it took. Carrying them on the preview too put a SECOND copy of every call
+    // at the end of the transcript, and when the preview retired that copy vanished - which reads
+    // as tool calls being eaten mid-run.
+    const out = getDisplayMessages(msgs, {
+      ...base(),
+      remotePreviews: [
+        {
+          id: 'remote-tools-turn',
+          messageId: 'message-1',
+          deviceId: 'the-phone',
+          content: '',
+          phase: 'thinking',
+          tools: [
+            { name: 'search_knowledge_base', result: 'Found it.', status: 'completed' },
+            { name: 'web_search', result: 'Found more.', status: 'completed' },
+          ],
+        },
+      ],
+    });
+
+    expect(out.at(-1)?.toolArtifacts).toBeUndefined();
+  });
+
   it('removes a remote preview when its durable message is visible', () => {
     const durableMessage = {
       id: 'local-record-id',

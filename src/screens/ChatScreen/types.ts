@@ -175,6 +175,9 @@ function remotePreviewMessage(preview: RemoteStreamItem): ChatMessageItem {
   // One rule, asked three times, instead of three hand-kept lists of phase names. A status phase
   // renders BESIDE whatever arrived, so it only becomes the whole row when nothing else has.
   const isStatusPhase = chatStreamPhaseIsStatus(preview.phase);
+  const previewOwnedTools = (preview.tools ?? []).filter(
+    tool => tool.name === 'generate_image',
+  );
   const isStatusOnly =
     preview.phase === 'waiting' ||
     (isStatusPhase && !hasMessageBody && !preview.reasoning) ||
@@ -189,9 +192,14 @@ function remotePreviewMessage(preview: RemoteStreamItem): ChatMessageItem {
     isThinking: isStatusOnly,
     isStreaming: true,
     suppressMessageBubble: isStatusPhase && !hasMessageBody,
-    ...(preview.tools?.length
+    // Only tools with NO durable owner. Every ordinary tool call arrives as its own synced message
+    // and is already drawn inline, in order, with the duration it took - so carrying them here too
+    // put a second copy of every call at the END of the transcript, and when the preview retired
+    // that copy vanished. Image generation is the exception: it is a lifecycle marker, not a tool
+    // result, so nothing durable ever replaces its row.
+    ...(previewOwnedTools.length
       ? {
-          toolArtifacts: preview.tools.map(tool => ({
+          toolArtifacts: previewOwnedTools.map(tool => ({
             name: tool.name,
             result: tool.result ?? '',
             status: tool.status,
