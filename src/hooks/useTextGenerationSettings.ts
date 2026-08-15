@@ -15,10 +15,10 @@ export interface NumericSettingModel {
   onChange: (value: number) => void;
 }
 
-export const formatContext = (value: number): string =>
+const formatContext = (value: number): string =>
   value >= 1024 ? `${(value / 1024).toFixed(0)}K` : String(value);
 
-export const formatMaxTokens = (value: number): string =>
+const formatMaxTokens = (value: number): string =>
   value >= 1024 ? `${(value / 1024).toFixed(1)}K` : String(value);
 
 /**

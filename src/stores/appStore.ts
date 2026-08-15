@@ -25,7 +25,7 @@ import { createProAccessSlice, type ProAccessSlice } from './proAccessSlice';
 import {
   isExcludedTextModel,
   isSuspiciousRecoveredImageModel,
-} from './appStoreModelRecovery';
+} from '../utils/modelSelectorFilters';
 import { migratePersistedState } from './appStoreMigrations';
 import { defaultImageSteps, SWEET_SPOT_SIZE } from '../utils/imageGenAdvice';
 

@@ -26,12 +26,9 @@ import {
   XML_TOOL_CALL_FUNCTION_MARKER,
   XML_TOOL_CALL_PARAMETER_MARKER,
 } from '../utils/messageContent';
-export const DEFAULT_MAX_TOOL_STEPS_PER_RESPONSE = 25;
+const DEFAULT_MAX_TOOL_STEPS_PER_RESPONSE = 25;
 export const toolStepLimitNotice = (maximum: number): string =>
   `This response reached the ${maximum}-step tool limit, so it stopped. The conversation context is still available. Send another message to continue.`;
-export const TOOL_STEP_LIMIT_NOTICE = toolStepLimitNotice(
-  DEFAULT_MAX_TOOL_STEPS_PER_RESPONSE,
-);
 const currentMaxToolSteps = (): number => {
   const configured = useAppStore.getState().settings.maxToolCalls;
   return Number.isInteger(configured) && configured >= 1 && configured <= 100

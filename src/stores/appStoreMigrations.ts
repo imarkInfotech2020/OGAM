@@ -15,7 +15,7 @@ interface PersistedSettings {
 import { Platform } from 'react-native';
 import { INFERENCE_BACKENDS } from '../types';
 
-export function migrateEnabledTools(merged: any): void {
+function migrateEnabledTools(merged: any): void {
   if (
     merged.settings?.enabledTools &&
     !merged.settings.enabledTools.includes('search_knowledge_base')
@@ -33,7 +33,7 @@ export function migrateEnabledTools(merged: any): void {
 // the device-safe defaults. Idempotent: once reset, the values no longer match.
 const MCP_BOOST_CTX_CEILING = 32768;
 const MCP_BOOST_MAX_OUTPUT_TOKENS = 8192;
-export function migrateBoostedContext(
+function migrateBoostedContext(
   merged: any,
   DEFAULT_SETTINGS: PersistedSettings,
 ): void {
@@ -113,7 +113,7 @@ export function migratePersistedState<TState>(
  * `Date.parse` answers NaN. The producers now write ISO-8601, but a phone that has generated images
  * already holds the old value, and nothing else would ever rewrite it.
  */
-export function migrateGeneratedImageTimestamps(merged: any): void {
+function migrateGeneratedImageTimestamps(merged: any): void {
   if (!Array.isArray(merged.generatedImages)) return;
   merged.generatedImages = merged.generatedImages.map((image: any) => {
     const epochMs = Number(image?.createdAt);
