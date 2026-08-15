@@ -71,4 +71,30 @@ describe('happy — support-share sheet dismisses after Share on X and does not 
     // ASSERT (2): the sheet does NOT re-appear (no re-nag) — because the user already engaged.
     expect(h.view!.queryByText(SHEET_TITLE)).toBeNull();
   }, 60000);
+
+  it("llama.cpp: Don't show again dismisses the sheet and keeps it hidden in a new session", async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    h.render();
+
+    await h.send('first opt-out prompt', { text: 'reply one' });
+    expect(h.view!.queryByText(SHEET_TITLE)).toBeNull();
+
+    await h.send('second opt-out prompt', { text: 'reply two' });
+    await h.rtl.waitFor(() => {
+      expect(h.view!.getByText("Don't show again")).toBeTruthy();
+    }, { timeout: 4000 });
+
+    h.rtl.fireEvent.press(h.view!.getByText("Don't show again"));
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(SHEET_TITLE)).toBeNull();
+    }, { timeout: 4000 });
+
+    // A relaunch resets the in-memory session guard. The persisted user choice is the only reason
+    // a later generation stays quiet, which is the exact behavior this action promises.
+    const { resetSharePromptSession } = require('../../../src/utils/sharePrompt');
+    resetSharePromptSession();
+    await h.send('new session prompt', { text: 'reply three' });
+    await h.settle(1700);
+    expect(h.view!.queryByText(SHEET_TITLE)).toBeNull();
+  }, 60000);
 });
