@@ -13,6 +13,11 @@
  * Values are TYPED into each slider's value field rather than dragged: a drag lands wherever the
  * gesture ends, which is how a "maximum steps" run quietly becomes a 47-step one.
  *
+ * Driven through Appium rather than `uiautomator dump`. The dump serialises the WHOLE hierarchy in
+ * one shot and is killed outright on a long transcript - the exact chat an image journey runs in -
+ * so every label lookup misses and the failure reads as "the app has no home screen". Appium's
+ * server queries element by element and survives it.
+ *
  *   node scripts/e2e/prepare-image-settings.mjs --enhancement off
  *   node scripts/e2e/prepare-image-settings.mjs --enhancement on --fresh-chat false
  */
@@ -36,35 +41,87 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const adb = new AdbClient(serial);
 const appium = new AppiumAndroidClient(appiumUrl, serial);
 
+/** Wait for a control to exist, asking Appium one element at a time. */
+const waitFor = async (testId, timeoutMs = 30_000) => {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      return await appium.findByTestId(testId);
+    } catch (error) {
+      if (Date.now() >= deadline) {
+        throw new Error(`timed out waiting for ${testId}: ${error.message}`);
+      }
+      await sleep(700);
+    }
+  }
+};
+
+const tap = async (testId, timeoutMs = 30_000) => {
+  await waitFor(testId, timeoutMs);
+  await appium.clickTestId(testId);
+  await sleep(500);
+};
+
+/**
+ * Bring a control into view, then answer with it.
+ *
+ * A long settings sheet does not RENDER its off-screen rows, so a control below the fold is absent
+ * from the hierarchy rather than merely invisible - and "not found" reads as "this build has no GPU
+ * switch". Swiping is what makes it exist.
+ */
+const scrollTo = async (testId, swipes = 8) => {
+  for (let attempt = 0; attempt <= swipes; attempt += 1) {
+    if (await has(testId)) return;
+    await adb.shell('input swipe 540 1700 540 900 250');
+    await sleep(700);
+  }
+  throw new Error(`${testId} never came into view after ${swipes} swipes`);
+};
+
+/** Present, or not - used where a control is optional rather than awaited. */
+const has = async (testId) => {
+  try {
+    await appium.findByTestId(testId);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /** Set a slider by typing its value, so the run gets the number this asked for. */
 const setSlider = async (testId, value) => {
-  await adb.scrollToLabel(`${testId}-value-button`, { maxSwipes: 10 });
-  await adb.tapLabel(`${testId}-value-button`);
-  await sleep(600);
+  await scrollTo(`${testId}-value-button`);
+  await tap(`${testId}-value-button`);
   await appium.replaceTestId(`${testId}-input`, String(value));
-  // Submit by leaving the field: the input commits on blur as well as on submit, and tapping the
-  // label beside it cannot land on another control.
-  await adb.tapLabel(`${testId}-value-button`).catch(() => undefined);
-  await sleep(600);
-  const shown = (await adb.labels()).some((label) => label.includes(String(value)));
-  if (!shown) throw new Error(`${testId} did not accept ${value}`);
-  console.log(`SET   ${testId} = ${value}`);
+  // Commit it. The field only becomes the readable value again once it submits or blurs, so
+  // without this the check below reads an empty string off a control still being edited.
+  await adb.shell('input keyevent 66');
+  await sleep(900);
+  // Read the value BACK off the control, so a field that silently refused the number fails here
+  // rather than three minutes later as a run that used the wrong settings.
+  const shown = await appium.textTestId(`${testId}-value`).catch(() => '');
+  if (!shown.includes(String(value))) {
+    throw new Error(`${testId} shows "${shown}" after being set to ${value}`);
+  }
+  console.log(`SET   ${testId} = ${value} (reads "${shown}")`);
+};
+
+const stateOf = async (testId, name) => {
+  await waitFor(testId);
+  const checked = await appium.attributeTestId(testId, 'checked');
+  if (checked === 'true' || checked === true) return true;
+  if (checked === 'false' || checked === false) return false;
+  throw new Error(`${name} exposes no checked state (saw ${JSON.stringify(checked)})`);
 };
 
 const ensureToggle = async (testId, name, wanted) => {
-  await adb.scrollToLabel(testId, { maxSwipes: 10 });
-  const labels = await adb.labels();
-  const on = labels.includes(`${name}, ON`);
-  const off = labels.includes(`${name}, OFF`);
-  if (!on && !off) throw new Error(`${name} exposes no state`);
-  if (on === wanted) {
+  if ((await stateOf(testId, name)) === wanted) {
     console.log(`KEEP  ${name} already ${wanted ? 'ON' : 'OFF'}`);
     return;
   }
-  await adb.tapLabel(testId);
+  await tap(testId);
   await sleep(800);
-  const after = await adb.labels();
-  if (!after.includes(`${name}, ${wanted ? 'ON' : 'OFF'}`)) {
+  if ((await stateOf(testId, name)) !== wanted) {
     throw new Error(`${name} did not reach ${wanted ? 'ON' : 'OFF'}`);
   }
   console.log(`SET   ${name} = ${wanted ? 'ON' : 'OFF'}`);
@@ -74,36 +131,43 @@ await adb.session(packageName);
 await appium.session();
 
 if (freshChat) {
-  await adb.waitForLabel('home-screen', { label: 'Android home', timeoutMs: 40_000 });
-  await adb.scrollAndTap('new-chat-button', { timeoutMs: 20_000 }).catch(async () => {
-    await adb.tapLabel('New Chat');
-  });
-  await adb.waitForLabel('chat-screen', { label: 'a new chat', timeoutMs: 30_000 });
+  // Back out of whatever chat the app reopened into. A fresh chat is also a SHORT transcript, which
+  // is what keeps the rest of this readable to the driver.
+  for (let attempt = 0; attempt < 6 && !(await has('home-screen')); attempt += 1) {
+    await appium.back?.().catch(() => undefined);
+    await adb.back().catch(() => undefined);
+    await sleep(900);
+  }
+  await tap('new-chat-button', 40_000);
+  await waitFor('chat-screen', 30_000);
   console.log('OPEN  a new chat');
 }
 
-await adb.tapLabel('quick-settings-button');
-await adb.waitForLabel('quick-tools', { label: 'in-chat settings', timeoutMs: 20_000 });
+// Top-right, not the quick panel beside the input: the quick one carries Thinking and the tool
+// badges, and the image controls live in the full generation-settings modal behind this icon.
+await tap('chat-settings-icon');
+await waitFor('modal-image-accordion', 20_000);
 console.log('OPEN  in-chat settings');
 
 // The image controls live behind their own section, and the GPU switch behind Advanced inside it.
-await adb.scrollAndTap('IMAGE GENERATION', { maxSwipes: 8 });
-await sleep(800);
+await tap('modal-image-accordion');
+await sleep(600);
 
 await setSlider('image-steps', MAX_IMAGE_STEPS);
 await setSlider('image-size', IMAGE_SIZE);
 
-await adb.scrollAndTap('modal-image-advanced-toggle', { maxSwipes: 8 });
-await sleep(800);
+await scrollTo('modal-image-advanced-toggle');
+await tap('modal-image-advanced-toggle');
+await sleep(600);
+await scrollTo('image-gpu-acceleration');
 await ensureToggle('image-gpu-acceleration', 'GPU Acceleration', true);
 
-await adb.scrollToLabel(`image-enhance-${enhancement}`, { maxSwipes: 10 });
-await adb.tapLabel(`image-enhance-${enhancement}`);
-await sleep(600);
+await scrollTo(`image-enhance-${enhancement}`);
+await tap(`image-enhance-${enhancement}`);
 console.log(`SET   prompt enhancement = ${enhancement.toUpperCase()}`);
 
 await adb.back();
-await adb.waitForLabel('chat-screen', { label: 'the prepared chat', timeoutMs: 20_000 });
+await waitFor('chat-screen', 20_000);
 await appium.close().catch(() => undefined);
 console.log(
   `PASS  android  steps=${MAX_IMAGE_STEPS} size=${IMAGE_SIZE} GPU=ON enhancement=${enhancement.toUpperCase()}`,
