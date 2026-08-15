@@ -10,7 +10,7 @@ import {
   initMultimodal, checkContextMultimodal, recordGenerationStats, getStreamingDelta,
   hashString, ensureSessionCacheDir, getSessionPath, buildModelParams,
   buildCompletionParams, buildThinkingCompletionParams, supportsNativeThinking,
-  getMaxContextForDevice, getGpuLayersForDevice, BYTES_PER_GB,
+  getGpuLayersForDevice, BYTES_PER_GB,
   validateModelFile, checkMemoryForModel, safeCompletion, resolveSafeContext,
   describeGpuFallback, isTruncatedResult,
 } from './llmHelpers';
@@ -147,7 +147,7 @@ class LLMService {
       this.currentSettings = { nThreads, nBatch, contextLength: ctxLen };
       logger.log(`[LLM] Loading model: ctx=${ctxLen}, threads=${nThreads}, batch=${nBatch}, fileSize=${(fileSize / (1024 * 1024)).toFixed(0)}MB, availRAM=${memCheck.availableMB.toFixed(0)}MB`);
       try {
-        const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } = await this.initWithAutoContext({ baseParams, ctxLen, nGpuLayers, fileSize });
+        const { context, gpuAttemptFailed, actualLength, attemptedGpuLayers } = await this.initConfiguredContext({ baseParams, ctxLen, nGpuLayers, fileSize });
         // attemptedGpuLayers (post device-cap/backend resolution) is what the init actually offered the
         // GPU — the truthful layer count for the meta; nGpuLayers is the raw settings request.
         await this.applyLoadedContext({ context, actualLength, gpuAttemptFailed, nGpuLayers: attemptedGpuLayers, requestedGpuLayers: nGpuLayers, modelPath, mmProjPath });
@@ -161,7 +161,7 @@ class LLMService {
       mutex.release();
     }
   }
-  private async initWithAutoContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number; fileSize: number }): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number; attemptedGpuLayers: number }> {
+  private async initConfiguredContext(params: { baseParams: object; ctxLen: number; nGpuLayers: number; fileSize: number }): Promise<{ context: LlamaContext; gpuAttemptFailed: boolean; actualLength: number; attemptedGpuLayers: number }> {
     const deviceInfo = await hardwareService.getDeviceInfo();
     // Pass model size + free RAM so iOS Metal offload is capped to what fits (the
     // uncapped 99-layer offload was overflowing Metal → SIGSEGV on memory-tight devices).
@@ -195,24 +195,14 @@ class LLMService {
         logger.log('[LLM] CPU backend selected');
       }
     }
-    // Cap the INITIAL context by device RAM. The KV cache + compute buffers scale
-    // with n_ctx, so loading at the full 4096 on a 4GB phone spikes even a tiny
-    // model past the ~2GB per-process limit → jetsam kill (confirmed: 2098MB on a
-    // 4GB iPhone 12 mid-generation). The scale-down logic below never fired because
-    // it only ever RAISES context; do the floor here so the first load is safe.
-    const deviceCtxCap = getMaxContextForDevice(deviceInfo.totalMemory);
-    const safeCtx = Math.min(params.ctxLen, deviceCtxCap);
-    if (safeCtx !== params.ctxLen) logger.log(`[LLM] context capped for ${(deviceInfo.totalMemory / BYTES_PER_GB).toFixed(1)}GB RAM: ${params.ctxLen} → ${safeCtx}`);
-    const initial = { ...await initContextWithFallback(resolvedBaseParams, safeCtx, safeGpuLayers), attemptedGpuLayers: safeGpuLayers };
-    const modelMax = getModelMaxContext(initial.context);
-    const userIsOnDefault = this.currentSettings.contextLength === APP_CONFIG.maxContextLength;
-    if (!modelMax || !userIsOnDefault || modelMax <= initial.actualLength) return initial;
-    const deviceMaxCtx = getMaxContextForDevice(deviceInfo.totalMemory);
-    const targetCtx = Math.min(modelMax, 4096, deviceMaxCtx);
-    if (targetCtx <= initial.actualLength) return initial;
-    logger.log(`[LLM] Model supports ${modelMax} ctx, RAM cap ${deviceMaxCtx}, scaling ${initial.actualLength} → ${targetCtx}`);
-    try { await initial.context.release(); } catch (e) { logger.warn('[LLM] Error releasing initial context:', e); }
-    return { ...await initContextWithFallback(resolvedBaseParams, targetCtx, safeGpuLayers), attemptedGpuLayers: safeGpuLayers };
+    // The model metadata and the user's setting own context length. Do not impose a
+    // second RAM-tier ceiling here. validateAndPrepareModel already checks this exact
+    // model + cache + requested context against live memory and reduces only when it
+    // does not fit.
+    return {
+      ...await initContextWithFallback(resolvedBaseParams, params.ctxLen, safeGpuLayers),
+      attemptedGpuLayers: safeGpuLayers,
+    };
   }
   /** Multimodal init on a NOT-YET-PUBLISHED context (the load pipeline) — no instance-state writes. */
   private async deriveMultimodalFromProjector(context: LlamaContext, modelPath: string, mmProjPath: string): Promise<{ initialized: boolean; support: MultimodalSupport }> {
@@ -306,7 +296,7 @@ class LLMService {
       // regardless of the global thinkingEnabled — a rewrite is not a reasoning task, and
       // letting it think leaked "Thinking Process:..." into the enhanced prompt (B30).
       const thinkingOn = this.isThinkingEnabled() && !opts?.disableThinking;
-      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift(), contextLength: this.currentSettings.contextLength }), ...buildThinkingCompletionParams(thinkingOn, this.isGemma4Model()) };
+      const completionParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), ...buildThinkingCompletionParams(thinkingOn, this.isGemma4Model()) };
       logger.log(`[LLM][THINKING] thinkingSupported=${this.thinkingSupported}, thinkingEnabled=${useAppStore.getState().settings.thinkingEnabled}, isThinkingEnabled=${this.isThinkingEnabled()}, enable_thinking=${(completionParams as any).enable_thinking}, reasoning_format=${(completionParams as any).reasoning_format}`);
       logger.log(`[WIRE-LLAMA-PARAMS] ${JSON.stringify({ model: this.currentModelPath, params: { ...completionParams, messages: undefined } })}`); // [WIRE] settings→native params (temp/thinking/etc), messages elided
       const completionResult = await safeCompletion(ctx, () => ctx.completion(completionParams, (data: any) => {
@@ -345,7 +335,6 @@ class LLMService {
       isThinkingEnabled: this.isThinkingEnabled(),
       isGemma4Model: this.isGemma4Model(),
       disableCtxShift: this.shouldDisableCtxShift(),
-      contextLength: this.currentSettings.contextLength,
       manageContextWindow: (msgs, extra?) => this.manageContextWindow(msgs, extra),
       convertToOAIMessages: async msgs =>
         this.convertToOAIMessages(await this.dropMissingImageAttachments(msgs)),
@@ -400,7 +389,7 @@ class LLMService {
     let fullResponse = '';
     const ctx = this.context;
     const completionWork = safeCompletion(ctx, () => ctx.completion(
-      { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift(), contextLength: this.currentSettings.contextLength }), n_predict: maxTokens },
+      { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift() }), n_predict: maxTokens },
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },
     ), 'generateWithMaxTokens');
     this.activeCompletionPromise = completionWork.then(() => { }, () => { });
@@ -457,7 +446,7 @@ class LLMService {
   private convertToOAIMessages(messages: Message[]): RNLlamaOAICompatibleMessage[] {
     return buildOAIMessages(messages, this.multimodalSupport?.audio ?? false);
   }
-  async getModelInfo() { return this.context ? { contextLength: APP_CONFIG.maxContextLength, vocabSize: 0 } : null; }
+  async getModelInfo() { return this.context ? { contextLength: this.currentSettings.contextLength, vocabSize: 0 } : null; }
   async tokenize(text: string) {
     if (!this.context) throw new Error('No model loaded');
     return (await this.context.tokenize(text)).tokens || [];
