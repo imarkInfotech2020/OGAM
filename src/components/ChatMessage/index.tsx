@@ -71,7 +71,8 @@ const ToolCallWithThinking: React.FC<{
   onToggle: () => void;
   styles: any;
   colors: any;
-}> = ({ message, showThinking, onToggle, styles, colors }) => {
+  hideProse?: boolean;
+}> = ({ message, showThinking, onToggle, styles, colors, hideProse }) => {
   // Use buildMessageData (the single source that honors message.reasoningContent from the
   // separate reasoning channel AND inline <think> in content) so a tool-call message keeps
   // its pre-tool-call thinking block. Reading only parseThinkingContent(content) missed the
@@ -80,7 +81,7 @@ const ToolCallWithThinking: React.FC<{
     message.content || message.reasoningContent
       ? buildMessageData(message).parsedContent
       : null;
-  const hasText = !!tc?.response?.trim();
+  const hasText = !hideProse && !!tc?.response?.trim();
   // Left-aligned + bubble-width, matching a NORMAL assistant reply — a tool-call reply is an
   // assistant message, so its thinking box + pre-text + tool cards must line up with every other
   // AI message. (Previously used systemInfoContainer — centered, full-bleed — so the pre-tool-call
@@ -273,6 +274,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onSpeak: onSpeakProp,
   showGenerationDetails = false,
   animateEntry = false,
+  hideProse,
   metaExtra,
 }) => {
   const { colors } = useTheme();
@@ -388,6 +390,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         onToggle={() => setShowThinking(!showThinking)}
         styles={styles}
         colors={colors}
+        hideProse={hideProse}
       />
     );
   }
