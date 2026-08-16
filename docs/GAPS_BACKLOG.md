@@ -657,9 +657,9 @@ Greptile on mobile-pro#47, where the thread is deliberately left open so the sea
 
 ---
 
-## A tool-heavy turn's FINAL ANSWER does not sync off the device that produced it
+## A tool-heavy turn's FINAL ANSWER reaches peers LONG after its tool calls do
 
-**Verdict:** fix-the-guard — the turn's events sync; its conclusion does not.
+**Verdict:** instrument-and-revisit — the delay is real and large; the trigger is unknown.
 
 Observed 16 Aug 2026, run `iostools20260816161658`, guided six-tool journey driven from iOS.
 
@@ -675,8 +675,15 @@ tail: … read_wiki_structure Completed in 1611 ms / read_wiki_contents Complete
 hasOgamOverview: false
 ```
 
-The transcript on both desktops ENDS at the last tool call. The assistant message that follows -
-the actual answer, and the only part a person wanted - never arrives. Android shows the same shape.
+At that moment the transcript on both desktops ENDED at the last tool call, with no assistant
+message after it. It did arrive later - Mac saw it appear on every device some minutes afterwards -
+so this is LATENCY, not loss. The delay was long enough to read as a failure while watching.
+
+How long, and what finally triggered it, are NOT yet measured. A first reading claimed the answer
+never synced; that was wrong, and a second reading could not be compared because the desktops had
+moved to a different conversation by then. Measure it properly before theorising: stamp the moment
+the primary settles, then poll ONE peer on that same conversation until the answer appears, and
+report the interval.
 
 **Why it matters:** the mesh looks healthy. The conversation is there, the tool activity is there,
 timings are there. A user on their Mac sees a turn that apparently did a lot of work and concluded
