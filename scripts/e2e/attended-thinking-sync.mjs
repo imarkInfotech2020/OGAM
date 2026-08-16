@@ -21,6 +21,22 @@ const step = flag('step', 'snapshot');
 const run = flag('run', '');
 const requestedPlatform = flag('platform', 'all').toLowerCase();
 const primaryKind = flag('primary', 'android').toLowerCase();
+// Which devices take part. Defaults to all four; narrow it when one is genuinely unavailable, and
+// the run PRINTS what it left out - a journey that quietly drops a surface reads as full coverage.
+const meshKinds = flag('mesh', KINDS.join(','))
+  .split(',')
+  .map(kind => kind.trim().toLowerCase())
+  .filter(Boolean);
+const excluded = KINDS.filter(kind => !meshKinds.includes(kind));
+for (const kind of meshKinds) {
+  if (!KINDS.includes(kind)) throw new Error(`--mesh has an unknown device: ${kind}`);
+}
+if (!meshKinds.includes(primaryKind)) {
+  throw new Error(`--mesh must include the primary device (${primaryKind})`);
+}
+if (excluded.length) {
+  console.log(`NOTE  excluded from this run: ${excluded.join(', ')}`);
+}
 if (!run) throw new Error('--run must contain the existing checkpoint marker');
 if (requestedPlatform !== 'all' && !KINDS.includes(requestedPlatform)) {
   throw new Error(`--platform must be all or one of ${KINDS.join(', ')}`);
@@ -468,7 +484,14 @@ const waitUntil = async (check, label, limitMs = timeoutMs) => {
   throw new Error(`timed out after ${limitMs}ms waiting for ${label}`);
 };
 
-const openNewAndroidChat = async surface => {
+/**
+ * A fresh chat on whichever device is driving.
+ *
+ * Named for the ROLE, not the platform: this speaks the shared label vocabulary, and Android and iOS
+ * carry identical testIDs because they are the same React Native tree. Calling it "Android" is what
+ * made the normal-message stage look like it needed an Android-shaped path of its own.
+ */
+const openNewPrimaryChat = async surface => {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const labels = await surface.ui.labels();
     if (labels.includes('home-screen')) break;
@@ -721,18 +744,19 @@ const ensurePrimaryFileAttachment = async (surface, fileName) => {
   return 'added';
 };
 
-const setAndroidThinking = async (surface, enabled) => {
+/** The Thinking toggle on whichever device is driving. Shared vocabulary, as above. */
+const setPrimaryThinking = async (surface, enabled) => {
   let labels = await surface.ui.labels();
   if (!labels.includes('quick-thinking-toggle')) {
     if (!labels.includes('chat-screen'))
-      throw new Error('Android chat is not open');
+      throw new Error(`${surface.platform} chat is not open`);
     await surface.ui.tapLabel('quick-settings-button');
     await sleep(500);
     labels = await surface.ui.labels();
   }
   if (!labels.includes('quick-thinking-toggle')) {
     throw new Error(
-      'Android does not expose the Thinking control for the loaded model',
+      `${surface.platform} does not expose the Thinking control for the loaded model`,
     );
   }
   const isOn = labels.some(label => /Thinking, ON/i.test(label));
@@ -797,8 +821,8 @@ const prepareGuidedTools = async (surface, projectName) => {
   if (projectName && flag('fresh-chat', 'false') === 'true') {
     await openNewAndroidProjectChat(surface, projectName);
   } else if (projectName) await openAndroidProjectChat(surface, projectName);
-  else await openNewAndroidChat(surface);
-  await setAndroidThinking(surface, true);
+  else await openNewPrimaryChat(surface);
+  await setPrimaryThinking(surface, true);
 
   await surface.ui.tapLabel('quick-settings-button');
   await surface.ui.waitForLabel('quick-tools', {
@@ -1099,7 +1123,9 @@ const verifyNormalAcrossMesh = async (surfaces, state) => {
 const runAcrossMesh = async action => {
   // Run in series. Android UiAutomator permits only one active automation service, and serial
   // capture also makes the action order explicit in the evidence log.
-  const kinds = requestedPlatform === 'all' ? KINDS : [requestedPlatform];
+  // Honours --mesh, so a device excluded from the run is excluded HERE too. It used to fall back to
+  // every kind, which meant the run printed what it had left out and then ran it anyway.
+  const kinds = requestedPlatform === 'all' ? meshKinds : [requestedPlatform];
   for (const kind of kinds) {
     const surface = await connect(kind);
     try {
@@ -1151,7 +1177,7 @@ if (step === 'snapshot') {
   const surfaces = [];
   let appium;
   try {
-    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const kind of meshKinds) surfaces.push(await connect(kind));
     for (const surface of surfaces) {
       if (count(await surface.text(), state.normalToken) !== 0) {
         throw new Error(
@@ -1160,37 +1186,53 @@ if (step === 'snapshot') {
       }
     }
 
-    const android = surfaces.find(surface => surface.platform === 'android');
-    const before = await capture(android, 'before');
-    await openNewAndroidChat(android);
-    await setAndroidThinking(android, false);
-    const ready = await capture(android, 'ready');
+    // The device that DRIVES is whichever --primary names. This stage used to find 'android' by
+    // name and dispatch through Appium unconditionally, so --primary ios was accepted, validated,
+    // and then ignored here - the iOS run silently went out from the Android phone. The journey
+    // either side of this is already shared, because both apps are the same React Native tree with
+    // the same testIDs; only the dispatch differs, and send-guided-tools already picks between them.
+    const primary = surfaces.find(surface => surface.platform === primaryKind);
+    if (!primary) throw new Error(`the mesh has no ${primaryKind} surface to drive`);
+    const before = await capture(primary, 'before');
+    await openNewPrimaryChat(primary);
+    await setPrimaryThinking(primary, false);
+    const ready = await capture(primary, 'ready');
 
-    appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
-    await dispatchAndroidPrompt({
-      appium,
-      prompt: state.normalPrompt,
-      token: state.normalToken,
-      beforeClick: async description => {
-        const reserved = await readState();
-        reserved.normalSendReservedAt = new Date().toISOString();
-        reserved.normalSendTarget = description;
-        await saveState(reserved);
-      },
-    });
-    await appium.close();
-    appium = undefined;
+    const reserve = async description => {
+      const reserved = await readState();
+      reserved.normalSendReservedAt = new Date().toISOString();
+      reserved.normalSendTarget = description;
+      await saveState(reserved);
+    };
+    if (primaryKind === 'ios') {
+      await dispatchIosPrompt({
+        surface: primary,
+        prompt: state.normalPrompt,
+        token: state.normalToken,
+        beforeClick: reserve,
+      });
+    } else {
+      appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
+      await dispatchAndroidPrompt({
+        appium,
+        prompt: state.normalPrompt,
+        token: state.normalToken,
+        beforeClick: reserve,
+      });
+      await appium.close();
+      appium = undefined;
+    }
 
     await waitUntil(
       async () => {
-        const source = await android.ui.source();
+        const source = await primary.ui.source();
         return mobileMessageHasMarker(
           source,
           'user-message',
           state.normalToken,
         );
       },
-      'Android sent normal marker',
+      `${primaryKind} sent normal marker`,
       20_000,
     );
     const sent = await readState();
@@ -1198,14 +1240,14 @@ if (step === 'snapshot') {
     sent.normalSentAt = new Date().toISOString();
     await saveState(sent);
     await record({
-      platform: 'android',
+      platform: primaryKind,
       ok: true,
       action: 'send-normal',
       token: state.normalToken,
       before: before.screenshot,
       ready: ready.screenshot,
     });
-    console.log(`SEND android  ${state.normalToken}`);
+    console.log(`SEND ${primaryKind.padEnd(8)}${state.normalToken}`);
 
     await verifyNormalAcrossMesh(surfaces, state);
   } finally {
@@ -1223,7 +1265,7 @@ if (step === 'snapshot') {
   }
   const surfaces = [];
   try {
-    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const kind of meshKinds) surfaces.push(await connect(kind));
     await verifyNormalAcrossMesh(surfaces, state);
   } finally {
     await Promise.all(
@@ -1258,7 +1300,7 @@ if (step === 'snapshot') {
   try {
     const before = await capture(surface, 'before');
     await openMobileChat(surface);
-    await setAndroidThinking(surface, true);
+    await setPrimaryThinking(surface, true);
     const after = await capture(surface, 'after');
     await record({
       platform: 'android',
@@ -1277,7 +1319,7 @@ if (step === 'snapshot') {
   const surface = await connect('android');
   try {
     const before = await capture(surface, 'before');
-    await openNewAndroidChat(surface);
+    await openNewPrimaryChat(surface);
     const after = await capture(surface, 'after');
     await record({
       platform: 'android',
@@ -1652,7 +1694,7 @@ if (step === 'snapshot') {
   const surfaces = [];
   let appium;
   try {
-    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const kind of meshKinds) surfaces.push(await connect(kind));
     for (const surface of surfaces) {
       if (count(await surface.text(), state.thinkToken) !== 0) {
         throw new Error(
@@ -1662,8 +1704,8 @@ if (step === 'snapshot') {
     }
 
     const android = surfaces.find(surface => surface.platform === 'android');
-    await openNewAndroidChat(android);
-    await setAndroidThinking(android, true);
+    await openNewPrimaryChat(android);
+    await setPrimaryThinking(android, true);
     const ready = await capture(android, 'ready');
     console.log('READY android  clean chat open with Thinking ON');
 
@@ -1861,7 +1903,7 @@ if (step === 'snapshot') {
   const surfaces = [];
   let appium;
   try {
-    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const kind of meshKinds) surfaces.push(await connect(kind));
     for (const surface of surfaces) await assertChatOpen(surface);
     const baselines = new Map();
     for (const surface of surfaces) {
@@ -1992,7 +2034,7 @@ if (step === 'snapshot') {
   const surfaces = [];
   const failures = [];
   try {
-    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const kind of meshKinds) surfaces.push(await connect(kind));
     await Promise.all(surfaces.map(openSyncedChat));
     for (const surface of surfaces) {
       await assertChatOpen(surface);
@@ -2044,7 +2086,7 @@ if (step === 'snapshot') {
   }
   const surfaces = [];
   try {
-    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const kind of meshKinds) surfaces.push(await connect(kind));
     for (const surface of surfaces) {
       const text = await surface.text();
       if (count(text, state.thinkToken) !== 0) {
@@ -2100,7 +2142,7 @@ if (step === 'snapshot') {
   }
   const surfaces = [];
   try {
-    for (const kind of KINDS) surfaces.push(await connect(kind));
+    for (const kind of meshKinds) surfaces.push(await connect(kind));
     const android = surfaces.find(surface => surface.platform === 'android');
     const androidSource = await android.ui.source();
     const androidText = await android.text();
