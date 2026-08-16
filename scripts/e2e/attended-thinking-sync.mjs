@@ -926,10 +926,10 @@ const ensurePrimaryTextAttachment = async (surface, fixture) => {
     label: `${title} indexed`,
     timeoutMs: 180_000,
   });
-  await surface.ui.waitForLabel(`Use ${title}, ON`, {
-    label: `${title} enabled`,
-    timeoutMs: 20_000,
-  });
+  // The per-document "Use <name>, ON" switch lives on the Knowledge Base screen, not on project
+  // detail. Waiting for it here waited on a screen that never shows it, so a note that had saved
+  // and indexed correctly still failed the step. prepare-project opens the Knowledge Base and
+  // checks every document's switch there, which is the right place and already covers this one.
   return 'added';
 };
 
@@ -1755,8 +1755,12 @@ if (step === 'snapshot') {
         source: attachment.source,
       };
     }
+    // A pasted note is stored as a .txt document named after its title, so the Knowledge Base lists
+    // "Off Grid AI overview.txt" while the fixture calls it "Off Grid AI overview". Checking for the
+    // bare title never matched "Use <name>, ON", because the real label carries the extension
+    // between the name and the state.
     const expectedDocuments = [
-      fixture.textAttachment.title,
+      `${fixture.textAttachment.title}.txt`,
       ...attachments.map(({ fileName }) => fileName),
     ];
     await surface.ui.waitForLabel(
