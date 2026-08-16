@@ -29,11 +29,11 @@ class WhisperService {
   private currentModelPath: string | null = null;
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
-  /** Ends the turn once the speaker stops, so a voice turn needs no stop button. */
+  /** Ends the turn once the room goes quiet, so a voice turn needs no stop button. */
   private readonly endpoint = new SpeechEndpointTimer(() => {
-    logger.log('[WhisperService] silence detected - ending the turn');
     void this.stopTranscription();
   });
+  private unsubscribeLevels: (() => void) | null = null;
   private isReleasingContext: boolean = false;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
@@ -357,10 +357,12 @@ class WhisperService {
 
       logger.log('[WhisperService] transcribeRealtime started successfully');
       this.stopFn = stop;
-      // Start the clock HERE, not on the first partial. With useVad on, whisper emits no realtime
-      // events at all until its own detector trips, so hanging the endpoint off the first partial
-      // means a turn where nobody speaks never arms anything and records until it is stopped by hand.
-      this.endpoint.observe('');
+      // Listen to the ROOM for the rest of this turn: loudness, not the transcript. See speechEndpoint.
+      this.endpoint.begin();
+      this.unsubscribeLevels?.();
+      this.unsubscribeLevels = audioRecorderService.onAudioLevel(rms => {
+        this.endpoint.observeLevel(rms);
+      });
 
       subscribe((evt: RealtimeTranscribeEvent) => {
         logger.log('[WhisperService] Event received:', {
@@ -382,11 +384,12 @@ class WhisperService {
             processTime: processTime || 0,
             recordingTime: recordingTime || 0,
           });
-          this.endpoint.observe(data?.result || '');
           return;
         }
 
         this.endpoint.cancel();
+        this.unsubscribeLevels?.();
+        this.unsubscribeLevels = null;
 
         // FINAL: the utterance ended. Deliver the authoritative transcript — the realtime result if
         // it captured anything, else the file transcript (B26 fix). Emit it as the single final event.
@@ -408,6 +411,8 @@ class WhisperService {
       if (recordedFile) audioRecorderService.cancelRecording();
       logger.error('[WhisperService] transcribeRealtime error:', error);
       this.endpoint.cancel();
+      this.unsubscribeLevels?.();
+      this.unsubscribeLevels = null;
       this.isTranscribing = false;
       this.stopFn = null;
       resolveTranscriptionStopped();
@@ -418,6 +423,8 @@ class WhisperService {
   async stopTranscription(): Promise<void> {
     logger.log('[WhisperService] stopTranscription called');
     this.endpoint.cancel();
+    this.unsubscribeLevels?.();
+    this.unsubscribeLevels = null;
     try {
       // Grab and clear stopFn atomically to prevent double-stop race conditions.
       // Two concurrent callers (e.g. trailing audio timeout + clearResult) could

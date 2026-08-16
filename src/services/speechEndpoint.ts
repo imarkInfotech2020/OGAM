@@ -1,128 +1,129 @@
 /**
  * When has the speaker finished talking?
  *
- * Pure, and separate from WhisperService, because "the user has stopped speaking" is a decision and
- * everything around it is I/O. whisper.rn's `useVad` gates which slices get transcribed; it never
- * ends the session, so without this the only way to finish a voice turn is to press stop.
+ * Decided from the AUDIO, not from the transcript.
  *
- * The signal is the transcript itself. While someone is speaking, realtime slices keep changing the
- * text; when they stop, the text settles. That is a better end-of-speech marker than raw volume,
- * because it is already downstream of the VAD and of whisper's own decoding - a cough or a passing
- * car moves the meter but does not add words.
+ * The first version of this watched the transcript settle, and it does not work. Whisper's realtime
+ * mode re-decodes the whole accumulated buffer on every 3s slice, so the text keeps shifting while
+ * the room is silent - punctuation moves, a word gets corrected - and "the transcript stopped
+ * changing" never becomes true. It passed on a short clean phrase in a quiet room and failed on real
+ * speech, which is the worst way for a check to be wrong.
+ *
+ * whisper.rn's own `useVad` does not end a turn either. In `rn-whisper.cpp`, `vad_simple` only gates
+ * whether a slice gets DECODED, and `vad()` returns true outright whenever transcription is already
+ * running. Nothing in the native path stops the recorder, so the decision has to be made here.
+ *
+ * So this listens to the microphone's loudness - an RMS per buffer from audioRecorderService, which
+ * already runs alongside the realtime transcription - and ends the turn when the room goes quiet.
  */
 
-/** How long the transcript must sit unchanged before the turn is treated as finished. */
-const AUTO_STOP_SILENCE_MS = 1_800;
+/** Silence after speech. Short, because this can only fire once someone has actually spoken. */
+const SILENCE_AFTER_SPEECH_MS = 1_500;
 
 /**
  * How long to wait when nothing has been said at all.
  *
  * Longer, deliberately: someone who taps record and then thinks for a moment has not finished, they
- * have not started. Ending that turn early would send an empty transcript and look like the button
- * was broken.
+ * have not started. Ending that turn early sends an empty transcript and looks like a broken button.
  */
-const AUTO_STOP_INITIAL_SILENCE_MS = 8_000;
+const SILENCE_BEFORE_SPEECH_MS = 8_000;
 
-interface SpeechEndpointState {
-  /** The last transcript seen, trimmed. Empty means nothing has been heard yet. */
-  transcript: string;
-  /** When that transcript last CHANGED. */
-  changedAt: number;
+/**
+ * How far above the noise floor counts as speech.
+ *
+ * Relative rather than absolute: a phone on a desk in a quiet room and the same phone in a cafe have
+ * very different floors, and one fixed number cannot serve both. The additive margin stops a silent
+ * room, where the floor sits near zero, from hearing its own hiss as speech.
+ */
+const SPEECH_OVER_FLOOR = 3;
+const SPEECH_FLOOR_MARGIN = 0.006;
+
+/** The floor follows quiet quickly and loud slowly, so a long sentence cannot drag it up into speech. */
+const FLOOR_FALL = 0.25;
+const FLOOR_RISE = 0.02;
+
+/** How often the turn is re-checked. Silence delivers buffers too, but a device that stops
+ *  delivering them entirely would otherwise never re-evaluate and never end the turn. */
+const CHECK_EVERY_MS = 250;
+
+export interface SpeechEndpointReading {
+  /** Whether this buffer sounded like speech. */
+  speech: boolean;
+  /** The adapting noise floor, exposed so a decision can be explained. */
+  floor: number;
 }
 
-const initialSpeechEndpointState = (now: number): SpeechEndpointState => ({
-  transcript: '',
-  changedAt: now,
-});
-
 /**
- * Fold one realtime partial into the state.
+ * Hears the room and decides when the turn is over.
  *
- * Only a real change moves the clock. Whisper re-emits the same text on every slice while the room
- * is quiet, so treating each event as activity would hold the turn open forever.
- */
-const observePartial = (
-  state: SpeechEndpointState,
-  partial: string,
-  now: number,
-): SpeechEndpointState => {
-  const transcript = partial.trim();
-  if (transcript === state.transcript) return state;
-  return { transcript, changedAt: now };
-};
-
-/**
- * Has the turn ended?
- *
- * Two windows, because silence before speech and silence after it mean different things - see
- * AUTO_STOP_INITIAL_SILENCE_MS.
- */
-const hasSpeechEnded = (
-  state: SpeechEndpointState,
-  now: number,
-): boolean => {
-  const quietFor = now - state.changedAt;
-  return state.transcript.length > 0
-    ? quietFor >= AUTO_STOP_SILENCE_MS
-    : quietFor >= AUTO_STOP_INITIAL_SILENCE_MS;
-};
-
-/**
- * The endpoint decision plus the one timer that acts on it.
- *
- * Owned here rather than in WhisperService because ending a turn is about time, and the service is
- * about transcription. It also keeps the timer and the state that justifies it in the same place -
- * split across two objects, a stale timer firing against fresh state is the obvious bug.
+ * Separate from WhisperService because ending a turn is a decision about audio, and the service is
+ * about transcription. The timer lives with the state that justifies it, so a stale timer cannot
+ * fire against fresh state.
  */
 export class SpeechEndpointTimer {
-  private state: SpeechEndpointState | null = null;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private floor: number | null = null;
+  private heardSpeech = false;
+  private lastSpeechAt = 0;
+  private startedAt = 0;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private ended = true;
 
   constructor(private readonly onEnded: () => void) {}
 
-  /**
-   * Fold in one realtime partial and re-arm.
-   *
-   * Re-armed on change rather than scheduled once, because the window restarts each time the speaker
-   * adds a word. When nothing changed the existing timer is already counting the right window down,
-   * so it is left alone.
-   */
-  observe(partial: string): void {
-    const now = Date.now();
-    const next = observePartial(this.state ?? initialSpeechEndpointState(now), partial, now);
-    const unchanged = this.state === next;
-    this.state = next;
-    if (unchanged && this.timer) return;
+  /** A turn has started. Nothing has been heard yet. */
+  begin(now: number = Date.now()): void {
+    this.floor = null;
+    this.heardSpeech = false;
+    this.lastSpeechAt = 0;
+    this.startedAt = now;
+    this.ended = false;
     this.clear();
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      // Re-checked at fire time: a partial can land between the last arm and now.
-      if (!this.state || !hasSpeechEnded(this.state, Date.now())) return;
-      this.onEnded();
-    }, msUntilSpeechEnds(next, now));
+    this.timer = setInterval(() => this.check(Date.now()), CHECK_EVERY_MS);
+  }
+
+  /** One buffer of microphone loudness. */
+  observeLevel(rms: number, now: number = Date.now()): SpeechEndpointReading {
+    if (!Number.isFinite(rms) || rms < 0) return { speech: false, floor: this.floor ?? 0 };
+    if (this.floor === null) this.floor = rms;
+    const alpha = rms < this.floor ? FLOOR_FALL : FLOOR_RISE;
+    this.floor += alpha * (rms - this.floor);
+
+    const speech = rms > this.floor * SPEECH_OVER_FLOOR + SPEECH_FLOOR_MARGIN;
+    if (speech) {
+      this.heardSpeech = true;
+      this.lastSpeechAt = now;
+    }
+    return { speech, floor: this.floor };
+  }
+
+  /** Whether the turn should end now. Public so it can be checked without waiting on a timer. */
+  hasEnded(now: number = Date.now()): boolean {
+    return this.heardSpeech
+      ? now - this.lastSpeechAt >= SILENCE_AFTER_SPEECH_MS
+      : now - this.startedAt >= SILENCE_BEFORE_SPEECH_MS;
+  }
+
+  /** True once speech has been heard at all - the difference between "paused" and "never started". */
+  hasHeardSpeech(): boolean {
+    return this.heardSpeech;
   }
 
   /** Forget the turn. Called whenever transcription stops, however it stopped. */
   cancel(): void {
     this.clear();
-    this.state = null;
+    this.ended = true;
+  }
+
+  private check(now: number): void {
+    if (this.ended || !this.hasEnded(now)) return;
+    this.ended = true;
+    this.clear();
+    this.onEnded();
   }
 
   private clear(): void {
     if (!this.timer) return;
-    clearTimeout(this.timer);
+    clearInterval(this.timer);
     this.timer = null;
   }
 }
-
-/** Milliseconds until the turn would end if nothing more is said. Used to schedule the check. */
-const msUntilSpeechEnds = (
-  state: SpeechEndpointState,
-  now: number,
-): number => {
-  const window =
-    state.transcript.length > 0
-      ? AUTO_STOP_SILENCE_MS
-      : AUTO_STOP_INITIAL_SILENCE_MS;
-  return Math.max(0, state.changedAt + window - now);
-};

@@ -6,9 +6,64 @@ import logger from '../utils/logger';
 /** Supported formats for llama.rn audio input */
 type AudioInputFormat = 'wav' | 'mp3';
 
+/** How loud the microphone is right now, 0 upwards. RMS of one buffer of PCM samples. */
+export type AudioLevelListener = (rms: number) => void;
+
 class AudioRecorderService {
   private recorder: AudioRecorder | null = null;
   private isRecording = false;
+  private readonly levelListeners = new Set<AudioLevelListener>();
+
+  /**
+   * Listen to how loud the microphone is, while something is recording.
+   *
+   * End-of-speech has to be decided from the AUDIO. The transcript is a bad silence signal: each
+   * realtime slice re-decodes the whole buffer, so the text keeps shifting while the room is quiet
+   * and "the transcript settled" never becomes true.
+   *
+   * Returns an unsubscribe. Samples are reduced to one number here and never leave this service.
+   */
+  onAudioLevel(listener: AudioLevelListener): () => void {
+    this.levelListeners.add(listener);
+    if (this.recorder && this.isRecording) this.attachLevelCallback(this.recorder);
+    return () => {
+      this.levelListeners.delete(listener);
+      if (this.levelListeners.size === 0) {
+        (this.recorder as unknown as { clearOnAudioReady?: () => void })?.clearOnAudioReady?.();
+      }
+    };
+  }
+
+  private attachLevelCallback(rec: AudioRecorder): void {
+    const withCallback = rec as unknown as {
+      onAudioReady?: (
+        options: { sampleRate: number; bufferLengthInSamples: number; channelCount: number },
+        callback: (event: { buffer?: { getChannelData?: (i: number) => Float32Array }; numFrames?: number }) => void,
+      ) => void;
+    };
+    try {
+      withCallback.onAudioReady?.(
+        { sampleRate: 16000, bufferLengthInSamples: 1600, channelCount: 1 },
+        event => {
+          const channel = event?.buffer?.getChannelData?.(0);
+          const frames = event?.numFrames ?? channel?.length ?? 0;
+          if (!channel || frames <= 0) return;
+          let sum = 0;
+          for (let i = 0; i < frames; i += 1) sum += channel[i] * channel[i];
+          const rms = Math.sqrt(sum / frames);
+          for (const listener of this.levelListeners) {
+            try {
+              listener(rms);
+            } catch {
+              // One bad listener must never take the recording down with it.
+            }
+          }
+        },
+      );
+    } catch {
+      // No buffer callback on this platform build: callers keep their own timeout.
+    }
+  }
 
   supportsDirectAudioInput(): boolean {
     return true;
@@ -70,6 +125,8 @@ class AudioRecorderService {
     });
     this.recorder = rec;
     this.isRecording = true;
+    // Before start, so the opening buffers are not missed.
+    if (this.levelListeners.size > 0) this.attachLevelCallback(rec);
     const startResult: any = rec.start();
     if (startResult && startResult.status && startResult.status !== 'success') {
       this.isRecording = false;
