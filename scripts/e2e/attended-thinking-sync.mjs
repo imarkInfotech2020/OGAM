@@ -933,64 +933,63 @@ const ensurePrimaryTextAttachment = async (surface, fixture) => {
   return 'added';
 };
 
-const ensurePrimaryFileAttachment = async (surface, fileName) => {
-  const documentLabel = `Knowledge document ${fileName}`;
-  if (
-    await surface.ui
-      .scrollToLabel(documentLabel, { maxSwipes: 4 })
-      .catch(() => null)
-  )
-    return 'existing';
-  await surface.ui.scrollAndTap('kb-add-document', { maxSwipes: 6 });
-  // The picker opens wherever iOS last left it - on this phone, the iCloud Drive root - and the
-  // fixtures live one folder down. Waiting for the file at whatever the root happens to be reported
-  // "mobile.pdf is not in the system file picker" while it sat in plain sight inside Downloads.
-  // So: look, and if it is not here, open the folder it lives in and look again.
-  const folder = flag('picker-folder', 'Downloads');
-  // The picker names a file "mobile, pdf" - the extension is a separate accessibility component,
-  // not part of the name - so searching for "mobile.pdf" never matched a file sitting in plain
-  // sight. Ask for what the picker actually calls it.
-  const pickerLabel = fileName.replace(/\.([^.]+)$/, ', $1');
-  const visible = async () =>
-    (await surface.ui.labels()).some(label => label.includes(pickerLabel));
-  if (!(await visible())) {
-    // A plain tap, NOT scrollAndTap: scrolling here swipes, and a swipe on the picker sheet
-    // dismisses it - which is why the run kept ending back on project detail with no picker and a
-    // "the file is not in the picker" message about a picker that was no longer open.
-    await surface.ui.tapLabel(folder).catch(() => undefined);
-    await sleep(2000);
+/**
+ * Attach every missing fixture file in ONE trip through the picker.
+ *
+ * The picker is multi-select and already sits in the folder the fixtures live in. Opening it once
+ * per file meant three round trips, and each reopen was a fresh chance to land somewhere unexpected
+ * - which is what kept happening. Worse, the old per-file path "navigated to the folder" by tapping
+ * the label `Downloads`, which in the nav bar is `Downloads, Actions Menu`: that opens the folder's
+ * context menu (Remove Download / Keep Downloaded / Copy) over the picker and blocks everything
+ * underneath. There is no folder navigation here at all; the picker remembers where it was.
+ *
+ * `Open` exists only while something is selected, so it doubles as the check that the selection
+ * took, and as the control that hands the files back.
+ */
+const ensurePrimaryFileAttachments = async (surface, fileNames) => {
+  const pickerLabelFor = name => name.replace(/\.([^.]+)$/, ', $1');
+  const missing = [];
+  for (const name of fileNames) {
+    const present = await surface.ui
+      .scrollToLabel(`Knowledge document ${name}`, { maxSwipes: 4 })
+      .catch(() => null);
+    if (!present) missing.push(name);
   }
-  await surface.ui.waitForLabel(pickerLabel, {
-    label: `${fileName} in the system file picker (as "${pickerLabel}", in ${folder})`,
+  if (!missing.length) return { added: [], existing: fileNames };
+
+  await surface.ui.scrollAndTap('kb-add-document', { maxSwipes: 6 });
+  // Wait for the picker itself, by the first file we need rather than by chrome.
+  await surface.ui.waitForLabel(pickerLabelFor(missing[0]), {
+    label: `${missing[0]} in the file picker`,
     timeoutMs: 30_000,
   });
-  // The picker is in multi-select mode, so a tap TOGGLES: tapping a file that a previous attempt
-  // left ticked deselects it, and the run then waits forever on a picker with nothing chosen.
-  // `Open` appears only while something is selected, which makes it the honest signal for both
-  // "is anything selected" and "hand it back".
-  const selected = async () => (await surface.ui.labels()).includes('Open');
-  if (!(await selected())) {
-    await surface.ui.tapLabel(pickerLabel);
-    await sleep(1000);
+
+  const selectionMade = async () =>
+    (await surface.ui.labels()).includes('Open');
+  for (const name of missing) {
+    const label = pickerLabelFor(name);
+    await surface.ui.tapLabel(label);
+    await sleep(700);
   }
-  if (!(await selected())) {
+  if (!(await selectionMade())) {
     throw new Error(
-      `${fileName} would not select in the picker; no Open control appeared`,
+      `none of ${missing.join(', ')} selected in the picker; no Open control appeared`,
     );
   }
   await surface.ui.tapLabel('Open');
   await surface.ui.waitForLabel('project-detail-screen', {
     label: 'project after file selection',
-    timeoutMs: 40_000,
+    timeoutMs: 60_000,
   });
-  await surface.ui.waitForLabel(documentLabel, {
-    label: `${fileName} indexed`,
-    timeoutMs: 240_000,
-  });
-  // As with the pasted note: the "Use <name>, ON" switch is on the Knowledge Base screen, not on
-  // project detail. prepare-project checks every document's switch there.
-  return 'added';
+  for (const name of missing) {
+    await surface.ui.waitForLabel(`Knowledge document ${name}`, {
+      label: `${name} indexed`,
+      timeoutMs: 240_000,
+    });
+  }
+  return { added: missing, existing: fileNames.filter(n => !missing.includes(n)) };
 };
+
 
 /** The Thinking toggle on whichever device is driving. Shared vocabulary, as above. */
 const setPrimaryThinking = async (surface, enabled) => {
@@ -1778,13 +1777,20 @@ if (step === 'snapshot') {
     const stagedAt = await stageProjectFixtures(primaryKind, attachments);
     const project = await ensurePrimaryProject(surface, state, fixture);
     const textAttachment = await ensurePrimaryTextAttachment(surface, fixture);
-    const fileAttachments = {};
-    for (const attachment of attachments) {
-      fileAttachments[attachment.fileName] = {
-        result: await ensurePrimaryFileAttachment(surface, attachment.fileName),
-        source: attachment.source,
-      };
-    }
+    // One trip through the picker for all three, not one trip each.
+    const attached = await ensurePrimaryFileAttachments(
+      surface,
+      attachments.map(({ fileName }) => fileName),
+    );
+    const fileAttachments = Object.fromEntries(
+      attachments.map(({ fileName, source }) => [
+        fileName,
+        {
+          result: attached.added.includes(fileName) ? 'added' : 'existing',
+          source,
+        },
+      ]),
+    );
     // A pasted note is stored as a .txt document named after its title, so the Knowledge Base lists
     // "Off Grid AI overview.txt" while the fixture calls it "Off Grid AI overview". Checking for the
     // bare title never matched "Use <name>, ON", because the real label carries the extension
@@ -1815,7 +1821,14 @@ if (step === 'snapshot') {
       });
     }
     const indexed = await capture(surface, 'project-indexed');
-    await surface.ui.back();
+    // Leave by the screen's own Back control. iOS has no hardware back, and ui.back()'s edge swipe
+    // does not reliably pop this screen - the run sat on the Knowledge Base waiting for a project
+    // detail it had never navigated away from.
+    if ((await surface.ui.labels()).includes('knowledge-base-back')) {
+      await surface.ui.tapLabel('knowledge-base-back');
+    } else {
+      await surface.ui.back();
+    }
     await surface.ui.waitForLabel('project-detail-screen', {
       label: 'project detail after Knowledge Base check',
       timeoutMs: 20_000,

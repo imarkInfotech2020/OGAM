@@ -156,18 +156,27 @@ export const KnowledgeBaseScreen: React.FC = () => {
     );
   };
 
+  // Three controls, not one.
+  //
+  // The row used to be a single accessible TouchableOpacity wrapping the switch and the delete
+  // button, so iOS merged all of it into one element named "Knowledge document <name>". The
+  // switch's own label - "Use <name>, ON" - was never exposed, which means VoiceOver could not tell
+  // whether a document was in use, and could not toggle it: the whole row read as one button that
+  // opens a preview. Opening, toggling and deleting are three different actions and each needs to
+  // be reachable on its own.
   const renderDoc = ({ item }: { item: RagDocument }) => (
-    <TouchableOpacity
-      style={styles.docRow}
-      onPress={() => navigation.navigate('DocumentPreview', { filePath: item.path, fileName: item.name, fileSize: item.size })}
-      activeOpacity={0.7}
-      accessibilityLabel={`Knowledge document ${item.name}`}
-      testID={`knowledge-document-row-${item.sync_id}`}
-    >
-      <View style={styles.docInfo}>
+    <View style={styles.docRow}>
+      <TouchableOpacity
+        style={styles.docInfo}
+        onPress={() => navigation.navigate('DocumentPreview', { filePath: item.path, fileName: item.name, fileSize: item.size })}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Knowledge document ${item.name}`}
+        testID={`knowledge-document-row-${item.sync_id}`}
+      >
         <Text style={styles.docName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.docSize}>{formatFileSize(item.size)}</Text>
-      </View>
+      </TouchableOpacity>
       <Switch
         value={item.enabled === 1}
         onValueChange={(val) => handleToggleDocument(item.id, val)}
@@ -175,16 +184,28 @@ export const KnowledgeBaseScreen: React.FC = () => {
         testID={`knowledge-document-toggle-${item.sync_id}`}
         trackColor={{ false: colors.border, true: colors.primary }}
       />
-      <TouchableOpacity style={styles.docDelete} onPress={() => handleDeleteDocument(item)}>
+      <TouchableOpacity
+        style={styles.docDelete}
+        onPress={() => handleDeleteDocument(item)}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${item.name}`}
+        testID={`knowledge-document-remove-${item.sync_id}`}
+      >
         <Icon name="trash-2" size={16} color={colors.error} />
       </TouchableOpacity>
-    </TouchableOpacity>
+    </View>
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']} testID="knowledge-base-screen">
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          testID="knowledge-base-back"
+        >
           <Icon name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>

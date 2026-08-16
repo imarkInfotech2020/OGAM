@@ -341,15 +341,26 @@ export class WdaClient {
    * A test that passes on iOS and fails on Android with "no such element" is almost always this.
    */
   async scrollToLabel(needle, { maxSwipes = 8, ...options } = {}) {
-    const existing = await this.findByLabel(needle);
-    if (existing) return existing;
     const { width, height } = await this.windowSize();
     const x = Math.round(width / 2);
+    // "Found" has to mean "reachable". A row that is merely PRESENT can still be half under the tab
+    // bar, and tapping its centre then hits the tab bar instead - which is how a freshly created
+    // project, visible at the bottom of the list, could not be opened. Keep scrolling until its
+    // centre is clear of the chrome at both ends.
+    const TAB_BAR = 110;
+    const STATUS_BAR = 60;
+    const reachable = (element) =>
+      element &&
+      element.center.y < height - TAB_BAR &&
+      element.center.y > STATUS_BAR;
+
+    const existing = await this.findByLabel(needle);
+    if (reachable(existing)) return existing;
     for (let attempt = 0; attempt < maxSwipes; attempt += 1) {
       await this.swipe(x, Math.round(height * 0.75), x, Math.round(height * 0.3));
       await new Promise((resolve) => setTimeout(resolve, 500));
       const found = await this.findByLabel(needle).catch(() => null);
-      if (found) return found;
+      if (reachable(found)) return found;
     }
     throw new Error(`"${needle}" did not appear after ${maxSwipes} swipes.${options.hint ? ` ${options.hint}` : ''}`);
   }
