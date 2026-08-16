@@ -116,6 +116,8 @@ const rnSurface = (client, platform) => {
       type: (value) => client.type(value),
       replaceTestId: client.replaceTestId ? (testId, value) => client.replaceTestId(testId, value) : undefined,
       back: () => client.back(),
+      hideKeyboard: client.hideKeyboard ? () => client.hideKeyboard() : undefined,
+      keyboardTop: client.keyboardTop ? () => client.keyboardTop() : undefined,
       waitFor: (check, options) => client.waitFor(() => check(), options),
     },
 

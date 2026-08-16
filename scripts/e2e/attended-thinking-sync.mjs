@@ -673,6 +673,112 @@ const stageProjectFixtures = async (kind, attachments) => {
   return remoteDir;
 };
 
+/**
+ * Prove the project and its Knowledge Base reached the OTHER devices.
+ *
+ * prepare-project only ever checked the device that created the project, so "the project is ready"
+ * meant "ready on the phone that made it" - which is not what a mesh claims. A project carries its
+ * name, description, system prompt and indexed documents; if those do not arrive, a guided run on a
+ * peer answers from an empty Knowledge Base and still looks like a pass.
+ *
+ * Checked on each peer's own Projects surface, by the names a person would read.
+ */
+const showProjectsSurface = async surface => {
+  if (surface.family === 'rn') {
+    if ((await surface.ui.labels()).includes('projects-screen')) return;
+    await surface.ui.tapLabel('projects-tab');
+    await surface.ui.waitForLabel('projects-screen', {
+      label: `${surface.platform} projects screen`,
+      timeoutMs: 20_000,
+    });
+    return;
+  }
+  const clicked = await surface.ui.evaluate(`
+    const label = [...document.querySelectorAll('button > span')]
+      .find((node) => (node.textContent || '').trim() === 'Projects');
+    const button = label?.closest('button');
+    if (!button) return false;
+    button.click();
+    return true;
+  `);
+  if (!clicked)
+    throw new Error(`${surface.platform} does not expose the Projects nav`);
+  await surface.ui.waitFor(
+    () =>
+      surface.ui.evaluate(
+        `return location.href.toLowerCase().includes('/project');`,
+      ),
+    {
+      label: `${surface.platform} on Projects`,
+      timeoutMs: 20_000,
+      intervalMs: 500,
+    },
+  );
+};
+
+const verifyProjectAcrossMesh = async (projectName, documents) => {
+  const peers = meshKinds.filter(kind => kind !== primaryKind);
+  const results = [];
+  for (const kind of peers) {
+    const surface = await connect(kind);
+    try {
+      await showProjectsSurface(surface);
+      await waitUntil(
+        async () => (await surface.text()).includes(projectName),
+        `${kind} shows project ${projectName}`,
+        90_000,
+      );
+      if (surface.family === 'rn') {
+        await surface.ui.scrollAndTap(projectName, { maxSwipes: 10 });
+      } else {
+        await surface.ui.evaluate(`
+          const wanted = ${JSON.stringify(projectName.toLowerCase())};
+          const row = [...document.querySelectorAll('.cursor-pointer')]
+            .filter((node) => node.offsetParent !== null)
+            .find((node) => (node.innerText || '').toLowerCase().includes(wanted));
+          row?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          return Boolean(row);
+        `);
+      }
+      const missing = [];
+      for (const name of documents) {
+        const found = await waitUntil(
+          async () => (await surface.text()).includes(name),
+          `${kind} shows Knowledge Base document ${name}`,
+          60_000,
+        ).catch(() => false);
+        if (!found) missing.push(name);
+      }
+      const shot = await capture(surface, `project-synced-${kind}`);
+      await record({
+        platform: kind,
+        ok: missing.length === 0,
+        action: 'verify-project-sync',
+        projectName,
+        missingDocuments: missing,
+        after: shot.screenshot,
+      });
+      results.push({ kind, missing });
+      console.log(
+        missing.length
+          ? `FAIL ${kind.padEnd(8)} project synced but ${missing.length} document(s) missing: ${missing.join(', ')}`
+          : `SYNC ${kind.padEnd(8)} project and ${documents.length} Knowledge Base documents present`,
+      );
+    } finally {
+      await Promise.resolve(surface.close()).catch(() => undefined);
+    }
+  }
+  const broken = results.filter(result => result.missing.length);
+  if (broken.length) {
+    throw new Error(
+      `project Knowledge Base did not sync to: ${broken
+        .map(result => result.kind)
+        .join(', ')}`,
+    );
+  }
+  return results;
+};
+
 const fillPrimaryFields = async (surface, fields, submitTestId) => {
   if (surface.platform === 'android') {
     const appium = new AppiumAndroidClient(
@@ -709,6 +815,33 @@ const fillPrimaryFields = async (surface, fields, submitTestId) => {
     throw new Error(`${surface.platform} cannot replace text fields`);
   for (const [testId, value] of fields)
     await surface.ui.replaceTestId(testId, value);
+  // Close the keyboard before pressing Save, exactly as the Android branch does. The editor's Save
+  // control sits below a multiline field and under the keyboard, so the tap lands on a key instead.
+  // The app not lifting that control above the keyboard is a real UI gap - logged in
+  // docs/GAPS_BACKLOG.md rather than worked around silently here.
+  // Get the submit control clear of the keyboard before pressing it.
+  //
+  // These sheets are not keyboard-aware (docs/GAPS_BACKLOG.md), so Save can sit UNDER the keyboard
+  // and a tap aimed at it lands on a key. Ask the keyboard to close; if it will not - a multiline
+  // field offers it no Done affordance - scroll the control up and MEASURE, rather than tapping
+  // hopefully. An earlier attempt tapped a blind point above the keyboard to dismiss it, which on
+  // the paste-note sheet hit Back and discarded everything typed.
+  await surface.ui.hideKeyboard?.();
+  await surface.ui.scrollToLabel(submitTestId, { maxSwipes: 4 }).catch(() => {});
+  const keyboardTop = (await surface.ui.keyboardTop?.()) ?? null;
+  if (keyboardTop !== null) {
+    const control = await surface.ui.findByLabel(submitTestId);
+    if (!control) {
+      throw new Error(
+        `${surface.platform} cannot find ${submitTestId} to submit`,
+      );
+    }
+    if (control.center.y >= keyboardTop) {
+      throw new Error(
+        `${surface.platform} keyboard covers ${submitTestId} (control at y=${control.center.y}, keyboard from y=${keyboardTop}); refusing to tap a key instead`,
+      );
+    }
+  }
   await surface.ui.tapLabel(submitTestId);
 };
 
@@ -1681,6 +1814,11 @@ if (step === 'snapshot') {
       `PASS ${primaryKind.padEnd(8)} ${state.projectName} has ${
         expectedDocuments.length
       } indexed, enabled Knowledge Base documents`,
+    );
+    // A project that exists only on the device that made it is not a mesh result.
+    await verifyProjectAcrossMesh(state.projectName, expectedDocuments);
+    console.log(
+      `PASS mesh     ${state.projectName} and its Knowledge Base present on every device`,
     );
   } finally {
     await Promise.resolve(surface.close()).catch(() => undefined);

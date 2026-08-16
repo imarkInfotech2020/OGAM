@@ -189,6 +189,51 @@ export class WdaClient {
     await this.#post(`/session/${sid}/element/${element}/value`, { value: [...text] });
   }
 
+  /**
+   * Dismiss the soft keyboard.
+   *
+   * The project editor's Save control sits below a multiline field and UNDER the keyboard, so a tap
+   * aimed at Save lands on a key instead. Android's client hides the keyboard before Save for the
+   * same reason; this is the iOS counterpart. Not `back()` - that is an edge swipe, which would
+   * leave the editor rather than close the keyboard.
+   */
+  /** Top edge of the on-screen keyboard, or null when it is not up. */
+  async keyboardTop() {
+    let top = null;
+    const walk = node => {
+      if (!node) return;
+      if (node.type === 'Keyboard' && node.rect && node.rect.height > 0) {
+        top = node.rect.y;
+      }
+      (node.children || []).forEach(walk);
+    };
+    walk(await this.source());
+    return top;
+  }
+
+  async keyboardShown() {
+    return (await this.keyboardTop()) !== null;
+  }
+
+  /**
+   * Ask the keyboard to close. Returns whether it actually went away.
+   *
+   * Deliberately does NOT fall back to tapping a blind coordinate above the keyboard: on the paste-
+   * note sheet that lands on Back and DISCARDS what was typed. A helper that silently destroys the
+   * user's input is worse than one that reports it could not close the keyboard - callers position
+   * the control instead (see keyboardTop).
+   */
+  async hideKeyboard() {
+    if (!(await this.keyboardShown())) return true;
+    const sid = this.#requireSession();
+    // WDA's dismiss only works when the keyboard carries a Done/return affordance. A multiline
+    // field has none, so the result is CHECKED rather than swallowed.
+    await this.#post(`/session/${sid}/wda/keyboard/dismiss`, {}).catch(
+      () => {},
+    );
+    return !(await this.keyboardShown());
+  }
+
   /** Back one screen. iOS has no hardware back, so this is the edge-swipe-from-left gesture. */
   async back() {
     const { width, height } = await this.windowSize();
