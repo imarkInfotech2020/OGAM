@@ -6,7 +6,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { llmService } from '../../services';
 import { createStyles } from './styles';
-import { VoiceActivityDetectionToggle } from '../settings/textGenAdvancedSections';
+import { VoiceActivityDetectionToggle } from '../settings/voiceSections';
 import { ConversationActionsSection } from './ConversationActionsSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';

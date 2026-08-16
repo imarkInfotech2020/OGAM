@@ -8,7 +8,6 @@ import { backgroundDownloadService } from './backgroundDownloadService';
 import { useDownloadStore } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
 import { WHISPER_MODELS, cleanTranscription } from './whisperModels';
-import { SpeechEndpointTimer } from './speechEndpoint';
 import * as whisperModelFiles from './whisperModelFiles';
 
 // Re-export the model catalog + transcription normalizer (moved to whisperModels.ts
@@ -29,10 +28,6 @@ class WhisperService {
   private currentModelPath: string | null = null;
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
-  /** Ends the turn once the room goes quiet, so a voice turn needs no stop button. */
-  private readonly endpoint = new SpeechEndpointTimer(() => this.onSilence?.());
-  private onSilence: (() => void) | null = null; // set per turn from startRealtimeTranscription
-  private unsubscribeLevels: (() => void) | null = null;
   private isReleasingContext: boolean = false;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
@@ -261,8 +256,6 @@ class WhisperService {
     options?: {
       language?: string;
       maxLen?: number;
-      /** Room went quiet. MUST be the caller's stop path - ours alone leaves the UI recording. */
-      onSilence?: () => void;
     }
   ): Promise<void> {
     logger.log(`[WhisperService] start (context=${!!this.context})`);
@@ -342,7 +335,8 @@ class WhisperService {
         maxLen: options?.maxLen || 0, // 0 = no limit
         realtimeAudioSec: 30, // Process in 30-second chunks
         realtimeAudioSliceSec: 3, // Slice every 3 seconds for faster intermediate results
-        // Decode only slices with speech. Does not end the turn - speechEndpoint does that.
+        // Decode only slices that contain speech, so a quiet room is not decoded into invented
+        // words. This does NOT end the turn - only useVoiceInput does that, in voice mode.
         useVad: true,
         ...(Platform.OS === 'ios' && {
           audioSessionOnStartIos: {
@@ -356,13 +350,6 @@ class WhisperService {
 
       logger.log('[WhisperService] transcribeRealtime started successfully');
       this.stopFn = stop;
-      // Loudness, not the transcript - see speechEndpoint. The caller's stop runs, not ours.
-      this.onSilence = options?.onSilence ?? (() => void this.stopTranscription());
-      this.endpoint.begin();
-      this.unsubscribeLevels?.();
-      this.unsubscribeLevels = audioRecorderService.onAudioLevel(rms => {
-        this.endpoint.observeLevel(rms);
-      });
 
       subscribe((evt: RealtimeTranscribeEvent) => {
         logger.log('[WhisperService] Event received:', {
@@ -387,9 +374,6 @@ class WhisperService {
           return;
         }
 
-        this.endpoint.cancel();
-        this.unsubscribeLevels?.();
-        this.unsubscribeLevels = null;
 
         // FINAL: the utterance ended. Deliver the authoritative transcript — the realtime result if
         // it captured anything, else the file transcript (B26 fix). Emit it as the single final event.
@@ -410,9 +394,6 @@ class WhisperService {
     } catch (error) {
       if (recordedFile) audioRecorderService.cancelRecording();
       logger.error('[WhisperService] transcribeRealtime error:', error);
-      this.endpoint.cancel();
-      this.unsubscribeLevels?.();
-      this.unsubscribeLevels = null;
       this.isTranscribing = false;
       this.stopFn = null;
       resolveTranscriptionStopped();
@@ -422,9 +403,6 @@ class WhisperService {
 
   async stopTranscription(): Promise<void> {
     logger.log('[WhisperService] stopTranscription called');
-    this.endpoint.cancel();
-    this.unsubscribeLevels?.();
-    this.unsubscribeLevels = null;
     try {
       // Grab and clear stopFn atomically to prevent double-stop race conditions.
       // Two concurrent callers (e.g. trailing audio timeout + clearResult) could

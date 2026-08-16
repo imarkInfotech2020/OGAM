@@ -11,7 +11,7 @@ import { createStyles } from './styles';
 import { SystemPromptSection } from './SystemPromptSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
-import { VoiceActivityDetectionToggle } from '../../components/settings/textGenAdvancedSections';
+import { VoiceActivityDetectionToggle } from '../../components/settings/voiceSections';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import {
