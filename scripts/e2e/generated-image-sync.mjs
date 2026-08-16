@@ -86,16 +86,33 @@ const observe = async (surface, baseline, { alreadyOpen = false } = {}) => {
     // silent downgrade would be worse than the wrong verdict it replaces.
     let live;
     let liveMissed = false;
-    try {
-      live = await surface.waitForLiveState(liveTimeoutMs);
-    } catch (liveError) {
-      const settledEarly = await surface
-        .waitForFinal(token, 5_000)
-        .then(() => true)
-        .catch(() => false);
-      if (!settledEarly) throw liveError;
-      liveMissed = true;
-      live = 'not observed - this surface opened the conversation after generation had finished';
+    {
+      // Watch for BOTH outcomes and take whichever happens first: the live state, or the finished
+      // image. Waiting out the live timeout before checking whether generation had already ended
+      // cost the whole timeout on every late surface - minutes of nothing, for a generation that
+      // takes about thirty seconds. The timeout is a ceiling, not a schedule.
+      const liveRace = surface
+        .waitForLiveState(liveTimeoutMs)
+        .then((value) => ({ kind: 'live', value }), (error) => ({ kind: 'live-failed', error }));
+      const finishedRace = surface
+        .waitForFinal(token, liveTimeoutMs)
+        .then(() => ({ kind: 'finished' }), () => ({ kind: 'never-finished' }));
+      const first = await Promise.race([liveRace, finishedRace]);
+      if (first.kind === 'live') {
+        live = first.value;
+      } else if (first.kind === 'live-failed') {
+        throw first.error;
+      } else {
+        // The image was already there. Give the live check one last look in case a fast generation
+        // let both resolve together, then call it missed rather than pretending it was seen.
+        const late = await liveRace;
+        if (late.kind === 'live') {
+          live = late.value;
+        } else {
+          liveMissed = true;
+          live = 'not observed - this surface opened the conversation after generation had finished';
+        }
+      }
     }
     const liveShot = await capture(surface, 'live');
     console.log(
