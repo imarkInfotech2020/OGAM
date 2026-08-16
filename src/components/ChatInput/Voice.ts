@@ -5,6 +5,7 @@ import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
+import { SpeechEndpointTimer } from '../../services/speechEndpoint';
 import { recordingController } from '../../services/recordingController';
 import { resolveTranscription } from './transcriptionOutcome';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
@@ -75,6 +76,33 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // voiceAvailable: direct audio OR whisper downloaded
   const voiceAvailable = supportsDirectAudio() || !!downloadedModelId;
 
+  // Ends a turn when the room goes quiet, so voice mode needs no stop tap. Wired HERE because this
+  // is the path the record button actually takes: audioRecorderService records to a file and the
+  // transcript comes from transcribeFile afterwards. The realtime API is a different path entirely.
+  const endpointRef = useRef<SpeechEndpointTimer | null>(null);
+  const levelsOffRef = useRef<(() => void) | null>(null);
+
+  const listenForSilence = () => {
+    stopListeningForSilence();
+    const endpoint = new SpeechEndpointTimer(() => {
+      logger.log('[Voice] silence detected - ending the turn');
+      stopListeningForSilence();
+      // The SAME stop the button runs, so the turn finalises exactly as a manual stop does.
+      // stopRef is declared below and kept current every render, so this is never a stale closure.
+      void stopRef.current();
+    });
+    endpointRef.current = endpoint;
+    endpoint.begin();
+    levelsOffRef.current = audioRecorderService.onAudioLevel(rms => endpoint.observeLevel(rms));
+  };
+
+  const stopListeningForSilence = () => {
+    endpointRef.current?.cancel();
+    endpointRef.current = null;
+    levelsOffRef.current?.();
+    levelsOffRef.current = null;
+  };
+
   const startRecording = async () => {
     recordingConversationIdRef.current = conversationId || null;
     setDirectError(null);
@@ -86,6 +114,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
       try {
         setIsDirectRecording(true);
         await audioRecorderService.startRecording();
+        listenForSilence();
       } catch (err) {
         setIsDirectRecording(false);
         const msg = err instanceof Error ? err.message : 'Recording failed';
@@ -99,6 +128,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
       try {
         setIsAudioModeRecording(true);
         await audioRecorderService.startRecording();
+        listenForSilence();
       } catch (err) {
         setIsAudioModeRecording(false);
         const msg = err instanceof Error ? err.message : 'Recording failed';
@@ -217,6 +247,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   };
 
   const stopRecording = async () => {
+    stopListeningForSilence();
     if (isDirectRecording) {
       await stopDirectRecording();
       return;
@@ -231,6 +262,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   };
 
   const cancelRecording = () => {
+    stopListeningForSilence();
     if (isDirectRecording) {
       audioRecorderService.cancelRecording();
       setIsDirectRecording(false);
