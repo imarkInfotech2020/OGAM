@@ -1,6 +1,16 @@
 import type { ThemeColors, ThemeShadows } from '../../theme';
 import { TYPOGRAPHY, SPACING, FONTS } from '../../constants';
 
+/**
+ * How wide a message is allowed to be, as ONE number.
+ *
+ * A tool row belongs to the bubble above it, so it has to end where that bubble ends - a row that
+ * stretched the full screen put its chevron past the bubble's right edge, which read as the row
+ * belonging to the screen rather than to the message. This lived as a repeated '85%' in four
+ * places, so the row and the bubble could drift apart silently.
+ */
+const MESSAGE_MAX_WIDTH = '85%' as const;
+
 const createBubbleStyles = (colors: ThemeColors) => ({
   container: {
     marginVertical: 8,
@@ -25,7 +35,7 @@ const createBubbleStyles = (colors: ThemeColors) => ({
   // A tool-call reply's content column — matches the assistant bubble width (85%) + left alignment
   // so the thinking box, pre-text, and tool cards line up with every other AI message.
   toolCallReplyContent: {
-    width: '85%' as const,
+    width: MESSAGE_MAX_WIDTH,
     alignSelf: 'flex-start' as const,
   },
   toolCallPreText: {
@@ -46,6 +56,7 @@ const createBubbleStyles = (colors: ThemeColors) => ({
   toolRow: {
     alignSelf: 'stretch' as const,
     alignItems: 'flex-start' as const,
+    maxWidth: MESSAGE_MAX_WIDTH,
     paddingVertical: 4,
   },
   /**
@@ -56,6 +67,7 @@ const createBubbleStyles = (colors: ThemeColors) => ({
   toolRowPaired: {
     alignSelf: 'stretch' as const,
     alignItems: 'flex-start' as const,
+    maxWidth: MESSAGE_MAX_WIDTH,
     paddingTop: 4,
     paddingBottom: 0,
   },
@@ -99,7 +111,7 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     lineHeight: 16,
   },
   bubble: {
-    maxWidth: '85%' as const,
+    maxWidth: MESSAGE_MAX_WIDTH,
     borderRadius: 8,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
