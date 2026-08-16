@@ -126,25 +126,85 @@ function reactNativeGeneratedImageSurface(surface) {
       });
     },
 
+    /**
+     * Both phones run the same React Native tree with the same testIDs, so producing an image is one
+     * journey - only the driver differs, and that is settled a layer below. The Android-only guard
+     * here was the last thing pinning this route to one device.
+     */
     async startGeneration(prompt) {
-      if (platform !== 'android') throw new Error('the first generated-image route starts on Android');
       await openHome();
       await ui.tapWhenReady('new-chat-button', { timeoutMs: 30_000 });
-      await ui.waitForLabel('chat-screen', { label: 'the new Android chat', timeoutMs: 30_000 });
-      await ui.tapWhenReady('quick-settings-button', { timeoutMs: 20_000 });
-      await ui.waitForLabel('quick-image-mode', { label: 'Android Image Gen mode', timeoutMs: 20_000 });
-      const modeLabels = await ui.labels();
-      if (!hasLabel(modeLabels, 'image-mode-force-badge')) {
+      await ui.waitForLabel('chat-screen', {
+        label: `the new ${platform} chat`,
+        timeoutMs: 30_000,
+      });
+      // The sheet is a TOGGLE: tapping it when it is already open closes it, and the run then waits
+      // for a control that just disappeared. Open it only when it is not already showing.
+      if (!hasLabel(await ui.labels(), 'quick-image-mode')) {
+        await ui.tapWhenReady('quick-settings-button', { timeoutMs: 20_000 });
+      }
+      await ui.waitForLabel('quick-image-mode', {
+        label: `${platform} Image Gen mode`,
+        timeoutMs: 20_000,
+      });
+      if (!hasLabel(await ui.labels(), 'image-mode-force-badge')) {
         await ui.tapLabel('quick-image-mode');
       }
       await ui.waitForLabel('image-mode-force-badge', {
-        label: 'Android forced image mode',
+        label: `${platform} forced image mode`,
         timeoutMs: 20_000,
       });
-      await ui.back();
+      // Close the sheet the way it was opened. iOS has no hardware back, and its edge-swipe leaves
+      // the sheet up - the composer underneath is then unreachable.
+      if (hasLabel(await ui.labels(), 'quick-image-mode')) {
+        await ui.tapLabel('quick-settings-button');
+      }
       await ui.tapWhenReady('chat-input', { timeoutMs: 20_000 });
       await ui.type(prompt);
       await ui.tapWhenReady('send-button', { timeoutMs: 20_000 });
+    },
+
+    /**
+     * Prompt enhancement on or off, through the controls a person uses.
+     *
+     * These live in the FULL generation-settings modal behind the top-right icon, not the quick
+     * panel beside the input, and the enhance choice sits behind the modal's Advanced section.
+     * prepare-image-settings.mjs already drives exactly these testIDs - it just reaches them with
+     * adb + Appium, which is what made it Android-only.
+     */
+    async setEnhancement(enhancement) {
+      if (!['on', 'off'].includes(enhancement)) {
+        throw new Error(`enhancement must be on or off, got ${enhancement}`);
+      }
+      await ui.tapWhenReady('chat-settings-icon', { timeoutMs: 20_000 });
+      await ui.waitForLabel('modal-image-accordion', {
+        label: `${platform} in-chat generation settings`,
+        timeoutMs: 20_000,
+      });
+      await ui.tapLabel('modal-image-accordion');
+      await ui.waitForLabel('modal-image-advanced-toggle', {
+        label: `${platform} image section open`,
+        timeoutMs: 20_000,
+      });
+      await ui.tapLabel('modal-image-advanced-toggle');
+      // A plain scroll inside a modal, then a plain tap: scrollAndTap swipes, and a swipe on a sheet
+      // can dismiss it rather than scroll it.
+      await ui.scrollToLabel(`image-enhance-${enhancement}`, { maxSwipes: 8 });
+      await ui.tapLabel(`image-enhance-${enhancement}`);
+
+      // Leave by a real control, never a blind gesture, and confirm the state reached.
+      for (const control of ['modal-close', 'Done', 'Close']) {
+        if (hasExactLabel(await ui.labels(), control)) {
+          await ui.tapLabel(control);
+          break;
+        }
+      }
+      if (!hasLabel(await ui.labels(), 'chat-screen')) await ui.back();
+      await ui.waitForLabel('chat-screen', {
+        label: `${platform} chat after setting enhancement ${enhancement}`,
+        timeoutMs: 20_000,
+      });
+      return enhancement;
     },
 
     async waitForLiveState(timeoutMs) {

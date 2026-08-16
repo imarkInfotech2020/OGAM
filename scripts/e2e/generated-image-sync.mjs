@@ -1,12 +1,22 @@
 /**
- * Physical Android -> mesh generated-image journey.
+ * Physical phone -> mesh generated-image journey.
  *
  * Preconditions: the four apps are already paired and connected. This runner does not change mesh
- * membership. It starts one image on Android and observes every named peer at the same time.
+ * membership. It starts one image on the PRODUCER and observes every named peer at the same time.
+ *
+ * `--primary` names the producer, exactly as attended-thinking-sync does. It used to be hardwired
+ * to Android: the producer was `kinds[0] = 'android'` and naming android in --mesh was rejected
+ * outright, so an iPhone could only ever watch. Both phones run the same React Native tree with the
+ * same testIDs, so the journey is the same on either.
  *
  * Run on the Mac that owns WDA and both desktop CDP endpoints:
  *   npm run e2e:image-sync
- *   npm run e2e:image-sync -- --mesh ios,macos,windows --timeout-minutes 30
+ *   npm run e2e:image-sync -- --primary ios --mesh android,macos,windows
+ *   npm run e2e:image-sync -- --primary ios --enhancement off
+ *
+ * `--enhancement on|off` sets prompt enhancement on the producer before it generates - enhancement
+ * adds a whole model pass before the image, so the two settings are genuinely different journeys.
+ * Omit it to use whatever the device is already set to.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -22,18 +32,29 @@ const minutes = (name, fallback) => {
   return value * 60_000;
 };
 
-const observerKinds = flag('mesh', 'ios,macos,windows')
+const primaryKind = flag('primary', 'android').toLowerCase();
+if (!['android', 'ios'].includes(primaryKind)) {
+  throw new Error('--primary must be android or ios; a desktop cannot start this journey');
+}
+const enhancement = flag('enhancement', '').toLowerCase();
+if (enhancement && !['on', 'off'].includes(enhancement)) {
+  throw new Error('--enhancement must be on or off');
+}
+const DEFAULT_OBSERVERS = { android: 'ios,macos,windows', ios: 'android,macos,windows' };
+const observerKinds = flag('mesh', DEFAULT_OBSERVERS[primaryKind])
   .split(',')
   .map((kind) => kind.trim().toLowerCase())
   .filter(Boolean);
 if (observerKinds.length === 0) throw new Error('--mesh names no observers');
-if (observerKinds.includes('android')) throw new Error('Android is the producer; do not repeat it in --mesh');
+if (observerKinds.includes(primaryKind)) {
+  throw new Error(`${primaryKind} is the producer; do not repeat it in --mesh`);
+}
 if (new Set(observerKinds).size !== observerKinds.length) throw new Error('--mesh repeats an observer');
 
 const liveTimeoutMs = minutes('live-timeout-minutes', 5);
 const finalTimeoutMs = minutes('timeout-minutes', 30);
 const discoveryTimeoutMs = minutes('discovery-timeout-minutes', 5);
-const runId = `android-to-mesh-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+const runId = `${primaryKind}-to-mesh-${new Date().toISOString().replace(/[:.]/g, '-')}`;
 const evidenceDir = join(EVIDENCE_DIR, 'generated-image-sync', runId);
 const token = `meshproof${Date.now()}`;
 const prompt = `draw a simple green square robot keep marker ${token} unchanged`;
@@ -90,11 +111,11 @@ const observe = async (surface, baseline, { alreadyOpen = false } = {}) => {
 };
 
 try {
-  console.log(`\nAndroid -> mesh generated-image journey`);
+  console.log(`\n${primaryKind} -> mesh generated-image journey${enhancement ? ` (enhancement ${enhancement.toUpperCase()})` : ''}`);
   console.log(`marker: ${token}`);
   console.log(`evidence: ${evidenceDir}\n`);
 
-  const kinds = ['android', ...observerKinds];
+  const kinds = [primaryKind, ...observerKinds];
   const connections = await Promise.allSettled(
     kinds.map((kind) => connectSurface(specFor(kind))),
   );
@@ -121,12 +142,16 @@ try {
   );
   await Promise.all(observers.map((surface) => surface.prepareForIncoming()));
 
-  // Start every observer before Android sends. This is what makes temporary Enhancing/Loading/
+  // Start every observer before the producer sends. This is what makes temporary Enhancing/Loading/
   // Generating frames observable instead of checking only the durable record after the fact.
   const observerRuns = observers.map((surface) =>
     observe(surface, baselines.get(surface.platform)),
   );
   await sleep(500);
+  if (enhancement) {
+    await producer.setEnhancement(enhancement);
+    console.log(`SET   ${producer.platform} prompt enhancement = ${enhancement.toUpperCase()}`);
+  }
   await producer.startGeneration(prompt);
   const producerRun = observe(producer, baselines.get(producer.platform), { alreadyOpen: true });
 
@@ -144,7 +169,7 @@ try {
 } finally {
   await writeFile(
     join(evidenceDir, 'result.json'),
-    `${JSON.stringify({ runId, token, prompt, observerKinds, results }, null, 2)}\n`,
+    `${JSON.stringify({ runId, token, prompt, primaryKind, enhancement: enhancement || 'device default', observerKinds, results }, null, 2)}\n`,
   );
   await Promise.all(connected.map((surface) => Promise.resolve(surface.close()).catch(() => undefined)));
 }
