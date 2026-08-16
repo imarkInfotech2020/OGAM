@@ -72,6 +72,7 @@ export const resetStores = (): void => {
       aggressiveModelLoading: false,
       cacheType: 'q8_0',
       showGenerationDetails: false,
+      autoStopOnSilence: true,
       enhanceImagePrompts: false,
       enabledTools: ['calculator', 'get_current_datetime'],
       thinkingEnabled: true,

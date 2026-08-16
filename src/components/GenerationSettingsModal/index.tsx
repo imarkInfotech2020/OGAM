@@ -6,6 +6,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { llmService } from '../../services';
 import { createStyles } from './styles';
+import { VoiceActivityDetectionToggle } from '../settings/textGenAdvancedSections';
 import { ConversationActionsSection } from './ConversationActionsSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
@@ -176,6 +177,8 @@ export const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = (
               </View>
               <Icon name="chevron-right" size={18} color={colors.textMuted} />
             </TouchableOpacity>
+            {/* Voice mode ends a turn on silence. Lives with STT because it is about listening. */}
+            <VoiceActivityDetectionToggle />
           </View>
         )}
 

@@ -927,6 +927,7 @@ describe('ModelSettingsScreen', () => {
           aggressiveModelLoading: undefined as any,
           cacheType: undefined as any,
           showGenerationDetails: undefined as any,
+          autoStopOnSilence: true,
           enhanceImagePrompts: undefined as any,
           enabledTools: undefined as any,
           thinkingEnabled: undefined as any,

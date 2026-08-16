@@ -6,6 +6,7 @@ import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
 import { SpeechEndpointTimer } from '../../services/speechEndpoint';
+import { useAppStore } from '../../stores';
 import { recordingController } from '../../services/recordingController';
 import { resolveTranscription } from './transcriptionOutcome';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
@@ -18,12 +19,6 @@ interface UseVoiceInputParams {
   /** Called in Audio Mode to auto-send. Includes audio info so caller can build attachment atomically. */
   onAutoSend?: (text: string, audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number }) => void;
 }
-
-/**
- * Proven on device before switching on: buffers arrive (frames=1600), speech reads ~0.14 rms against
- * a ~0.008 silent floor, and the endpoint decided to end ~1.5s after speech stopped.
- */
-const AUTO_STOP_ON_SILENCE = true;
 
 export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment, onAutoSend }: UseVoiceInputParams) {
   const recordingConversationIdRef = useRef<string | null>(null);
@@ -108,11 +103,13 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     // mid-sentence and expect the recording to wait for them. Ending that turn on silence would cut
     // people off while they are still composing.
     if (!isInAudioInterfaceMode()) return;
+    // Read at the START of each turn, so toggling the setting takes effect on the very next turn
+    // rather than needing a reload.
+    if (useAppStore.getState().settings.autoStopOnSilence === false) {
+      logger.log('[VAD] stop-on-silence is off in settings');
+      return;
+    }
     const endpoint = new SpeechEndpointTimer(() => {
-      if (!AUTO_STOP_ON_SILENCE) {
-        logger.log('[VAD] would stop the turn now (auto-stop disabled)');
-        return;
-      }
       logger.log('[VAD] silence detected - ending the turn');
       stopListeningForSilence();
       // Deferred off the audio callback: stopping the recorder from inside its own buffer

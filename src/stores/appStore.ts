@@ -77,6 +77,8 @@ export type AppSettings = {
   modelLoadingMode?: 'conservative' | 'balanced' | 'aggressive';
   cacheType: CacheType;
   showGenerationDetails: boolean;
+  /** Voice mode ends a turn when the speaker stops, instead of waiting for a stop tap. */
+  autoStopOnSilence: boolean;
   enabledTools: string[];
   thinkingEnabled: boolean;
   inferenceBackend: InferenceBackend;
@@ -230,6 +232,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   modelLoadingMode: 'balanced',
   cacheType: 'q8_0' as CacheType,
   showGenerationDetails: false,
+  // On by default: a voice turn that waits for a tap is the thing people ask us to fix. Off is for
+  // anyone who pauses mid-thought and wants the recorder to keep waiting.
+  autoStopOnSilence: true,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],
   thinkingEnabled: false,
   liteRTBackend: 'gpu',
