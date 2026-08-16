@@ -127,10 +127,21 @@ try {
   // not read the view hierarchy", which looks like a wedged phone rather than a driver collision.
   // So the session is opened only around the steps that need Appium, and closed before the surface
   // layer reads anything.
+  // Relaunch first, then walk back. Pressing back until a screen appears walks straight OUT of the
+  // app and onto the phone's launcher, where none of its screens exist and every further press is
+  // wasted - the failure then reads as "would not return to its home screen" while the app is not
+  // even running.
+  await adb.session(flag('package', 'ai.offgridmobile.dev'));
+  await sleep(3000);
   await appium.session();
   for (let attempt = 0; attempt < 8 && !(await present('home-screen')); attempt += 1) {
     await adb.back().catch(() => undefined);
     await sleep(900);
+    if (!(await present('home-screen')) && !(await present('chat-screen'))) {
+      // Back may have left the app altogether; bring it forward and keep going.
+      await adb.session(flag('package', 'ai.offgridmobile.dev')).catch(() => undefined);
+      await sleep(2000);
+    }
   }
   if (!(await present('home-screen'))) {
     throw new Error('Android would not return to its home screen');
