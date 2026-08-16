@@ -231,6 +231,15 @@ export class WdaClient {
     await this.#post(`/session/${sid}/wda/keyboard/dismiss`, {}).catch(
       () => {},
     );
+    if (!(await this.keyboardShown())) return true;
+    // WDA's dismiss does nothing for a multiline field, which has no return key. Our own sheets put
+    // a Done bar above the keyboard for exactly this - so press THAT. It is a real control found in
+    // the tree, not a coordinate guessed above the keyboard.
+    const done = await this.findByLabel('Dismiss keyboard');
+    if (done) {
+      await this.tap(done.center.x, done.center.y);
+      await new Promise(resolve => setTimeout(resolve, 600));
+    }
     return !(await this.keyboardShown());
   }
 

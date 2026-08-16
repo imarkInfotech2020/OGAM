@@ -107,7 +107,14 @@ export const PasteNoteSheet: React.FC<PasteNoteSheetProps> = ({
           testID="paste-note-title"
         />
         <TextInput
-          style={styles.textInput}
+          style={[
+            styles.textInput,
+            // The field grows with what is pasted. With the keyboard up, that growth is what pushes
+            // Save off the bottom of the screen - the sheet can only lift so far. So cap it while
+            // the keyboard is showing: the pasted text still scrolls inside its own box, and the
+            // action stays where a thumb can reach it.
+            keyboardHeight > 0 ? styles.textInputWithKeyboard : null,
+          ]}
           value={text}
           onChangeText={setText}
           placeholder="Paste or type the text to remember"
@@ -188,6 +195,10 @@ const createStyles = (colors: ThemeColors) => ({
     // Tall enough that a pasted page is visibly a page, and scrolls inside its own box.
     minHeight: 220,
     maxHeight: 320,
+  },
+  textInputWithKeyboard: {
+    minHeight: 120,
+    maxHeight: 160,
   },
   count: {
     ...TYPOGRAPHY.meta,
