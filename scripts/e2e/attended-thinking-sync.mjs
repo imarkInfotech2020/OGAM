@@ -1023,7 +1023,7 @@ const setPrimaryThinking = async (surface, enabled) => {
   const expected = enabled ? /Thinking, ON/i : /Thinking, OFF/i;
   if (!labels.some(label => expected.test(label))) {
     throw new Error(
-      `Android Thinking control did not reach ${enabled ? 'ON' : 'OFF'}`,
+      `${surface.platform} Thinking control did not reach ${enabled ? 'ON' : 'OFF'}`,
     );
   }
   await surface.ui.back();
@@ -1050,7 +1050,7 @@ const setAndroidToolToggle = async (surface, tool) => {
   const offLabel = `${tool.name}, OFF`;
   const isOn = labels.includes(onLabel);
   if (!isOn && !labels.includes(offLabel)) {
-    throw new Error(`Android does not expose a state for ${tool.name}`);
+    throw new Error(`${surface.platform} does not expose a state for ${tool.name}`);
   }
   if (isOn !== tool.enabled) {
     await surface.ui.tapLabel(control);
@@ -1081,12 +1081,12 @@ const prepareGuidedTools = async (surface, projectName) => {
 
   await surface.ui.tapLabel('quick-settings-button');
   await surface.ui.waitForLabel('quick-tools', {
-    label: 'Android quick Tools control',
+    label: `${surface.platform} quick Tools control`,
     timeoutMs: 20_000,
   });
   await surface.ui.tapLabel('quick-tools');
   await surface.ui.waitForLabel('tools-pro-tools', {
-    label: 'Android Tools screen',
+    label: `${surface.platform} Tools screen`,
     timeoutMs: 20_000,
   });
 
@@ -1097,7 +1097,7 @@ const prepareGuidedTools = async (surface, projectName) => {
 
   await surface.ui.scrollAndTap('tools-pro-tools', { maxSwipes: 8 });
   await surface.ui.waitForLabel('mcp-add-server', {
-    label: 'Android MCP add control',
+    label: `${surface.platform} MCP add control`,
     timeoutMs: 20_000,
   });
   await surface.ui.scrollAndTap('mcp-add-server', { maxSwipes: 8 });
@@ -1108,7 +1108,7 @@ const prepareGuidedTools = async (surface, projectName) => {
   } else if (labels.includes('DeepWiki, Add')) {
     await surface.ui.tapLabel('mcp-preset-add-deepwiki');
   } else {
-    throw new Error('Android does not expose the DeepWiki preset state');
+    throw new Error(`${surface.platform} does not expose the DeepWiki preset state`);
   }
 
   await surface.ui.scrollToLabel('mcp-server-card-deepwiki', { maxSwipes: 8 });
@@ -1129,34 +1129,45 @@ const prepareGuidedTools = async (surface, projectName) => {
   );
   const proToolsConfigured = await capture(surface, 'pro-tools-configured');
 
-  // Hardware Back follows the navigation contract and cannot land on a notification banner that
-  // overlaps a coordinate-based header tap.
-  await surface.ui.back();
-  await surface.ui.waitForLabel('tools-back', {
-    label: 'Android Tools screen after Pro tools',
-    timeoutMs: 20_000,
-  });
-  await surface.ui.back();
-  await surface.ui.waitForLabel('chat-screen', {
-    label: 'Android chat after Tools setup',
-    timeoutMs: 20_000,
-  });
+  await leaveVia(
+    surface,
+    'pro-tools-back',
+    'tools-back',
+    `${surface.platform} Tools screen after Pro tools`,
+  );
+  await leaveVia(
+    surface,
+    'tools-back',
+    'chat-screen',
+    `${surface.platform} chat after Tools setup`,
+  );
+
   await surface.ui.tapLabel('quick-settings-button');
+  const proBadge = expectedProToolBadge(surface.platform);
   labels = await surface.ui.waitFor(
     async () => {
       const current = await surface.ui.labels();
       const ready =
         current.some(label => /Thinking, ON/i.test(label)) &&
-        current.some(label => /Tools, 3$/i.test(label)) &&
-        current.some(label => /Pro Tools, 3$/i.test(label));
+        current.some(label => /Tools, 3(?!\d)/i.test(label)) &&
+        current.some(label =>
+          new RegExp(`Pro Tools, ${proBadge}(?!\\d)`, 'i').test(label),
+        );
       return ready ? current : false;
     },
-    { label: 'Android guided tool badges', timeoutMs: 20_000, intervalMs: 500 },
+    {
+      label: `${surface.platform} guided tool badges (Tools 3, Pro Tools ${proBadge})`,
+      timeoutMs: 20_000,
+      intervalMs: 500,
+    },
   );
   const ready = await capture(surface, 'guided-tools-ready');
-  await surface.ui.back();
+  // The sheet is a toggle: close it the way it was opened, not with a back gesture.
+  if ((await surface.ui.labels()).includes('quick-tools')) {
+    await surface.ui.tapLabel('quick-settings-button');
+  }
   await surface.ui.waitForLabel('chat-screen', {
-    label: 'prepared Android chat',
+    label: `${surface.platform} prepared chat`,
     timeoutMs: 20_000,
   });
 
@@ -1199,6 +1210,32 @@ const NO_STANDARD_TOOLS = GUIDED_STANDARD_TOOLS.map(tool => ({
   ...tool,
   enabled: false,
 }));
+
+/**
+ * Leave a screen by its OWN Back control, falling back to the platform gesture.
+ *
+ * iOS has no hardware Back, and its edge-swipe does not reliably pop the tool screens - runs were
+ * left stranded on Pro tools waiting for a chat that was still two screens away. Shared by both
+ * directions of the tools journey so they cannot drift.
+ */
+const leaveVia = async (surface, control, expected, what) => {
+  if ((await surface.ui.labels()).includes(control)) {
+    await surface.ui.tapLabel(control);
+  } else {
+    await surface.ui.back();
+  }
+  await surface.ui.waitForLabel(expected, { label: what, timeoutMs: 20_000 });
+};
+
+/**
+ * How many Pro tools the badge should read once DeepWiki is active.
+ *
+ * Android can switch its three built-in Pro tools (Send Email, Create/Read Calendar Event) off, so
+ * the badge is DeepWiki's 3. On iOS those three render as `pro-tool-row-*` with no switch and no
+ * state in the accessibility tree - tapping the row does nothing - so they stay on and the badge is
+ * 3 + 3. Asserting Android's number on an iPhone failed a correctly configured device.
+ */
+const expectedProToolBadge = platform => (platform === 'ios' ? 6 : 3);
 
 /** Stop every MCP server that is currently Active. Mirrors the guided flow's DeepWiki activation. */
 const deactivateMcpServers = async surface => {
@@ -1245,22 +1282,14 @@ const prepareNoTools = async surface => {
   const mcpStopped = await deactivateMcpServers(surface);
   const proCleared = await capture(surface, 'pro-tools-cleared');
 
-  // Leave through each screen's own Back control. iOS has no hardware Back, so ui.back() cannot be
-  // relied on to unwind these two levels - it leaves the run stranded on the Pro tools screen.
-  const leave = async (control, expected, what) => {
-    if ((await surface.ui.labels()).includes(control)) {
-      await surface.ui.tapLabel(control);
-    } else {
-      await surface.ui.back();
-    }
-    await surface.ui.waitForLabel(expected, { label: what, timeoutMs: 20_000 });
-  };
-  await leave(
+  await leaveVia(
+    surface,
     'pro-tools-back',
     'tools-back',
     `${surface.platform} Tools screen after Pro tools`,
   );
-  await leave(
+  await leaveVia(
+    surface,
     'tools-back',
     'chat-screen',
     `${surface.platform} chat after clearing tools`,
@@ -1906,13 +1935,43 @@ if (step === 'snapshot') {
       'Guided tools are not prepared for this run; run --step prepare-guided-tools first',
     );
   }
-  if (state.guidedToolSent || state.guidedToolSendReservedAt) {
-    throw new Error(
-      `Guided tool send is already ${
-        state.guidedToolSent ? 'complete' : 'reserved'
-      }; refusing a duplicate`,
-    );
+  // A reservation means "a send was ATTEMPTED", not "a send landed". If the attempt actually
+  // reached the chat and the step then died before its bookkeeping - which is what happened when
+  // closing a non-existent Appium session threw on the iOS path - refusing forever is wrong: the
+  // prompt is sitting in the conversation and only the record is missing. Recover by looking at the
+  // device, then let verify-guided-tools run. The duplicate guard still holds for a genuine rerun,
+  // because a landed prompt is never sent twice.
+  if (state.guidedToolSent) {
+    throw new Error('Guided tool send is already complete; refusing a duplicate');
   }
+  if (state.guidedToolSendReservedAt) {
+    const surface = await connect(primaryKind);
+    try {
+      const landed = mobileMessageHasMarker(
+        await surface.ui.source(),
+        'user-message',
+        state.guidedToolToken ?? run,
+      );
+      if (!landed) {
+        throw new Error(
+          'Guided tool send is already reserved but never reached the chat; clear the reservation before retrying',
+        );
+      }
+      const recovered = await readState();
+      recovered.guidedToolSent = true;
+      recovered.guidedToolSentAt = new Date().toISOString();
+      recovered.guidedToolRecoveredAt = new Date().toISOString();
+      await saveState(recovered);
+      console.log(
+        `SEND ${primaryKind}  guided tool prompt already in the chat (${recovered.guidedToolToken}); recorded, nothing resent`,
+      );
+    } finally {
+      await Promise.resolve(surface.close()).catch(() => undefined);
+    }
+  }
+  if ((await readState()).guidedToolSent) {
+    // Recovered above; verification is the next step.
+  } else {
   state.guidedToolToken ??= run;
   state.guidedToolPrompt ??=
     flag('guided-prompt', '') ||
@@ -1930,12 +1989,23 @@ if (step === 'snapshot') {
   let appium;
   try {
     const before = await capture(android, 'before');
-    const labels = await android.ui.labels();
+    // Get back to the prepared chat rather than demanding to find it.
+    //
+    // connectDriving asks WDA for a session on the bundle, and on iOS that ACTIVATES the app - the
+    // phone lands on Home, so this step destroyed the very chat it then required and failed with
+    // "not on the prepared chat screen". The chat is the project's, and reopening it is idempotent.
+    let labels = await android.ui.labels();
+    if (!labels.includes('chat-screen') && state.projectName) {
+      await openAndroidProjectChat(android, state.projectName);
+      labels = await android.ui.labels();
+    }
     if (
       !labels.includes('chat-screen') ||
       !labels.includes('quick-settings-button')
     ) {
-      throw new Error('Android is not on the prepared chat screen');
+      throw new Error(
+        `${primaryKind} is not on the prepared chat screen`,
+      );
     }
     const beforeSource = await android.ui.source();
     if (
@@ -1971,7 +2041,9 @@ if (step === 'snapshot') {
         beforeClick: reserve,
       });
     }
-    await appium.close();
+    // Only the Android path opens an Appium session; the iOS branch never creates one, and closing
+    // it unconditionally crashed AFTER the prompt had already been sent.
+    await appium?.close();
     appium = undefined;
     await waitUntil(
       async () => {
@@ -2002,6 +2074,7 @@ if (step === 'snapshot') {
   } finally {
     await appium?.close().catch(() => undefined);
     await Promise.resolve(android.close()).catch(() => undefined);
+  }
   }
 } else if (step === 'verify-guided-tools') {
   const state = await readState();

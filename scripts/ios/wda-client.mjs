@@ -354,14 +354,20 @@ export class WdaClient {
       element.center.y < height - TAB_BAR &&
       element.center.y > STATUS_BAR;
 
-    const existing = await this.findByLabel(needle);
-    if (reachable(existing)) return existing;
+    let seen = await this.findByLabel(needle);
+    if (reachable(seen)) return seen;
     for (let attempt = 0; attempt < maxSwipes; attempt += 1) {
       await this.swipe(x, Math.round(height * 0.75), x, Math.round(height * 0.3));
       await new Promise((resolve) => setTimeout(resolve, 500));
       const found = await this.findByLabel(needle).catch(() => null);
       if (reachable(found)) return found;
+      if (found) seen = found;
     }
+    // Present but never clear of the chrome: a list that ENDS with the target keeps it low no matter
+    // how much more you scroll, and on a sheet there is no tab bar over it anyway. Preferring a
+    // reachable position is right; refusing a present one outright turned a findable control into
+    // "did not appear after 8 swipes".
+    if (seen) return seen;
     throw new Error(`"${needle}" did not appear after ${maxSwipes} swipes.${options.hint ? ` ${options.hint}` : ''}`);
   }
 
