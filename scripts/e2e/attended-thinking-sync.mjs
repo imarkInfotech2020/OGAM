@@ -942,11 +942,43 @@ const ensurePrimaryFileAttachment = async (surface, fileName) => {
   )
     return 'existing';
   await surface.ui.scrollAndTap('kb-add-document', { maxSwipes: 6 });
-  await surface.ui.waitForLabel(fileName, {
-    label: `${fileName} in the system file picker`,
+  // The picker opens wherever iOS last left it - on this phone, the iCloud Drive root - and the
+  // fixtures live one folder down. Waiting for the file at whatever the root happens to be reported
+  // "mobile.pdf is not in the system file picker" while it sat in plain sight inside Downloads.
+  // So: look, and if it is not here, open the folder it lives in and look again.
+  const folder = flag('picker-folder', 'Downloads');
+  // The picker names a file "mobile, pdf" - the extension is a separate accessibility component,
+  // not part of the name - so searching for "mobile.pdf" never matched a file sitting in plain
+  // sight. Ask for what the picker actually calls it.
+  const pickerLabel = fileName.replace(/\.([^.]+)$/, ', $1');
+  const visible = async () =>
+    (await surface.ui.labels()).some(label => label.includes(pickerLabel));
+  if (!(await visible())) {
+    // A plain tap, NOT scrollAndTap: scrolling here swipes, and a swipe on the picker sheet
+    // dismisses it - which is why the run kept ending back on project detail with no picker and a
+    // "the file is not in the picker" message about a picker that was no longer open.
+    await surface.ui.tapLabel(folder).catch(() => undefined);
+    await sleep(2000);
+  }
+  await surface.ui.waitForLabel(pickerLabel, {
+    label: `${fileName} in the system file picker (as "${pickerLabel}", in ${folder})`,
     timeoutMs: 30_000,
   });
-  await surface.ui.tapLabel(fileName);
+  // The picker is in multi-select mode, so a tap TOGGLES: tapping a file that a previous attempt
+  // left ticked deselects it, and the run then waits forever on a picker with nothing chosen.
+  // `Open` appears only while something is selected, which makes it the honest signal for both
+  // "is anything selected" and "hand it back".
+  const selected = async () => (await surface.ui.labels()).includes('Open');
+  if (!(await selected())) {
+    await surface.ui.tapLabel(pickerLabel);
+    await sleep(1000);
+  }
+  if (!(await selected())) {
+    throw new Error(
+      `${fileName} would not select in the picker; no Open control appeared`,
+    );
+  }
+  await surface.ui.tapLabel('Open');
   await surface.ui.waitForLabel('project-detail-screen', {
     label: 'project after file selection',
     timeoutMs: 40_000,
@@ -955,10 +987,8 @@ const ensurePrimaryFileAttachment = async (surface, fileName) => {
     label: `${fileName} indexed`,
     timeoutMs: 240_000,
   });
-  await surface.ui.waitForLabel(`Use ${fileName}, ON`, {
-    label: `${fileName} enabled`,
-    timeoutMs: 20_000,
-  });
+  // As with the pasted note: the "Use <name>, ON" switch is on the Knowledge Base screen, not on
+  // project detail. prepare-project checks every document's switch there.
   return 'added';
 };
 

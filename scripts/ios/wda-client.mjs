@@ -98,7 +98,7 @@ export class WdaClient {
     const wanted = needle.toLowerCase();
     let found = null;
     const walk = (node) => {
-      if (!node || found) return;
+      if (!node) return;
       // EVERY identifying field, not the first non-empty one. `label || name || value` short-circuits, and that
       // hid every testID on Android: React Native puts testID in resource-id (node.name), but an accessible
       // container also gets a synthesised content-desc (node.label) built from its children - so label was always
@@ -106,6 +106,21 @@ export class WdaClient {
       const fields = [node.label, node.name, node.value].map((f) => `${f ?? ''}`);
       const hit = fields.find((f) => f.toLowerCase().includes(wanted));
       if (hit !== undefined && node.rect && node.rect.width > 0) {
+        // Prefer the SMALLEST, most exact match. Keeping the last match found meant a full-width
+        // wrapper won over the control inside it: searching the file picker for "Open" returned
+        // {x:0,y:119,w:440,h:63} - the row containing the search field - so every tap landed in the
+        // search box and raised the keyboard while the Open button, untouched, stayed top-right.
+        // The run then reported a successful tap and waited forever for a screen that never came.
+        const better = (() => {
+          if (!found) return true;
+          const exact = (value) => value.trim().toLowerCase() === wanted;
+          if (exact(hit) !== exact(found.label)) return exact(hit);
+          return node.rect.width * node.rect.height < found.rect.width * found.rect.height;
+        })();
+        if (!better) {
+          (node.children || []).forEach(walk);
+          return;
+        }
         found = {
           // The matched field, so a caller that searched by testID gets the testID back rather than the
           // description that happens to sit beside it.
