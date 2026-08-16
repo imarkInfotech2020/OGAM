@@ -37,7 +37,7 @@ class AudioRecorderService {
   private attachLevelCallback(rec: AudioRecorder): void {
     const withCallback = rec as unknown as {
       onAudioReady?: (
-        options: { sampleRate: number; bufferLengthInSamples: number; channelCount: number },
+        options: { sampleRate: number; bufferLength: number; channelCount: number },
         callback: (event: { buffer?: { getChannelData?: (i: number) => Float32Array }; numFrames?: number }) => void,
       ) => void;
     };
@@ -51,7 +51,7 @@ class AudioRecorderService {
     let seen = 0;
     try {
       withCallback.onAudioReady(
-        { sampleRate: 16000, bufferLengthInSamples: 1600, channelCount: 1 },
+        { sampleRate: 16000, bufferLength: 1600, channelCount: 1 },
         event => {
           const channel = event?.buffer?.getChannelData?.(0);
           const frames = event?.numFrames ?? channel?.length ?? 0;
