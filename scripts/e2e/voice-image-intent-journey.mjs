@@ -33,6 +33,8 @@ import {
 
 const primaryKind = flag('primary', 'ios').toLowerCase();
 const spoken = flag('say', 'draw a simple green square robot');
+// Let the silence endpoint end the turn instead of tapping stop. Needs a build that has it.
+const autoStop = process.argv.includes('--auto-stop');
 const runId = `${primaryKind}-voice-image-${Date.now()}`;
 const evidenceDir = join(EVIDENCE_DIR, 'voice-image-intent', runId);
 await mkdir(evidenceDir, { recursive: true });
@@ -54,8 +56,9 @@ try {
   // THE ACTION: say it out loud. Everything after this is the app's own doing - transcribe, route to
   // image intent, enhance the prompt, load the image model behind whatever already holds memory.
   await ensureChat(surface, 'voice');
-  await speakTurn(surface, spoken);
-  console.log(`\nSPOKE  "${spoken}"`);
+  console.log(autoStop ? '\nspeaking, then NOT tapping stop...' : '');
+  const turn = await speakTurn(surface, spoken, { autoStop });
+  console.log(`\nSPOKE  "${spoken}"  (turn ended by: ${turn.endedBy})`);
 
   const settled = await waitForOutcome(surface, OUTCOMES, { timeoutMs: 8 * 60_000 });
   outcome = settled.outcome;
@@ -73,7 +76,7 @@ try {
 } finally {
   await writeFile(
     join(evidenceDir, 'voice-image-intent.json'),
-    `${JSON.stringify({ runId, primaryKind, spoken, outcome, readings }, null, 2)}\n`,
+    `${JSON.stringify({ runId, primaryKind, spoken, autoStop, outcome, readings }, null, 2)}\n`,
   );
   console.log(`\nresult: ${join(evidenceDir, 'voice-image-intent.json')}`);
   await Promise.resolve(surface.close()).catch(() => undefined);

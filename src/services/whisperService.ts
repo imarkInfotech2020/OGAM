@@ -357,6 +357,10 @@ class WhisperService {
 
       logger.log('[WhisperService] transcribeRealtime started successfully');
       this.stopFn = stop;
+      // Start the clock HERE, not on the first partial. With useVad on, whisper emits no realtime
+      // events at all until its own detector trips, so hanging the endpoint off the first partial
+      // means a turn where nobody speaks never arms anything and records until it is stopped by hand.
+      this.endpoint.observe('');
 
       subscribe((evt: RealtimeTranscribeEvent) => {
         logger.log('[WhisperService] Event received:', {

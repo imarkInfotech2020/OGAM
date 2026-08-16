@@ -154,15 +154,35 @@ export const setChatMode = async (surface, mode) => {
  * A short pause on each side of the sentence so the opening syllable is not clipped by the recorder
  * still starting, and so the tail is not cut before whisper has seen it.
  */
-export const speakTurn = async (surface, text, { settleMs = 1_500 } = {}) => {
+export const speakTurn = async (surface, text, { settleMs = 1_500, autoStop = false } = {}) => {
   await surface.ui.tapWhenReady('voice-record-button-audio', { timeoutMs: 20_000 });
   await sleep(settleMs);
   await speakFromMac(text);
-  await sleep(settleMs);
-  // Explicit stop: the silence endpoint in speechEndpoint.ts ends the turn on its own, but only on a
-  // build that has it. Tapping stop works on every build and is what a user can always do.
+
+  if (!autoStop) {
+    await sleep(settleMs);
+    // Tapping stop works on every build and is what a user can always do.
+    await surface.ui.tapWhenReady('voice-record-button-audio', { timeoutMs: 20_000 });
+    return { text, endedBy: 'tap' };
+  }
+
+  // Nothing is pressed. The turn has to end by itself, which is the whole claim: the silence endpoint
+  // sees the transcript settle and stops the session. Waited out rather than assumed - if the button
+  // still reads "tap to stop" after the window, auto-stop did not happen and the run should say so.
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    await sleep(1_000);
+    const labels = (await surface.ui.labels()).map((label) => label.trim());
+    const stillRecording = labels.some((label) => /recording|tap to stop/i.test(label));
+    if (!stillRecording) {
+      const waited = Math.round((Date.now() - (deadline - 20_000)) / 100) / 10;
+      console.log(`  auto-stopped on silence after ~${waited}s of quiet`);
+      return { text, endedBy: 'silence', quietSeconds: waited };
+    }
+  }
+  console.log('  STILL RECORDING after 20s - auto-stop did not fire; tapping stop');
   await surface.ui.tapWhenReady('voice-record-button-audio', { timeoutMs: 20_000 });
-  return text;
+  return { text, endedBy: 'tap (auto-stop failed)' };
 };
 
 /**
