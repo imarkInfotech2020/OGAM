@@ -151,7 +151,7 @@ function reactNativeGeneratedImageSurface(surface) {
      * journey - only the driver differs, and that is settled a layer below. The Android-only guard
      * here was the last thing pinning this route to one device.
      */
-    async startGeneration(prompt) {
+    async startGeneration(prompt, { enhancement } = {}) {
       await openHome();
       await ui.tapWhenReady('new-chat-button', { timeoutMs: 30_000 });
       await ui.waitForLabel('chat-screen', {
@@ -179,6 +179,10 @@ function reactNativeGeneratedImageSurface(surface) {
       if (hasLabel(await ui.labels(), 'quick-image-mode')) {
         await ui.tapLabel('quick-settings-button');
       }
+      // Enhancement is set HERE, not before: its controls live in the in-chat settings modal behind
+      // chat-settings-icon, which does not exist until this chat does. Setting it first failed with
+      // "waiting for an element labelled chat-settings-icon" on a phone still sitting on Home.
+      if (enhancement) await this.setEnhancement(enhancement);
       await ui.tapWhenReady('chat-input', { timeoutMs: 20_000 });
       await ui.type(prompt);
       await ui.tapWhenReady('send-button', { timeoutMs: 20_000 });

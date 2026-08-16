@@ -149,10 +149,9 @@ try {
   );
   await sleep(500);
   if (enhancement) {
-    await producer.setEnhancement(enhancement);
     console.log(`SET   ${producer.platform} prompt enhancement = ${enhancement.toUpperCase()}`);
   }
-  await producer.startGeneration(prompt);
+  await producer.startGeneration(prompt, { enhancement: enhancement || undefined });
   const producerRun = observe(producer, baselines.get(producer.platform), { alreadyOpen: true });
 
   await Promise.all([producerRun, ...observerRuns]);
