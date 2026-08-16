@@ -93,6 +93,13 @@ export const ProjectsScreen: React.FC = () => {
           style={styles.projectItem}
           onPress={() => handleProjectPress(item)}
           testID={`project-row-${item.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={item.name}
+          accessibilityHint={
+            item.description
+              ? `${chatCount} chats. ${item.description}`
+              : `${chatCount} chats`
+          }
         >
           <View style={styles.projectIcon}>
             <Text style={styles.projectIconText}>
