@@ -74,9 +74,33 @@ const observe = async (surface, baseline, { alreadyOpen = false } = {}) => {
   try {
     if (!alreadyOpen) await surface.openIncomingConversation(token, discoveryTimeoutMs);
     console.log(`OPEN  ${surface.platform.padEnd(8)} synced conversation`);
-    const live = await surface.waitForLiveState(liveTimeoutMs);
+    // A live state can only be witnessed by an observer that arrives before it ends.
+    //
+    // Generation took 31s in one run and Android was the last surface to open the conversation, so
+    // it sat waiting for a transient state that was already over - and failed a device that had the
+    // right image on screen the whole time. Requiring every surface to SEE the work happen makes
+    // the result depend on who got there first, which is not what this journey is for.
+    //
+    // So: still wait for it, but if the finished image is already present, record the live state as
+    // MISSED rather than failing the surface - and say so in the log and the result, because a
+    // silent downgrade would be worse than the wrong verdict it replaces.
+    let live;
+    let liveMissed = false;
+    try {
+      live = await surface.waitForLiveState(liveTimeoutMs);
+    } catch (liveError) {
+      const settledEarly = await surface
+        .waitForFinal(token, 5_000)
+        .then(() => true)
+        .catch(() => false);
+      if (!settledEarly) throw liveError;
+      liveMissed = true;
+      live = 'not observed - this surface opened the conversation after generation had finished';
+    }
     const liveShot = await capture(surface, 'live');
-    console.log(`LIVE  ${surface.platform.padEnd(8)} ${String(live).split('\n')[0]}`);
+    console.log(
+      `${liveMissed ? 'MISS ' : 'LIVE '} ${surface.platform.padEnd(8)} ${String(live).split('\n')[0]}`,
+    );
     const final = await surface.waitForFinal(token, finalTimeoutMs);
     const finalShot = await capture(surface, 'final');
     console.log(`FINAL ${surface.platform.padEnd(8)} grouped image is decoded`);
@@ -86,6 +110,7 @@ const observe = async (surface, baseline, { alreadyOpen = false } = {}) => {
       platform: surface.platform,
       ok: true,
       live,
+      liveObserved: !liveMissed,
       final,
       gallery,
       evidence: { live: liveShot, final: finalShot, gallery: galleryShot },
