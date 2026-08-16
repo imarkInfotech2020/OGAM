@@ -654,3 +654,68 @@ edit.
 
 Bounded until then: the exposure is one already-streaming file, not every reconnection from then on. Raised by
 Greptile on mobile-pro#47, where the thread is deliberately left open so the seam stays tracked.
+
+---
+
+## A tool-heavy turn's FINAL ANSWER does not sync off the device that produced it
+
+**Verdict:** fix-the-guard — the turn's events sync; its conclusion does not.
+
+Observed 16 Aug 2026, run `iostools20260816161658`, guided six-tool journey driven from iOS.
+
+iOS finished the turn completely: thinking block, six tool calls, and a full answer
+("Off Grid AI & OGAM — Complete Overview", OGAM as a Product, Business Metrics…). macOS and
+Windows both hold the same conversation and **every tool call**, read straight off each desktop:
+
+```
+messageCount: 16, hasMarker: true
+tail: … read_wiki_structure Completed in 1611 ms / read_wiki_contents Completed in 3872 ms /
+      ask_question Completed in 17045 ms / search_knowledge_base Completed in 550 ms /
+      search_knowledge_base Completed in 758 ms / ask_question Completed in 14718 ms
+hasOgamOverview: false
+```
+
+The transcript on both desktops ENDS at the last tool call. The assistant message that follows -
+the actual answer, and the only part a person wanted - never arrives. Android shows the same shape.
+
+**Why it matters:** the mesh looks healthy. The conversation is there, the tool activity is there,
+timings are there. A user on their Mac sees a turn that apparently did a lot of work and concluded
+nothing. It reads as the model failing, not as sync dropping the last message.
+
+**Where to start:** whatever writes tool-result/artifact events syncs; the terminal assistant
+message for a long tool-using turn does not. Compare against the plain `run-normal` journey, whose
+final answer DOES reach all four devices - so this is specific to the tool-heavy path or to message
+size, not to sync in general.
+
+---
+
+## "Preparing reply" state never reaches peer devices
+
+**Verdict:** instrument-and-revisit.
+
+While the primary device is working, peers show nothing. There is no "preparing reply" or thinking
+indicator on the other devices, so a person watching their desktop cannot tell the difference
+between "my phone is mid-answer" and "nothing is happening". Reported by Mac, 16 Aug 2026, during
+the guided journey.
+
+Related to the entry above: the peers do eventually receive tool events, so SOMETHING streams -
+what is missing is any signal that a turn is in flight.
+
+---
+
+## DeepWiki `ask_question` returns a validation error
+
+**Verdict:** fix-the-guard.
+
+In the guided six-tool run the model reported, in its own thinking:
+
+```
+ask_question - FAILED due to validation error, but the tool was attempted/triggered
+```
+
+The desktops show `ask_question Completed in 17045 ms` and again `Completed in 14718 ms`, so the
+call is dispatched and returns - it is the arguments or the response shape that fail validation,
+not the transport. Five of the six named tools (search_knowledge_base, web_search, read_url,
+read_wiki_structure, read_wiki_contents) succeeded in the same turn.
+
+Worth checking what the DeepWiki MCP server expects for `ask_question` against what is being sent.
