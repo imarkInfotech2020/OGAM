@@ -378,8 +378,14 @@ export const ModelDownloadScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.deviceValue}>{deviceInfo?.deviceModel}</Text>
             </View>
             <View style={styles.deviceInfo}>
-              <Text style={styles.deviceLabel}>Available Memory</Text>
-              <Text style={styles.deviceValue}>{hardwareService.formatBytes(deviceInfo?.availableMemory || 0)}</Text>
+              {/* TOTAL memory, not available.
+                *
+                * Available memory is whatever the rest of the phone happens to be doing, so the same
+                * device reported a different number on every launch and the figure could not be
+                * compared with a model's size - which is the only reason it is on this screen. Total
+                * is a property of the device, so "12 GB" means the same thing tomorrow. */}
+              <Text style={styles.deviceLabel}>Total Memory</Text>
+              <Text style={styles.deviceValue}>{hardwareService.formatBytes(deviceInfo?.totalMemory || 0)}</Text>
             </View>
           </Card>
 
