@@ -450,6 +450,43 @@ const openDesktopChat = async surface => {
 const openChat = surface =>
   surface.family === 'rn' ? openMobileChat(surface) : openDesktopChat(surface);
 
+/**
+ * Put ONE surface on its Chat screen, without needing a chat to exist yet.
+ *
+ * openChat/openDesktopChat both hunt for the run marker, so neither can be used before the journey
+ * has sent anything - they are verification, not setup. This is the setup half: get every device to
+ * the place the conversation will appear, so a run starts from four comparable screens and a person
+ * watching can see the message land rather than discovering afterwards that Android was sitting on
+ * the launcher and Windows on the Models tab.
+ */
+const showChatSurface = async surface => {
+  if (surface.family === 'rn') {
+    const labels = await surface.ui.labels();
+    if (labels.includes('chat-screen')) return 'already on chat';
+    if (labels.includes('chats-tab')) {
+      await surface.ui.tapLabel('chats-tab');
+      await surface.ui.waitForLabel('chat-screen', {
+        label: `${surface.platform} chat screen`,
+        timeoutMs: 20_000,
+      });
+      return 'opened the Chats tab';
+    }
+    throw new Error(`${surface.platform} exposes neither chat-screen nor chats-tab`);
+  }
+  const clicked = await surface.ui.evaluate(`
+    const label = [...document.querySelectorAll('button > span')]
+      .find((node) => (node.textContent || '').trim() === 'Chat');
+    const button = label?.closest('button');
+    if (!button) return false;
+    button.click();
+    return true;
+  `);
+  if (!clicked)
+    throw new Error(`${surface.platform} does not expose the Chat nav button`);
+  await sleep(1200);
+  return 'clicked the Chat nav button';
+};
+
 const assertChatOpen = async surface => {
   const text = await surface.text();
   if (!text.toLowerCase().includes(run.toLowerCase())) {
@@ -925,6 +962,136 @@ const prepareGuidedTools = async (surface, projectName) => {
   };
 };
 
+/**
+ * The inverse of prepareGuidedTools: strip the chat back to no thinking and no tools.
+ *
+ * A "no thinking, no tool calls, and it syncs" journey is not testing sync when nine tools are
+ * attached - it is testing whether the model resists them. On 2026-08-16 an iPhone carrying 9
+ * enabled tools (3 standard + 6 Pro) answered
+ *
+ *   "Reply with exactly: <marker>. Do not add any other text."
+ *
+ * with a refusal that listed all nine tools and never emitted the marker. Every surface then failed
+ * its check and a HEALTHY mesh read as a sync failure - the conversation and that refusal had in
+ * fact propagated to all four devices. The picker says as much itself: "Too many tools can confuse
+ * the model and increase latency on the first response."
+ *
+ * So tool state is SETUP, not something a journey inherits from whatever the device was last left
+ * on. This reuses the guided journey's declarative list and its toggle helper with every tool asked
+ * for OFF, so the two directions cannot drift apart.
+ *
+ * iOS caveat: the three built-in Pro tools (Send Email, Create/Read Calendar Event) render as
+ * `pro-tool-row-*` with NO switch and no ON/OFF in the accessibility tree, and tapping a row does
+ * nothing. Only MCP servers can be stopped there, so iOS bottoms out at Pro Tools 3 where Android
+ * reaches 0. That is a picker parity gap, not a fault in this step.
+ */
+const NO_STANDARD_TOOLS = GUIDED_STANDARD_TOOLS.map(tool => ({
+  ...tool,
+  enabled: false,
+}));
+
+/** Stop every MCP server that is currently Active. Mirrors the guided flow's DeepWiki activation. */
+const deactivateMcpServers = async surface => {
+  const stopped = [];
+  await surface.ui.scrollAndTap('tools-pro-tools', { maxSwipes: 8 });
+  await surface.ui.waitForLabel('mcp-add-server', {
+    label: `${surface.platform} MCP server list`,
+    timeoutMs: 20_000,
+  });
+  await surface.ui
+    .scrollToLabel('mcp-server-card-deepwiki', { maxSwipes: 8 })
+    .catch(() => {});
+  if ((await surface.ui.labels()).includes('DeepWiki, Active')) {
+    await surface.ui.tapLabel('mcp-server-toggle-deepwiki');
+    await waitUntil(
+      async () => (await surface.ui.labels()).includes('DeepWiki, Inactive'),
+      'DeepWiki Inactive',
+      30_000,
+    );
+    stopped.push('deepwiki');
+  }
+  return stopped;
+};
+
+const prepareNoTools = async surface => {
+  await setPrimaryThinking(surface, false);
+
+  await surface.ui.tapLabel('quick-settings-button');
+  await surface.ui.waitForLabel('quick-tools', {
+    label: `${surface.platform} quick Tools control`,
+    timeoutMs: 20_000,
+  });
+  await surface.ui.tapLabel('quick-tools');
+  await surface.ui.waitForLabel('tools-pro-tools', {
+    label: `${surface.platform} Tools screen`,
+    timeoutMs: 20_000,
+  });
+
+  for (const tool of NO_STANDARD_TOOLS) {
+    await setAndroidToolToggle(surface, tool);
+  }
+  const toolsCleared = await capture(surface, 'tools-cleared');
+
+  const mcpStopped = await deactivateMcpServers(surface);
+  const proCleared = await capture(surface, 'pro-tools-cleared');
+
+  // Leave through each screen's own Back control. iOS has no hardware Back, so ui.back() cannot be
+  // relied on to unwind these two levels - it leaves the run stranded on the Pro tools screen.
+  const leave = async (control, expected, what) => {
+    if ((await surface.ui.labels()).includes(control)) {
+      await surface.ui.tapLabel(control);
+    } else {
+      await surface.ui.back();
+    }
+    await surface.ui.waitForLabel(expected, { label: what, timeoutMs: 20_000 });
+  };
+  await leave(
+    'pro-tools-back',
+    'tools-back',
+    `${surface.platform} Tools screen after Pro tools`,
+  );
+  await leave(
+    'tools-back',
+    'chat-screen',
+    `${surface.platform} chat after clearing tools`,
+  );
+
+  // Read the badges a person would read, rather than trusting the taps.
+  await surface.ui.tapLabel('quick-settings-button');
+  const labels = await surface.ui.waitFor(
+    async () => {
+      const current = await surface.ui.labels();
+      const thinkingOff = current.some(label => /Thinking, OFF/i.test(label));
+      const standardLeft = current.some(label => /(^|,)\s*Tools, [1-9]/i.test(label));
+      return thinkingOff && !standardLeft ? current : false;
+    },
+    {
+      label: `${surface.platform} cleared tool badges`,
+      timeoutMs: 20_000,
+      intervalMs: 500,
+    },
+  );
+  const ready = await capture(surface, 'no-tools-ready');
+  // The sheet is a toggle, so close it the same way it was opened.
+  if ((await surface.ui.labels()).includes('quick-tools')) {
+    await surface.ui.tapLabel('quick-settings-button');
+  }
+  await surface.ui.waitForLabel('chat-screen', {
+    label: `${surface.platform} chat with no tools`,
+    timeoutMs: 20_000,
+  });
+
+  return {
+    thinking: 'off',
+    standardTools: [],
+    mcpStopped,
+    badges: labels.find(label => /Tools/.test(label)) ?? null,
+    toolsCleared: toolsCleared.screenshot,
+    proToolsCleared: proCleared.screenshot,
+    ready: ready.screenshot,
+  };
+};
+
 const readAndroidGuidedToolEvidence = async token => {
   const adb = new AdbClient(flag('android', '505b53a0'));
   const wire = await adb.readAppFile(
@@ -1322,6 +1489,43 @@ if (step === 'snapshot') {
     );
   } finally {
     await Promise.resolve(surface.close()).catch(() => undefined);
+  }
+} else if (step === 'prepare-no-tools') {
+  const surface = await connect(primaryKind);
+  try {
+    const before = await capture(surface, 'before');
+    // Setup runs BEFORE the journey's chat exists, so start a fresh one rather than hunting for a
+    // marker chat that has not been created yet. Same choice prepareGuidedTools makes.
+    await openNewPrimaryChat(surface);
+    const result = await prepareNoTools(surface);
+    await record({
+      platform: primaryKind,
+      ok: true,
+      ...result,
+      before: before.screenshot,
+    });
+    console.log(
+      `PASS ${primaryKind}  prepare-no-tools (Thinking OFF, standard tools OFF, MCP stopped: ${
+        result.mcpStopped.join(', ') || 'none'
+      })`,
+    );
+    if (result.badges) console.log(`  sheet reads: ${result.badges}`);
+  } finally {
+    await Promise.resolve(surface.close()).catch(() => undefined);
+  }
+} else if (step === 'prepare-screens') {
+  const surfaces = [];
+  try {
+    for (const kind of meshKinds) surfaces.push(await connect(kind));
+    for (const surface of surfaces) {
+      const how = await showChatSurface(surface);
+      console.log(`READY ${surface.platform.padEnd(8)} ${how}`);
+    }
+    console.log(`PASS mesh     ${surfaces.length} surfaces on the chat screen`);
+  } finally {
+    for (const surface of surfaces) {
+      await Promise.resolve(surface.close()).catch(() => undefined);
+    }
   }
 } else if (step === 'prepare-new-chat') {
   const surface = await connect('android');
