@@ -771,24 +771,48 @@ is invisible when you only test that sharing works:
 
 "Arrives" and "works on the receiver" are different claims, and only the second one is the feature.
 
-### Also worth covering — found while working today
+### The ones Mac's list did not name, ranked by what they would cost us
 
-- **Settings a peer can push, with no device-fit check.** contextLength, maxTokens, gpuLayers,
-  nThreads and nBatch are writable by a paired desktop and validated for type and range only. Desktop
-  offers maxTokens to 32768 and ctxSize to 131072; a phone at 4096 accepts them. Test a desktop→phone
-  push of values the phone cannot honour, on iOS especially.
-- **maxToolCalls is synced too.** A peer set to 1 turns a single-tool request into a notice instead
-  of an answer.
-- **Non-image attachments other than PDF.** describeAttachment now classifies audio and video, but
-  only the PDF path has been seen working end to end. A voice note is the case this was originally
-  predicted for and it is still unproven on desktop.
-- **The vision journeys still only run from Android.** vision-image-sync and vision-answer-sync are
-  Android-hardcoded; the iOS photo picker exposes no addressable cells, so the iOS path needs the
-  geometric-tap approach used in multi-attachment-sync.
-- **A receiver that does NOT already have the model** - the download-on-demand path, not just
-  transfer between two devices that both have it.
-- **Interrupted transfers** - background the app, drop wifi, lock the phone mid-send, then resume.
-- **Offline behaviour.** Entitlement reconciliation reports "License service unavailable" with no
-  network; prove offline access genuinely stays usable rather than degrading into a lock-out.
-- **The five-device replacement flow** at the licence limit, including the failure mode where the
-  oldest membership cannot be removed.
+Highest risk first, because these are the ones where the failure is silent or unrecoverable rather
+than merely wrong.
+
+1. **Peer-pushed model settings, with no device-fit check.** `contextLength`, `maxTokens`,
+   `gpuLayers`, `nThreads` and `nBatch` are writable by a paired desktop and validated for TYPE and
+   RANGE only - never against what the receiving device can actually honour. Desktop offers maxTokens
+   up to 32768 and ctxSize up to 131072; a phone sitting at 4096 accepts them. The mutations are
+   per-key, so a maxTokens change alone lands on a phone whose context never moved, giving
+   `n_predict > n_ctx` - llama.cpp rejects the turn before inference while the settings screen still
+   reads 4096. On iOS the memory case is worse than wrong: a breach is an uncatchable jetsam
+   SIGKILL, so the engine's GPU→CPU→CPU@2048 fallback ladder cannot catch it. There is in-repo
+   precedent - appStoreMigrations.ts documents a removed MCP auto-boost that pinned context to 32768
+   and caused OOM crashes needing a repair migration. Sync can now reproduce that state from a peer,
+   with no migration to undo it. **Test: push each of those keys from desktop to a phone that cannot
+   honour them, and to an iPhone specifically.**
+
+2. **`maxToolCalls` is synced as well.** A peer set to 1 turns a single-tool request into a "tool
+   limit reached" notice instead of an answer. The default also moved from 3/5 to 25.
+
+3. **"Arrives" and "works on the receiver" are different claims.** Worth stating explicitly against
+   every transfer item above: only the second one is the feature. A model that lands and will not
+   load is a failure that a transfer test scores as a pass.
+
+4. **Every non-image attachment kind except PDF.** describeAttachment now classifies audio and video,
+   but only PDF has been SEEN working end to end. The voice note is the exact case this defect was
+   predicted for in the v0.0.103 review and it remains unproven on desktop.
+
+5. **A receiver that does not already have the model** - the download-on-demand path, as distinct
+   from transfer between two devices that both happen to have it.
+
+6. **Interrupted transfers** - background the app, drop wifi, lock the phone mid-send, then resume.
+
+7. **Offline behaviour.** Entitlement reconciliation reports "License service unavailable" with no
+   network. Prove offline access genuinely stays usable rather than degrading into a lock-out - the
+   home screen already had one of those, where a card that was still loading had no way into Sync.
+
+8. **The five-device replacement flow** at the licence limit, including the failure mode where the
+   oldest membership cannot be removed (`replacement_incomplete`).
+
+9. **The vision journeys still only run from Android.** vision-image-sync and vision-answer-sync are
+   Android-hardcoded. The iOS system photo picker exposes no addressable cells - only PXG* layout
+   groups and one concatenated label - so the iOS path needs the geometric-tap approach now used in
+   multi-attachment-sync.
