@@ -8,13 +8,7 @@ import { backgroundDownloadService } from './backgroundDownloadService';
 import { useDownloadStore } from '../stores/downloadStore';
 import { makeModelKey } from '../utils/modelKey';
 import { WHISPER_MODELS, cleanTranscription } from './whisperModels';
-import {
-  hasSpeechEnded,
-  initialSpeechEndpointState,
-  msUntilSpeechEnds,
-  observePartial,
-  type SpeechEndpointState,
-} from './speechEndpoint';
+import { SpeechEndpointTimer } from './speechEndpoint';
 import * as whisperModelFiles from './whisperModelFiles';
 
 // Re-export the model catalog + transcription normalizer (moved to whisperModels.ts
@@ -35,9 +29,11 @@ class WhisperService {
   private currentModelPath: string | null = null;
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
-  /** End-of-speech tracking for the turn in progress. Null whenever nothing is being transcribed. */
-  private endpoint: SpeechEndpointState | null = null;
-  private silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Ends the turn once the speaker stops, so a voice turn needs no stop button. */
+  private readonly endpoint = new SpeechEndpointTimer(() => {
+    logger.log('[WhisperService] silence detected - ending the turn');
+    void this.stopTranscription();
+  });
   private isReleasingContext: boolean = false;
   private contextReleasePromise: Promise<void> = Promise.resolve();
   private transcriptionFullyStopped: Promise<void> = Promise.resolve();
@@ -382,11 +378,11 @@ class WhisperService {
             processTime: processTime || 0,
             recordingTime: recordingTime || 0,
           });
-          this.noteSpeech(data?.result || '');
+          this.endpoint.observe(data?.result || '');
           return;
         }
 
-        this.clearSilenceTimer();
+        this.endpoint.cancel();
 
         // FINAL: the utterance ended. Deliver the authoritative transcript — the realtime result if
         // it captured anything, else the file transcript (B26 fix). Emit it as the single final event.
@@ -407,8 +403,7 @@ class WhisperService {
     } catch (error) {
       if (recordedFile) audioRecorderService.cancelRecording();
       logger.error('[WhisperService] transcribeRealtime error:', error);
-      this.clearSilenceTimer();
-      this.endpoint = null;
+      this.endpoint.cancel();
       this.isTranscribing = false;
       this.stopFn = null;
       resolveTranscriptionStopped();
@@ -416,42 +411,9 @@ class WhisperService {
     }
   }
 
-  /**
-   * Fold one realtime partial into the endpoint state and re-arm the stop.
-   *
-   * Re-armed on every event rather than scheduled once, because the window restarts each time the
-   * speaker adds a word. The decision itself is in speechEndpoint; this only owns the timer.
-   */
-  private noteSpeech(partial: string): void {
-    const now = Date.now();
-    const next = observePartial(
-      this.endpoint ?? initialSpeechEndpointState(now),
-      partial,
-      now,
-    );
-    const unchanged = this.endpoint === next;
-    this.endpoint = next;
-    // Nothing new was said, so the existing timer is already counting the right window down.
-    if (unchanged && this.silenceTimer) return;
-    this.clearSilenceTimer();
-    this.silenceTimer = setTimeout(() => {
-      this.silenceTimer = null;
-      if (!this.endpoint || !hasSpeechEnded(this.endpoint, Date.now())) return;
-      logger.log('[WhisperService] silence detected - ending the turn');
-      void this.stopTranscription();
-    }, msUntilSpeechEnds(next, now));
-  }
-
-  private clearSilenceTimer(): void {
-    if (!this.silenceTimer) return;
-    clearTimeout(this.silenceTimer);
-    this.silenceTimer = null;
-  }
-
   async stopTranscription(): Promise<void> {
     logger.log('[WhisperService] stopTranscription called');
-    this.clearSilenceTimer();
-    this.endpoint = null;
+    this.endpoint.cancel();
     try {
       // Grab and clear stopFn atomically to prevent double-stop race conditions.
       // Two concurrent callers (e.g. trailing audio timeout + clearResult) could
