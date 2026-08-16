@@ -751,7 +751,15 @@ const setPrimaryThinking = async (surface, enabled) => {
     if (!labels.includes('chat-screen'))
       throw new Error(`${surface.platform} chat is not open`);
     await surface.ui.tapLabel('quick-settings-button');
-    await sleep(500);
+    // Wait for the sheet rather than sleeping a fixed 500ms: on iOS it animates in slower than
+    // that, and the fixed wait turned "the sheet is still opening" into "this model has no
+    // Thinking control".
+    await surface.ui
+      .waitForLabel('quick-thinking-toggle', {
+        label: `${surface.platform} quick settings sheet`,
+        timeoutMs: 20_000,
+      })
+      .catch(() => {});
     labels = await surface.ui.labels();
   }
   if (!labels.includes('quick-thinking-toggle')) {
