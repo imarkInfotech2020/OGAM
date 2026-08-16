@@ -92,7 +92,7 @@ Counts as of 16 Aug 2026: **28 integration tests** in `__tests__/integration/mem
 |---|---|
 | Platform | android 25 files / ios 6 — **iOS is the jetsam platform and is the thinner half** |
 | Engine | litert appears in 12 of 28; llama/gguf is the default elsewhere |
-| Relaunch / restart | **0 files** — no test covers residency after an app restart |
+| Relaunch / restart | n/a **by design** — nothing is resident after a relaunch, so there is no state to cover |
 | Backend (CPU vs GPU/NPU) | ❌ nothing pins that the backend changes the estimate |
 | Device tier (4 / 8 / 12 / 24 GB) | partially, via seeded RAM in individual tests; not a named axis |
 | Cross-device (a peer pushing settings this device cannot honour) | ❌ |
@@ -108,7 +108,6 @@ Counts as of 16 Aug 2026: **28 integration tests** in `__tests__/integration/mem
 3. **The embedding model as a resident** — it registers and takes `runExclusive`, and nothing covers it.
 4. **The classifier swap** — the tool-routing model swapping the text model out and back mid-turn.
 5. **The active model is never evicted mid-generation**, and TTS is not evicted mid-playback.
-6. **Residency after relaunch** — no coverage at all.
 
 ## Blocked on a feature that does not exist yet
 
