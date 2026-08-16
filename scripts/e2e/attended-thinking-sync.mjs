@@ -473,18 +473,32 @@ const showChatSurface = async surface => {
     }
     throw new Error(`${surface.platform} exposes neither chat-screen nor chats-tab`);
   }
+  // Park the desktops on Day, NOT on Chat.
+  //
+  // Clicking Chat when the app is already in Chat does nothing, so the desktop stays pinned to
+  // whatever conversation was open last and never moves to the one the run creates - which is
+  // exactly what was seen on macOS and Windows: the message had synced, the screen had not
+  // changed. Leaving Chat first means the journey's own openDesktopChat has to re-enter it, and
+  // re-entering lands on the new conversation.
   const clicked = await surface.ui.evaluate(`
     const label = [...document.querySelectorAll('button > span')]
-      .find((node) => (node.textContent || '').trim() === 'Chat');
+      .find((node) => (node.textContent || '').trim() === 'Day');
     const button = label?.closest('button');
     if (!button) return false;
     button.click();
     return true;
   `);
   if (!clicked)
-    throw new Error(`${surface.platform} does not expose the Chat nav button`);
-  await sleep(1200);
-  return 'clicked the Chat nav button';
+    throw new Error(`${surface.platform} does not expose the Day nav button`);
+  // Report on the state reached, not on the click returning true.
+  await surface.ui.waitFor(
+    () =>
+      surface.ui.evaluate(
+        `return location.href.toLowerCase().includes('/day');`,
+      ),
+    { label: `${surface.platform} on Day`, timeoutMs: 20_000, intervalMs: 500 },
+  );
+  return 'parked on Day, so re-entering Chat must land on the new conversation';
 };
 
 const assertChatOpen = async surface => {
@@ -1521,7 +1535,7 @@ if (step === 'snapshot') {
       const how = await showChatSurface(surface);
       console.log(`READY ${surface.platform.padEnd(8)} ${how}`);
     }
-    console.log(`PASS mesh     ${surfaces.length} surfaces on the chat screen`);
+    console.log(`PASS mesh     ${surfaces.length} surfaces staged for the run`);
   } finally {
     for (const surface of surfaces) {
       await Promise.resolve(surface.close()).catch(() => undefined);
