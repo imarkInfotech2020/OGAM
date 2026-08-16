@@ -140,7 +140,14 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={popoverStyles.overlay}>
-          <TouchableWithoutFeedback>
+          {/* accessible={false}: this wrapper exists only to stop a tap inside the popover reaching
+              the dismiss scrim behind it. Left as an accessibility element it MERGES every row into
+              itself, so the whole popover reports as one control named
+              ", Image Gen, Auto, , Thinking, ON, ..." - each row's testID disappears, VoiceOver
+              reads a single blob instead of five controls, and neither a person nor a test can
+              reach one setting. Android exposes the rows individually; this is what made iOS
+              differ. */}
+          <TouchableWithoutFeedback accessible={false}>
             <View style={[popoverStyles.popover, {
               backgroundColor: colors.surface,
               borderColor: colors.border,
@@ -247,7 +254,14 @@ export const AttachPickerPopover: React.FC<AttachPickerPopoverProps> = ({
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={popoverStyles.overlay}>
-          <TouchableWithoutFeedback>
+          {/* accessible={false}: this wrapper exists only to stop a tap inside the popover reaching
+              the dismiss scrim behind it. Left as an accessibility element it MERGES every row into
+              itself, so the whole popover reports as one control named
+              ", Image Gen, Auto, , Thinking, ON, ..." - each row's testID disappears, VoiceOver
+              reads a single blob instead of five controls, and neither a person nor a test can
+              reach one setting. Android exposes the rows individually; this is what made iOS
+              differ. */}
+          <TouchableWithoutFeedback accessible={false}>
             <View style={[popoverStyles.popover, {
               backgroundColor: colors.surface,
               borderColor: colors.border,
