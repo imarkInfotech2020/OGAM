@@ -884,3 +884,54 @@ Qwythos" - a model that was never coming. Whatever the gate decides, the surface
 the numbers (needs X, budget Y, free Z), and offer the actionable next step - lower the context
 length, choose a smaller model, or free memory - rather than leaving a chat that looks ready and is
 not.
+
+### How to fix it: one owner, a real formula, and a card that tells the user
+
+**One owner.** memoryBudget.ts is already documented as "the single memory-budget owner ... so
+residency, the pre-load check, and the model lists all agree". The ESTIMATE needs the same
+treatment: one `estimateModelMemory({ model, contextSettings, backend })` that modelPreloader,
+activeModelService, the model lists and the UI all call. Today modelPreloader answers 8448 MB and
+activeModelService answers 12387 MB for the same model.
+
+**A real formula.** PocketPal (github.com/a-ghorbani/pocketpal-ai, src/utils/memoryEstimator.ts)
+does exactly the decomposition, and it is worth copying:
+
+```
+total = (weights + KV cache + compute buffer) * 1.1        // 1.1 on a COMPUTED number
+KV    = n_layers * effectiveCtx * n_embd_head_k * n_head_kv * bytesPerK
+      + n_layers * effectiveCtx * n_embd_head_v * n_head_kv * bytesPerV
+compute = (n_vocab + n_embd) * n_ubatch * 4
+fallback when GGUF metadata is missing = size * 1.2
+```
+
+Details they get right that a multiplier cannot express:
+
+- KV cache quantisation is exact, not assumed: f16 2.0, q8_0 1.0625 (34/32), q4_0 0.5625 bytes per
+  element, and K and V are computed separately because they can be quantised differently.
+- Sliding-window attention: `effectiveCtx = min(n_ctx, sliding_window)`, so a Gemma-style model is
+  not charged for KV it will never allocate.
+- The mmproj (vision projector) is added separately rather than folded into a multiplier.
+- Metadata is validated first (NaN / non-positive / missing), falling back to size * 1.2 rather than
+  silently computing nonsense.
+
+Their BUDGET side is calibrated rather than assumed:
+
+```
+ceiling  = max(largestSuccessfulLoad, availableMemoryCeiling)
+fallback = min(totalMemory * 0.6, totalMemory - 1.2GB)
+status   = fits | warning (fits in total but not in ceiling) | will not fit
+```
+
+They learn the ceiling from the largest model that has actually loaded on that device. We already
+log `[WIRE-RAM] footprintBytes` after every load, so the same calibration is available to us - the
+difference is we throw the measurement away and they keep it.
+
+**A card that tells the user.** MtpAdviceCard is the existing in-chat pattern: dismissible, a title,
+and ONE action ("Turn on speculative decoding and reload the model"), rendered from ChatMessageArea.
+A memory refusal belongs there, naming the numbers and the way out:
+
+  "Qwythos 9B needs about 12.4 GB at 32k context. This device has 12 GB."
+  -> Reduce context to 8k and load  /  Choose a smaller model
+
+Silence is the defect. Today the only trace of the refusal was `fits=false` in a debug log while the
+chat said "Type a message below to begin chatting with Qwythos" - a model that was never coming.
