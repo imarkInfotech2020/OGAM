@@ -89,10 +89,13 @@ export class SpeechEndpointTimer {
   observeLevel(rms: number, now: number = Date.now()): SpeechEndpointReading {
     if (!Number.isFinite(rms) || rms < 0) return { speech: false, floor: this.floor ?? 0 };
     if (this.floor === null) this.floor = rms;
-    const alpha = rms < this.floor ? FLOOR_FALL : FLOOR_RISE;
-    this.floor += alpha * (rms - this.floor);
-
+    // Classified against the CURRENT floor, before the floor moves.
     const speech = rms > this.floor * SPEECH_OVER_FLOOR + SPEECH_FLOOR_MARGIN;
+    // The floor tracks the ROOM, not the speaker. It always follows quiet down, but speech is never
+    // allowed to drag it up: on device a sustained sentence pushed it from 0.012 to 0.052, and a long
+    // enough one would raise the bar above the speaker's own voice and end the turn mid-sentence.
+    const alpha = rms < this.floor ? FLOOR_FALL : speech ? 0 : FLOOR_RISE;
+    this.floor += alpha * (rms - this.floor);
     // Throttled: buffers arrive ~10x a second and the interesting thing is the trend.
     if (now - this.levelLogAt >= 1_000) {
       this.levelLogAt = now;

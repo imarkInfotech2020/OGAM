@@ -19,8 +19,11 @@ interface UseVoiceInputParams {
   onAutoSend?: (text: string, audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number }) => void;
 }
 
-/** Off until the audio side is proven on a device. Flip to true to end turns on silence. */
-const AUTO_STOP_ON_SILENCE = false;
+/**
+ * Proven on device before switching on: buffers arrive (frames=1600), speech reads ~0.14 rms against
+ * a ~0.008 silent floor, and the endpoint decided to end ~1.5s after speech stopped.
+ */
+const AUTO_STOP_ON_SILENCE = true;
 
 export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment, onAutoSend }: UseVoiceInputParams) {
   const recordingConversationIdRef = useRef<string | null>(null);
