@@ -654,3 +654,30 @@ edit.
 
 Bounded until then: the exposure is one already-streaming file, not every reconnection from then on. Raised by
 Greptile on mobile-pro#47, where the thread is deliberately left open so the seam stays tracked.
+
+---
+
+## Project editor: Save sits under the soft keyboard (iOS)
+
+**Verdict:** fix-the-guard — the control is reachable in principle, the keyboard just covers it.
+
+On the project editor (`project-edit-name` / `project-edit-description` /
+`project-edit-system-prompt` → `project-edit-save`), the Save control sits below a multiline field.
+Focusing any field raises the soft keyboard OVER Save, so a tap aimed at Save lands on a key. The
+screen is not keyboard-aware: it does not lift the action above the keyboard, and it does not inset
+the scroll view by the keyboard height.
+
+Evidence: observed on Mac's iPhone, 16 Aug 2026, driving `--step prepare-project --primary ios`.
+Android hit the same wall earlier and the E2E client works around it with `appium.hideKeyboard()`
+before pressing Save (see the comment in `fillPrimaryFields`, `scripts/e2e/attended-thinking-sync.mjs`);
+iOS now does the same through a new `WdaClient.hideKeyboard()`.
+
+**Why it is still a gap:** the tests dismiss the keyboard, a person has to guess to. On iOS there is
+no visible affordance to close it from a multiline field — no Done accessory, no tap-to-dismiss —
+so the user can be left with a form they cannot submit without scrolling blind.
+
+**Fix:** make the editor keyboard-aware — `KeyboardAvoidingView` (or the shared inset hook, if one
+already exists) so Save rises with the keyboard, plus a Done accessory on the multiline fields.
+Then the E2E `hideKeyboard()` calls become belt-and-braces rather than load-bearing.
+
+**Not fixed now** at Mac's direction: noted, not worked around silently.
