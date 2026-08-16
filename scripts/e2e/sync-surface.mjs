@@ -118,6 +118,11 @@ const rnSurface = (client, platform) => {
       back: () => client.back(),
       hideKeyboard: client.hideKeyboard ? () => client.hideKeyboard() : undefined,
       keyboardTop: client.keyboardTop ? () => client.keyboardTop() : undefined,
+      // Raw geometry. Needed where a system UI exposes nothing to address: the iOS photo picker
+      // publishes only PXG* layout groups and one concatenated label, so its first cell can only be
+      // reached by position.
+      tap: client.tap ? (x, y) => client.tap(x, y) : undefined,
+      windowSize: client.windowSize ? () => client.windowSize() : undefined,
       waitFor: (check, options) => client.waitFor(() => check(), options),
     },
 
