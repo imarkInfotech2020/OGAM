@@ -54,9 +54,12 @@ const createBubbleStyles = (colors: ThemeColors) => ({
    * read as tool calls nested inside one another and as rows bunching mid-stream.
    */
   toolRow: {
+    // No maxWidth here. The parent column (toolCallReplyContent) is ALREADY the bubble's width, so
+    // capping the row at 85% again applied the same 85% twice: the row ended ~13% short of the
+    // bubble above it and its chevron stopped mid-bubble instead of at the bubble's right edge.
+    // Stretching to the column is what makes the row end exactly where its message ends.
     alignSelf: 'stretch' as const,
     alignItems: 'flex-start' as const,
-    maxWidth: MESSAGE_MAX_WIDTH,
     paddingVertical: 4,
   },
   /**
@@ -65,9 +68,9 @@ const createBubbleStyles = (colors: ThemeColors) => ({
    * call - otherwise a transcript reads as a flat list of unrelated rows at identical spacing.
    */
   toolRowPaired: {
+    // Same column as toolRow, and same reason for not re-applying MESSAGE_MAX_WIDTH.
     alignSelf: 'stretch' as const,
     alignItems: 'flex-start' as const,
-    maxWidth: MESSAGE_MAX_WIDTH,
     paddingTop: 4,
     paddingBottom: 0,
   },
