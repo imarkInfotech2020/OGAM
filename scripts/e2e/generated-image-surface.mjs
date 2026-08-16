@@ -175,9 +175,19 @@ function reactNativeGeneratedImageSurface(surface) {
         timeoutMs: 20_000,
       });
       // Close the sheet the way it was opened. iOS has no hardware back, and its edge-swipe leaves
-      // the sheet up - the composer underneath is then unreachable.
+      // the sheet up - the composer underneath is then unreachable. Then WAIT for it to actually be
+      // gone: the next tap fires immediately after, and one aimed at chat-settings-icon while the
+      // sheet is still animating away is swallowed, so the modal never opens and the run waits 20s
+      // for it. Enhancement OFF happened to win that race; ON lost it.
       if (hasLabel(await ui.labels(), 'quick-image-mode')) {
         await ui.tapLabel('quick-settings-button');
+        await ui
+          .waitFor(async () => !hasLabel(await ui.labels(), 'quick-image-mode'), {
+            label: `${platform} quick settings sheet closed`,
+            timeoutMs: 10_000,
+            intervalMs: 400,
+          })
+          .catch(() => undefined);
       }
       // Enhancement is set HERE, not before: its controls live in the in-chat settings modal behind
       // chat-settings-icon, which does not exist until this chat does. Setting it first failed with
@@ -200,11 +210,27 @@ function reactNativeGeneratedImageSurface(surface) {
       if (!['on', 'off'].includes(enhancement)) {
         throw new Error(`enhancement must be on or off, got ${enhancement}`);
       }
-      await ui.tapWhenReady('chat-settings-icon', { timeoutMs: 20_000 });
-      await ui.waitForLabel('modal-image-accordion', {
-        label: `${platform} in-chat generation settings`,
-        timeoutMs: 20_000,
-      });
+      // Open the settings modal, and if the tap was swallowed, try once more rather than waiting out
+      // the whole timeout on a screen where nothing was ever opened.
+      const settingsOpen = async (timeoutMs) =>
+        ui
+          .waitFor(async () => hasLabel(await ui.labels(), 'modal-image-accordion'), {
+            label: `${platform} in-chat generation settings`,
+            timeoutMs,
+            intervalMs: 500,
+          })
+          .then(() => true)
+          .catch(() => false);
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        if (await settingsOpen(0)) break;
+        await ui.tapWhenReady('chat-settings-icon', { timeoutMs: 20_000 });
+        if (await settingsOpen(10_000)) break;
+        if (attempt === 2) {
+          throw new Error(
+            `${platform} did not open the in-chat generation settings after two taps`,
+          );
+        }
+      }
       await ui.tapLabel('modal-image-accordion');
       await ui.waitForLabel('modal-image-advanced-toggle', {
         label: `${platform} image section open`,
