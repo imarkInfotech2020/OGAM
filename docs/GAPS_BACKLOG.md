@@ -935,3 +935,101 @@ A memory refusal belongs there, naming the numbers and the way out:
 
 Silence is the defect. Today the only trace of the refusal was `fits=false` in a debug log while the
 chat said "Type a message below to begin chatting with Qwythos" - a model that was never coming.
+
+---
+
+## A synced file can deadlock: bytes arrive, control never re-applies (16 Aug 2026)
+
+**Symptom, from the device.** An image generated on iPhone rendered on macOS, Windows and iOS but
+stayed a spinner on Android. The gallery counted it (`1`) while the grid showed nothing - the file was
+staged but never imported.
+
+**The evidence (Android logcat, 21:02:33):**
+
+```
+[StateSync] ops from=9d25c24e received=1 applied=0 shared_file:1
+transfer_offer_accepted  resumeOffset=504593  delivered=true      <- already had every byte
+shared_file_decided      result=waiting_for_control  reason=control_missing
+transfer_settled         status=completed  bytes=504593
+```
+
+`received=1 applied=0` repeats. Per `state-sync.ts:102`, that means the op was ALREADY KNOWN.
+
+**The loop.** It is self-sustaining and silent:
+
+1. Android holds the bytes AND holds the `shared_file` control op in its oplog.
+2. `ControlledFileSync.controls` (an in-memory `Map`, `controlled-file-sync.ts:204`) has no entry for
+   that syncId, so reconcile answers `control_missing`.
+3. `sharedFileSyncService.ts:337` correctly asks the peer to repair the `control`.
+4. The peer answers by re-announcing (`shared-file-repair.ts:320`). `OpLog.record` returns the
+   already-recorded op unchanged, so it carries the SAME opId.
+5. Android dedups it by opId -> `applied=0` -> the materializer never fires -> `applyControlPut` is
+   never called -> the map stays empty. Back to 2, forever.
+
+**This is the SSOT failure `shared/CLAUDE.md` describes.** Two sources answer "does a control exist for
+this file": the durable oplog (yes) and the in-memory `controls` map (no). They are kept in step by
+hand - the map is only ever written by an op that APPLIES - so any op already in the log leaves the map
+cold, and version vectors then stop the peer from ever helping. `oplog.ts:198-200` names this exact
+hazard: "an ephemeral materializer cannot recover and peers correctly decline to resend already-seen
+ops."
+
+**Not mobile-specific.** `controlled-file-sync.ts`, `oplog.ts` and `shared-file-repair.ts` are all in
+`@offgrid/sync`. Every host shares the defect; Android is the device that hit the cold-map condition.
+
+**Still open - why the map was cold.** `stateSyncService.ts:217` DOES call `rematerializeAll()` on
+start, which should rebuild it. Two untested candidates:
+- `parseControl` returned null on replay, so `applyControlPut` returned `"ignored"` and never set the
+  map (`controlled-file-sync.ts:222`) - a silent drop by itself.
+- `compact()` (`stateSyncService.ts:221`) dropped the superseded control op while the version vector
+  kept claiming it, so there is nothing left to replay but peers still refuse to resend.
+
+**The fix shape (do not implement yet).** Make the durable log the only source: rebuild `controls` by
+replaying the log, and make a `control` repair request force re-materialisation of that syncId rather
+than re-broadcasting an op the peer will discard. A repair that cannot make progress must surface -
+a file waiting on a control that will never come is exactly the silent drop we said we cannot afford.
+
+**Cover it.** No test asserts a control arriving BEFORE its bytes and then the app restarting, which is
+the shape of this bug.
+
+---
+
+## The selected text model is never resident on a 3-model device (16 Aug 2026, iPhone)
+
+Found by `scripts/e2e/model-eviction-journey.mjs`, which walks residency up one model at a time and
+reads the app's own Models sheet between each step.
+
+```
+1. at rest                             image + voice + speech
+2. after a typed turn                  image + voice + speech
+3. after a spoken turn                 image + voice + speech
+4. after an image request              image + voice + speech
+
+never resident at any stage: text
+  text    Qwythos-9B-v2-GGUF                (selected, never loaded)
+* image   3.6 GB  SD 1.5 Palettized (Core ML)
+* voice   0.3 GB  Kokoro TTS · Warm
+* speech  0.1 GB  Base
+```
+
+Three sidecars hold 4.0 GB and the model the user chose cannot get in. The app still answers and still
+draws, so nothing on screen says the chosen model is not the one running - except one in-chat line,
+captured on device:
+
+> Prompt enhancement skipped - Generating from your original prompt - Not enough free memory to load
+> this model. Close other apps or choose a smaller model.
+
+That message is right, and it is the only signal. It does not name what was needed, what was
+available, or what would fix it, and it appears only on the enhancement path - a plain chat turn with
+the same problem says nothing at all.
+
+**Ties directly to the memory-estimate work above.** The refusal is the estimator's verdict reaching
+the surface. Two questions this run raises that the current estimator cannot answer:
+
+- Would the text model fit if the image model (3.6 GB, idle) were evicted first? Nothing appears to
+  consider that trade - the image sidecar stays resident across every stage including two turns that
+  never needed it.
+- Qwythos loaded earlier in the same session once the context was lowered to 1k, which the gate's
+  cost model cannot express, since it is context-blind. Still unexplained, still open.
+
+**Cover it.** The journey is the regression test: any change to the cost model should be run against
+it, and `never resident at any stage: text` should become empty.
