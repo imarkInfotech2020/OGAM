@@ -419,13 +419,37 @@ const rnSurface = (client, platform) => {
 const electronSurface = async (spec) => {
   const { host, port = 9222, platform } = spec;
 
-  const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
-  const page = selectMainOffGridPage(targets);
+  // Try every place this desktop might be, and use the first that answers WITH an Off Grid page.
+  //
+  // This used to fetch 127.0.0.1 while reporting failure against `host`, so a run could name a box
+  // it had never contacted - the same "live app read as a dead one" this rig exists to prevent. A
+  // box that has moved, or whose tunnel is open on one address and not the other, now just works.
+  const candidates = spec.candidates?.length ? spec.candidates : [{ host, port }];
+  const tried = [];
+  let page;
+  let found;
+  for (const candidate of candidates) {
+    const at = `${candidate.host}:${candidate.port ?? port}`;
+    tried.push(at);
+    try {
+      const targets = await (await fetch(`http://${at}/json`)).json();
+      const hit = selectMainOffGridPage(targets);
+      if (hit) {
+        page = hit;
+        found = at;
+        break;
+      }
+    } catch {
+      // Nothing there. Try the next address rather than failing the whole run on the first miss.
+    }
+  }
   if (!page) {
     throw new Error(
-      `no Off Grid page on ${host}:${port}. Start the app with --remote-debugging-port=${port}.`,
+      `no Off Grid page for ${platform} at any of ${tried.join(', ')}. ` +
+        `Start the app with --remote-debugging-port=${port}.`,
     );
   }
+  if (found && !found.startsWith('127.0.0.1')) console.log(`AT    ${platform.padEnd(8)}${found}`);
 
   const socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
