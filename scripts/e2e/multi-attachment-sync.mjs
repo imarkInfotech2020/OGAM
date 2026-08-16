@@ -89,6 +89,56 @@ const waitForCount = async (surface, wanted, what) => {
   }
 };
 
+/**
+ * Make sure the chat is running the text model this journey means to exercise.
+ *
+ * A journey that inherits whatever model was last selected is not the same test twice: a 0.8B and a
+ * 2B answer differently, and a remote gateway model does not exercise on-device vision at all. The
+ * sheet's first row is the text model, so its label is the current one; the switch list names each
+ * row `text-model-row-<repo>/<file>.gguf`.
+ */
+const ensureTextModel = async (surface, wanted) => {
+  await surface.ui.tapWhenReady('model-selector', { timeoutMs: 20_000 });
+  await surface.ui.waitForLabel('models-row-text', {
+    label: `${surface.platform} models sheet`,
+    timeoutMs: 20_000,
+  });
+  const current = (await labelsOf(surface)).find(label => label.includes(', TEXT,'));
+  if (current?.includes(wanted)) {
+    await surface.ui.tapLabel('Done');
+    await surface.ui.waitForLabel('chat-input', {
+      label: `${surface.platform} chat after closing models`,
+      timeoutMs: 20_000,
+    });
+    return 'already selected';
+  }
+
+  await surface.ui.tapLabel('models-row-text');
+  await surface.ui.waitForLabel('SWITCH MODEL', {
+    label: `${surface.platform} text model list`,
+    timeoutMs: 20_000,
+  });
+  const row = (await labelsOf(surface)).find(
+    label => label.startsWith('text-model-row-') && label.includes(wanted),
+  );
+  if (!row) throw new Error(`${surface.platform} has no downloaded ${wanted} to select`);
+  await surface.ui.scrollToLabel(row, { maxSwipes: 8 }).catch(() => undefined);
+  await surface.ui.tapLabel(row);
+
+  // Selecting starts a load. Done is what closes the sheet, and the chat is only usable once the
+  // composer is back - waiting on the sheet alone would race the model into the first message.
+  await surface.ui.waitFor(
+    async () => (await labelsOf(surface)).includes('Done'),
+    { label: `${surface.platform} model sheet after selecting`, timeoutMs: 180_000, intervalMs: 1000 },
+  );
+  await surface.ui.tapLabel('Done');
+  await surface.ui.waitForLabel('chat-input', {
+    label: `${surface.platform} chat after model load`,
+    timeoutMs: 180_000,
+  });
+  return 'selected';
+};
+
 /** Open the composer's attach sheet and choose one of its three options. */
 const chooseAttachSource = async (surface, option) => {
   await surface.ui.tapWhenReady('attach-button', { timeoutMs: 20_000 });
@@ -166,6 +216,10 @@ const run = async () => {
     label: `${primaryKind} new chat`,
     timeoutMs: 30_000,
   });
+
+  const textModel = flag('text-model', 'Qwen3.5-2B');
+  const modelOutcome = await ensureTextModel(producer, textModel);
+  console.log(`MODEL  ${primaryKind.padEnd(8)} ${textModel} ${modelOutcome}`);
 
   // A composer can carry a draft from a previous run; three attachments must mean THESE three.
   for (const label of await labelsOf(producer)) {
