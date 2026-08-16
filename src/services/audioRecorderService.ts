@@ -41,12 +41,24 @@ class AudioRecorderService {
         callback: (event: { buffer?: { getChannelData?: (i: number) => Float32Array }; numFrames?: number }) => void,
       ) => void;
     };
+    if (typeof withCallback.onAudioReady !== 'function') {
+      // The whole endpoint depends on these buffers. If the method is not there, say so once rather
+      // than leave a turn that silently never ends.
+      logger.log('[VAD] onAudioReady is NOT available on this recorder - no levels will arrive');
+      return;
+    }
+    logger.log('[VAD] attaching level callback');
+    let seen = 0;
     try {
-      withCallback.onAudioReady?.(
+      withCallback.onAudioReady(
         { sampleRate: 16000, bufferLengthInSamples: 1600, channelCount: 1 },
         event => {
           const channel = event?.buffer?.getChannelData?.(0);
           const frames = event?.numFrames ?? channel?.length ?? 0;
+          if (seen === 0) {
+            logger.log(`[VAD] first buffer frames=${frames} hasChannel=${!!channel}`);
+          }
+          seen += 1;
           if (!channel || frames <= 0) return;
           let sum = 0;
           for (let i = 0; i < frames; i += 1) sum += channel[i] * channel[i];
@@ -60,8 +72,9 @@ class AudioRecorderService {
           }
         },
       );
-    } catch {
+    } catch (error) {
       // No buffer callback on this platform build: callers keep their own timeout.
+      logger.log(`[VAD] onAudioReady threw: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

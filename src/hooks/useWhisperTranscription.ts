@@ -260,6 +260,13 @@ export const useWhisperTranscription = ({ ensureModelReady }: UseWhisperTranscri
             transcribingStartTime.current = null;
           }
         }
+      }, {
+        // The room went quiet. Run OUR stop, not the service's: stopping the service alone leaves
+        // the UI recording and the turn unfinalised, which is exactly how a "finished" turn hangs.
+        onSilence: () => {
+          logger.log('[Whisper] silence detected - stopping the turn');
+          void stopRecording();
+        },
       });
     } catch (err) {
       logger.error('[Whisper] Recording error:', err);

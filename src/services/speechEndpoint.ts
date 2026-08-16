@@ -16,6 +16,7 @@
  * So this listens to the microphone's loudness - an RMS per buffer from audioRecorderService, which
  * already runs alongside the realtime transcription - and ends the turn when the room goes quiet.
  */
+import logger from '../utils/logger';
 
 /** Silence after speech. Short, because this can only fire once someone has actually spoken. */
 const SILENCE_AFTER_SPEECH_MS = 1_500;
@@ -67,11 +68,14 @@ export class SpeechEndpointTimer {
   private startedAt = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
   private ended = true;
+  private levelLogAt = 0;
 
   constructor(private readonly onEnded: () => void) {}
 
   /** A turn has started. Nothing has been heard yet. */
   begin(now: number = Date.now()): void {
+    logger.log('[VAD] begin - listening for silence');
+    this.levelLogAt = 0;
     this.floor = null;
     this.heardSpeech = false;
     this.lastSpeechAt = 0;
@@ -89,6 +93,13 @@ export class SpeechEndpointTimer {
     this.floor += alpha * (rms - this.floor);
 
     const speech = rms > this.floor * SPEECH_OVER_FLOOR + SPEECH_FLOOR_MARGIN;
+    // Throttled: buffers arrive ~10x a second and the interesting thing is the trend.
+    if (now - this.levelLogAt >= 1_000) {
+      this.levelLogAt = now;
+      logger.log(
+        `[VAD] rms=${rms.toFixed(4)} floor=${this.floor.toFixed(4)} speech=${speech} heard=${this.heardSpeech} quietMs=${this.heardSpeech ? now - this.lastSpeechAt : now - this.startedAt}`,
+      );
+    }
     if (speech) {
       this.heardSpeech = true;
       this.lastSpeechAt = now;
@@ -116,6 +127,7 @@ export class SpeechEndpointTimer {
 
   private check(now: number): void {
     if (this.ended || !this.hasEnded(now)) return;
+    logger.log(`[VAD] ENDING turn - heardSpeech=${this.heardSpeech}`);
     this.ended = true;
     this.clear();
     this.onEnded();

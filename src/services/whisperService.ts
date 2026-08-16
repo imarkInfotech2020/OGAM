@@ -30,9 +30,8 @@ class WhisperService {
   private isTranscribing: boolean = false;
   private stopFn: (() => void) | null = null;
   /** Ends the turn once the room goes quiet, so a voice turn needs no stop button. */
-  private readonly endpoint = new SpeechEndpointTimer(() => {
-    void this.stopTranscription();
-  });
+  private readonly endpoint = new SpeechEndpointTimer(() => this.onSilence?.());
+  private onSilence: (() => void) | null = null; // set per turn from startRealtimeTranscription
   private unsubscribeLevels: (() => void) | null = null;
   private isReleasingContext: boolean = false;
   private contextReleasePromise: Promise<void> = Promise.resolve();
@@ -262,10 +261,11 @@ class WhisperService {
     options?: {
       language?: string;
       maxLen?: number;
+      /** Room went quiet. MUST be the caller's stop path - ours alone leaves the UI recording. */
+      onSilence?: () => void;
     }
   ): Promise<void> {
-    logger.log('[WhisperService] startRealtimeTranscription called');
-    logger.log('[WhisperService] Context exists:', !!this.context);
+    logger.log(`[WhisperService] start (context=${!!this.context})`);
     logger.log('[WhisperService] isTranscribing:', this.isTranscribing);
 
     if (!this.context) {
@@ -342,8 +342,7 @@ class WhisperService {
         maxLen: options?.maxLen || 0, // 0 = no limit
         realtimeAudioSec: 30, // Process in 30-second chunks
         realtimeAudioSliceSec: 3, // Slice every 3 seconds for faster intermediate results
-        // Only decode slices that contain speech. This does not end the turn - the silence timer
-        // below does that - but it keeps a quiet room from being decoded into invented words.
+        // Decode only slices with speech. Does not end the turn - speechEndpoint does that.
         useVad: true,
         ...(Platform.OS === 'ios' && {
           audioSessionOnStartIos: {
@@ -357,7 +356,8 @@ class WhisperService {
 
       logger.log('[WhisperService] transcribeRealtime started successfully');
       this.stopFn = stop;
-      // Listen to the ROOM for the rest of this turn: loudness, not the transcript. See speechEndpoint.
+      // Loudness, not the transcript - see speechEndpoint. The caller's stop runs, not ours.
+      this.onSilence = options?.onSilence ?? (() => void this.stopTranscription());
       this.endpoint.begin();
       this.unsubscribeLevels?.();
       this.unsubscribeLevels = audioRecorderService.onAudioLevel(rms => {
