@@ -726,3 +726,69 @@ not the transport. Five of the six named tools (search_knowledge_base, web_searc
 read_wiki_structure, read_wiki_contents) succeeded in the same turn.
 
 Worth checking what the DeepWiki MCP server expects for `ask_question` against what is being sent.
+
+---
+
+## Test coverage we know we are missing (Mac's list, 16 Aug 2026)
+
+**Verdict:** instrument-and-revisit — none of these are known failures. They are capabilities we
+ship and do not exercise, which is how today's defects survived: the PDF-in-a-message bug had been
+predicted from a diff for VOICE NOTES weeks earlier and was only found when someone actually sent
+one.
+
+### Models and hardware
+
+- **Huge models — eviction and co-residency.** Run with something like Qwythos 9B (5.5 GB) and prove
+  eviction and co-residency behave: what gets unloaded, what survives, and that the device does not
+  die instead of evicting. iOS matters most here - a memory breach there is an uncatchable jetsam
+  SIGKILL, so the engine's GPU→CPU→CPU@2048 ladder cannot save it.
+- **GPU and NPU selection.** Prove the chosen backend is the one actually used, read back from
+  "show generation details" rather than assumed from a setting.
+
+### Voice
+
+- **Voice mode end to end** - STT in, TTS out, on a real device.
+
+### Clipboard
+
+- **Copying OUTSIDE the app** reflects in the in-app clipboard, on both Android and iOS.
+
+### Ambient sharing, both ways round
+
+Each of these needs the negative case as well as the positive, because a permission that fails open
+is invisible when you only test that sharing works:
+
+- screenshots ARE synced when allowed / are NOT synced when disallowed
+- downloads ARE synced when allowed / are NOT synced when disallowed
+
+### Model transfer between devices
+
+- image models send and WORK on the receiver
+- vision models send and WORK on the receiver
+- text models send and WORK on the receiver
+- STT models send and WORK on the receiver
+- the right models are offered to send, based on what the RECEIVER is
+
+"Arrives" and "works on the receiver" are different claims, and only the second one is the feature.
+
+### Also worth covering — found while working today
+
+- **Settings a peer can push, with no device-fit check.** contextLength, maxTokens, gpuLayers,
+  nThreads and nBatch are writable by a paired desktop and validated for type and range only. Desktop
+  offers maxTokens to 32768 and ctxSize to 131072; a phone at 4096 accepts them. Test a desktop→phone
+  push of values the phone cannot honour, on iOS especially.
+- **maxToolCalls is synced too.** A peer set to 1 turns a single-tool request into a notice instead
+  of an answer.
+- **Non-image attachments other than PDF.** describeAttachment now classifies audio and video, but
+  only the PDF path has been seen working end to end. A voice note is the case this was originally
+  predicted for and it is still unproven on desktop.
+- **The vision journeys still only run from Android.** vision-image-sync and vision-answer-sync are
+  Android-hardcoded; the iOS photo picker exposes no addressable cells, so the iOS path needs the
+  geometric-tap approach used in multi-attachment-sync.
+- **A receiver that does NOT already have the model** - the download-on-demand path, not just
+  transfer between two devices that both have it.
+- **Interrupted transfers** - background the app, drop wifi, lock the phone mid-send, then resume.
+- **Offline behaviour.** Entitlement reconciliation reports "License service unavailable" with no
+  network; prove offline access genuinely stays usable rather than degrading into a lock-out.
+- **The five-device replacement flow** at the licence limit, including the failure mode where the
+  oldest membership cannot be removed.
