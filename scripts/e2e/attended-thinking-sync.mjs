@@ -9,12 +9,16 @@
  *   npm run e2e:thinking-sync -- --step open-chat --run meshproof... --ios http://...:8100
  *   npm run e2e:thinking-sync -- --step open-settings --run meshproof... --ios http://...:8100
  */
+import { execFile as execFileCallback } from 'node:child_process';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { AdbClient } from '../android/adb-client.mjs';
 import { AppiumAndroidClient } from '../android/appium-client.mjs';
 import { EVIDENCE_DIR, flag, specFor } from './mesh-config.mjs';
 import { connectSurface } from './sync-surface.mjs';
+
+const execFile = promisify(execFileCallback);
 
 const KINDS = ['android', 'ios', 'macos', 'windows'];
 const step = flag('step', 'snapshot');
@@ -622,6 +626,36 @@ const projectFileAttachments = fixture => [
 ];
 
 const stageProjectFixtures = async (kind, attachments) => {
+  // iOS seeding, the counterpart to `adb push`. devicectl writes straight into the app's own data
+  // container, which is the "real seeding path" the handoff doc asked for - no Files-app detour and
+  // nothing to click. The UI journey either side of this was always platform-agnostic; only getting
+  // the fixture bytes onto the device was not.
+  if (kind === 'ios') {
+    const udid = flag(
+      'ios-udid',
+      process.env.WDA_UDID ?? '4CF4A291-280A-598C-8AC5-851073C14B30',
+    );
+    const bundleId = flag('ios-bundle', 'ai.offgridmobile.dev');
+    for (const attachment of attachments) {
+      await execFile('xcrun', [
+        'devicectl',
+        'device',
+        'copy',
+        'to',
+        '--device',
+        udid,
+        '--domain-type',
+        'appDataContainer',
+        '--domain-identifier',
+        bundleId,
+        '--source',
+        attachment.sourcePath,
+        '--destination',
+        `Documents/${attachment.fileName}`,
+      ]);
+    }
+    return 'Documents';
+  }
   if (kind !== 'android') {
     throw new Error(
       `${kind} fixture staging is not configured yet; the shared UI journey already supports --primary ${kind}`,
@@ -1667,7 +1701,7 @@ if (step === 'snapshot') {
     next.guidedToolPreparation = result;
     await saveState(next);
     await record({
-      platform: 'android',
+      platform: primaryKind,
       ok: true,
       action: 'prepare-guided-tools',
       before: before.screenshot,
@@ -1675,7 +1709,7 @@ if (step === 'snapshot') {
       ...result,
     });
     console.log(
-      'PASS android  Thinking ON; Web Search, Knowledge Base, URL Reader ON; DeepWiki Active 3/3',
+      `PASS ${primaryKind}  Thinking ON; Web Search, Knowledge Base, URL Reader ON; DeepWiki Active 3/3`,
     );
   } finally {
     await Promise.resolve(surface.close()).catch(() => undefined);
