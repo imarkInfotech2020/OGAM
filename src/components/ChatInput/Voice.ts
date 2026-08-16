@@ -5,6 +5,7 @@ import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
+import { SpeechEndpointTimer } from '../../services/speechEndpoint';
 import { recordingController } from '../../services/recordingController';
 import { resolveTranscription } from './transcriptionOutcome';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
@@ -17,6 +18,9 @@ interface UseVoiceInputParams {
   /** Called in Audio Mode to auto-send. Includes audio info so caller can build attachment atomically. */
   onAutoSend?: (text: string, audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number }) => void;
 }
+
+/** Off until the audio side is proven on a device. Flip to true to end turns on silence. */
+const AUTO_STOP_ON_SILENCE = false;
 
 export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment, onAutoSend }: UseVoiceInputParams) {
   const recordingConversationIdRef = useRef<string | null>(null);
@@ -75,6 +79,48 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // voiceAvailable: direct audio OR whisper downloaded
   const voiceAvailable = supportsDirectAudio() || !!downloadedModelId;
 
+  /**
+   * Ends a turn when the room goes quiet.
+   *
+   * Wired HERE because this is the path the record button actually takes: audioRecorderService
+   * records to a file and transcribeFile produces the transcript afterwards. The realtime API is a
+   * different path that voice mode never calls - instrumenting it produced no logs at all.
+   *
+   * AUTO_STOP is off while the audio side is being proven. With it off this only observes and logs,
+   * so a wrong threshold cannot end a turn early and nothing runs during recorder teardown.
+   */
+  const endpointRef = useRef<SpeechEndpointTimer | null>(null);
+  const levelsOffRef = useRef<(() => void) | null>(null);
+
+  const stopListeningForSilence = () => {
+    endpointRef.current?.cancel();
+    endpointRef.current = null;
+    levelsOffRef.current?.();
+    levelsOffRef.current = null;
+  };
+
+  const listenForSilence = () => {
+    stopListeningForSilence();
+    // VOICE MODE ONLY. Chat-mode dictation is the user typing with their voice - they pause to think
+    // mid-sentence and expect the recording to wait for them. Ending that turn on silence would cut
+    // people off while they are still composing.
+    if (!isInAudioInterfaceMode()) return;
+    const endpoint = new SpeechEndpointTimer(() => {
+      if (!AUTO_STOP_ON_SILENCE) {
+        logger.log('[VAD] would stop the turn now (auto-stop disabled)');
+        return;
+      }
+      logger.log('[VAD] silence detected - ending the turn');
+      stopListeningForSilence();
+      // Deferred off the audio callback: stopping the recorder from inside its own buffer
+      // callback tears down native state that the callback is still standing on.
+      setTimeout(() => { void stopRef.current(); }, 0);
+    });
+    endpointRef.current = endpoint;
+    endpoint.begin();
+    levelsOffRef.current = audioRecorderService.onAudioLevel(rms => endpoint.observeLevel(rms));
+  };
+
   const startRecording = async () => {
     recordingConversationIdRef.current = conversationId || null;
     setDirectError(null);
@@ -86,6 +132,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
       try {
         setIsDirectRecording(true);
         await audioRecorderService.startRecording();
+        listenForSilence();
       } catch (err) {
         setIsDirectRecording(false);
         const msg = err instanceof Error ? err.message : 'Recording failed';
@@ -99,6 +146,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
       try {
         setIsAudioModeRecording(true);
         await audioRecorderService.startRecording();
+        listenForSilence();
       } catch (err) {
         setIsAudioModeRecording(false);
         const msg = err instanceof Error ? err.message : 'Recording failed';
@@ -217,6 +265,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   };
 
   const stopRecording = async () => {
+    stopListeningForSilence();
     if (isDirectRecording) {
       await stopDirectRecording();
       return;
@@ -231,6 +280,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   };
 
   const cancelRecording = () => {
+    stopListeningForSilence();
     if (isDirectRecording) {
       audioRecorderService.cancelRecording();
       setIsDirectRecording(false);
