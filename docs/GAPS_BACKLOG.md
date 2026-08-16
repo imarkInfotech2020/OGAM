@@ -816,3 +816,71 @@ than merely wrong.
    Android-hardcoded. The iOS system photo picker exposes no addressable cells - only PXG* layout
    groups and one concatenated label - so the iOS path needs the geometric-tap approach now used in
    multi-attachment-sync.
+
+---
+
+## Model memory: the estimate is unscientific, inconsistent, and fails silently
+
+**Verdict:** fix-the-guard — three defects in one decision, found together on 16 Aug 2026 when
+Qwythos 9B (5.5 GB) would not load on an iPhone and the chat sat unusable with no explanation.
+
+### 1. The estimate ignores context length, which is the term that actually varies
+
+```ts
+estimateModelRam(model, multiplier = 1.5) {
+  return this.getModelTotalSize(model) * multiplier   // file size only
+}
+```
+
+Observed: `[MEM-SM] makeRoomFor text sizeMB=12387 budgetMB=9121 os_procAvailMB=5189 fits=false`.
+That 12387 is 5632 MB x 2.2. Reducing the context length to ~1k made the same model load
+immediately - the gate never saw the change, because context is not an input to it.
+
+Real memory decomposes as:
+
+```
+total = weights + KV cache + compute buffer + slack
+KV_bytes = 2 x n_layers x n_kv_heads x head_dim x n_ctx x bytes_per_element
+```
+
+Only WEIGHTS scale with file size. For a 9B with ~48 layers and GQA (8 KV heads x 128), f16 KV is
+roughly 196 KB per token: ~0.2 GB at 1k context, ~1.5 GB at 8k, ~6.3 GB at 32k, ~25 GB at 128k. A
+single file-size multiplier is being asked to hide a 100x spread, so it must be wrong in one
+direction or the other - it refuses big models that would fit at small context, and admits small
+models at 131072 context that will not. On iOS the second case is an uncatchable jetsam kill.
+
+Everything needed is already available: the GGUF header carries block_count,
+attention.head_count_kv, attention.key_length/value_length and context_length; llama.cpp prints its
+own tensor, KV and compute buffer sizes at load; and `[WIRE-RAM] footprintBytes` is already logged
+after every load, so predicted-vs-real can be calibrated per backend from real runs. This is how
+Ollama's scheduler decides layer offload, and what the HF/LM Studio calculators do.
+
+### 2. The multipliers are not derived from anything
+
+`TEXT_MODEL_OVERHEAD_MULTIPLIER = 1.5` is commented only "CPU: KV cache, activations, etc."
+`TEXT_MODEL_GPU_OVERHEAD_MULTIPLIER = 2.2` was chosen to "mirror the image estimator's
+ANE(1.8)->GPU(2.5) bump" after ONE device incident (2026-07-14, 8.2 GB estimated against 11.4 GB
+real). The file above them records that flat percentages were removed because they "wrongly treated
+a 12GB iPhone like a 6GB one" - a flat multiplier makes the same mistake one level down, treating
+every model's runtime shape as proportional to its file.
+
+### 3. Two owners compute it differently, and one of them fails silently
+
+```ts
+// modelPreloader.ts - default 1.5x, and a bare return
+const sizeMB = toMB(hardwareService.estimateModelRam(model));
+if (!modelResidencyManager.canLoadWithoutEviction({ key: 'text', sizeMB })) return;
+
+// activeModelService/index.ts - backend-aware 2.2x on GPU
+estimateModelRam(model, textOverheadMultiplier(store.settings.inferenceBackend))
+```
+
+For Qwythos that is 8448 MB versus 12387 MB - the preloader believes it fits and the authoritative
+gate refuses. Two answers to "how much memory does this model need", kept in step by hand.
+
+**No silent drops.** A refusal is a decision the user has to be told about. Today the only trace was
+`fits=false` in a debug log, while the chat still said "Type a message below to begin chatting with
+Qwythos" - a model that was never coming. Whatever the gate decides, the surface must say so, name
+the numbers (needs X, budget Y, free Z), and offer the actionable next step - lower the context
+length, choose a smaller model, or free memory - rather than leaving a chat that looks ready and is
+not.
