@@ -138,7 +138,12 @@ export const QuickSettingsPopover: React.FC<QuickSettingsPopoverProps> = ({
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
+      {/* accessible={false} on the SCRIM too. The inner wrapper was fixed first, but this outer
+          dismiss layer wraps the whole popover and merges it just the same - iOS reported one
+          control named ", Image Gen, Auto, , Thinking, ON, , Voice, Chat, , Tools, 1, Pro Tools, 6"
+          with every row's testID gone. Both layers exist only to route taps, so neither should be
+          an accessibility element. */}
+      <TouchableWithoutFeedback accessible={false} onPress={onClose}>
         <View style={popoverStyles.overlay}>
           {/* accessible={false}: this wrapper exists only to stop a tap inside the popover reaching
               the dismiss scrim behind it. Left as an accessibility element it MERGES every row into
@@ -252,7 +257,12 @@ export const AttachPickerPopover: React.FC<AttachPickerPopoverProps> = ({
 
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
+      {/* accessible={false} on the SCRIM too. The inner wrapper was fixed first, but this outer
+          dismiss layer wraps the whole popover and merges it just the same - iOS reported one
+          control named ", Image Gen, Auto, , Thinking, ON, , Voice, Chat, , Tools, 1, Pro Tools, 6"
+          with every row's testID gone. Both layers exist only to route taps, so neither should be
+          an accessibility element. */}
+      <TouchableWithoutFeedback accessible={false} onPress={onClose}>
         <View style={popoverStyles.overlay}>
           {/* accessible={false}: this wrapper exists only to stop a tap inside the popover reaching
               the dismiss scrim behind it. Left as an accessibility element it MERGES every row into
