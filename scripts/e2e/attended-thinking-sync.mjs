@@ -2183,42 +2183,58 @@ if (step === 'snapshot') {
       };
     };
 
-    const android = surfaces.find(surface => surface.platform === 'android');
-    // UiAutomator is single-owner. Observe the three peers first, then perform the Android send with
-    // no concurrent Android hierarchy reads. Start the Android observer only after the sent marker is
-    // visible in Android's own chat.
+    // Send from whichever device --primary names, as run-normal already does. This stage used to
+    // find the surface called 'android' and dispatch through Appium unconditionally, so
+    // `--primary ios` was accepted, validated, and then ignored: the "iOS thinking run" went out
+    // from the Android phone while the log said otherwise.
+    const primary = surfaces.find(surface => surface.platform === primaryKind);
+    if (!primary)
+      throw new Error(`the mesh has no ${primaryKind} surface to drive`);
+    // UiAutomator is single-owner. Observe the peers first, then send with no concurrent hierarchy
+    // reads on the sending device. Its own observer starts only after the marker is visible in its
+    // own chat.
     const observerRuns = surfaces
-      .filter(surface => surface.platform !== 'android')
+      .filter(surface => surface.platform !== primaryKind)
       .map(surface => observe(surface));
     await sleep(500);
-    const draftText = await android.text();
+    const draftText = await primary.text();
     const hasExistingDraft = draftText
       .toLowerCase()
       .includes(state.thinkToken.toLowerCase());
-    appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
-    if (hasExistingDraft) baselines.get('android').marker = 0;
-    await dispatchAndroidPrompt({
-      appium,
-      prompt: state.prompt,
-      token: state.thinkToken,
-      hasExistingDraft,
-      beforeClick: async () => {
-        const reserved = await readState();
-        reserved.sendReservedAt = new Date().toISOString();
-        await saveState(reserved);
-      },
-    });
-    await appium.close();
-    appium = undefined;
+    if (hasExistingDraft) baselines.get(primaryKind).marker = 0;
+    const reserveSend = async () => {
+      const reserved = await readState();
+      reserved.sendReservedAt = new Date().toISOString();
+      await saveState(reserved);
+    };
+    if (primaryKind === 'ios') {
+      await dispatchIosPrompt({
+        surface: primary,
+        prompt: state.prompt,
+        token: state.thinkToken,
+        beforeClick: reserveSend,
+      });
+    } else {
+      appium = new AppiumAndroidClient(appiumUrl, flag('android', '505b53a0'));
+      await dispatchAndroidPrompt({
+        appium,
+        prompt: state.prompt,
+        token: state.thinkToken,
+        hasExistingDraft,
+        beforeClick: reserveSend,
+      });
+      await appium.close();
+      appium = undefined;
+    }
     await sleep(500);
-    const androidSentText = await waitUntil(
+    const primarySentText = await waitUntil(
       async () => {
-        const source = await android.ui.source();
+        const source = await primary.ui.source();
         if (!mobileMessageHasMarker(source, 'user-message', state.thinkToken))
           return false;
-        return android.text();
+        return primary.text();
       },
-      'Android sent Thinking marker',
+      `${primaryKind} sent Thinking marker`,
       20_000,
     );
     const sent = await readState();
@@ -2226,15 +2242,15 @@ if (step === 'snapshot') {
     sent.sentAt = new Date().toISOString();
     await saveState(sent);
     await record({
-      platform: 'android',
+      platform: primaryKind,
       ok: true,
       action: 'send-thinking',
       token: state.thinkToken,
     });
-    console.log(`SEND android  ${state.thinkToken}`);
+    console.log(`SEND ${primaryKind}  ${state.thinkToken}`);
 
     const results = await Promise.all([
-      observe(android, androidSentText),
+      observe(primary, primarySentText),
       ...observerRuns,
     ]);
     for (const result of results) {
