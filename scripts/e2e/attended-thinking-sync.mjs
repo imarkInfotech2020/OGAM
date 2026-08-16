@@ -1485,21 +1485,27 @@ if (step === 'snapshot') {
     await Promise.resolve(surface.close()).catch(() => undefined);
   }
 } else if (step === 'prepare-thinking') {
-  const surface = await connect('android');
+  // Honour --primary, as run-normal already does. Hardcoding 'android' here accepted --primary ios
+  // and then set Thinking on the WRONG phone, so an "iOS thinking run" was an Android one wearing
+  // its name. setPrimaryThinking already speaks the shared label vocabulary.
+  const surface = await connect(primaryKind);
   try {
     const before = await capture(surface, 'before');
+    // The SAME chat the journey has been using. Thinking is a per-message setting, so the stage
+    // continues the checkpoint conversation that all four devices are already watching - which is
+    // what lets the peers see Thinking go live rather than having to find a new chat mid-generation.
     await openMobileChat(surface);
     await setPrimaryThinking(surface, true);
     const after = await capture(surface, 'after');
     await record({
-      platform: 'android',
+      platform: primaryKind,
       ok: true,
       thinking: 'on',
       before: before.screenshot,
       after: after.screenshot,
     });
     console.log(
-      'PASS android  prepare-thinking (Thinking ON, checkpoint chat open)',
+      `PASS ${primaryKind}  prepare-thinking (Thinking ON, checkpoint chat open)`,
     );
   } finally {
     await Promise.resolve(surface.close()).catch(() => undefined);
