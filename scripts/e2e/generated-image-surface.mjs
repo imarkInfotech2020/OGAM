@@ -67,8 +67,28 @@ function mobileGalleryEntries(root) {
   return entries;
 }
 
+/**
+ * Walk to a screen, waiting for it rather than sleeping a fixed amount at it.
+ *
+ * Six attempts at a flat 700ms was a budget, not a wait. Starting from a long transcript - the
+ * guided six-tool chat, say - a single accessibility dump on iOS takes seconds, so the loop spent
+ * its whole allowance mid-navigation and failed with "ios could not reach home-screen" while the
+ * phone was on its way there and arrived moments later. Same defect as the 500ms sleep at the
+ * quick-settings sheet: a timing artefact wearing a capability error's clothes.
+ */
 async function openMobileScreen(ui, { tab, screen, platform }) {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
+  const arrived = async (timeoutMs) =>
+    ui
+      .waitFor(async () => hasLabel(await ui.labels(), screen), {
+        label: `${platform} ${screen}`,
+        timeoutMs,
+        intervalMs: 500,
+      })
+      .then(() => true)
+      .catch(() => false);
+
+  if (await arrived(2_000)) return;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
     const labels = await ui.labels();
     if (hasLabel(labels, screen)) return;
     if (hasLabel(labels, tab)) {
@@ -80,7 +100,7 @@ async function openMobileScreen(ui, { tab, screen, platform }) {
     } else {
       await ui.back().catch(() => undefined);
     }
-    await sleep(700);
+    if (await arrived(6_000)) return;
   }
   throw new Error(`${platform} could not reach ${screen}`);
 }
