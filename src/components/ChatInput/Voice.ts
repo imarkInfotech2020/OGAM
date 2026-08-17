@@ -328,11 +328,6 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
       cancel: () => cancelRef.current(),
     });
   }, []);
-  useEffect(() => {
-    // Facts only. Which phase these add up to - including awaiting-speech outranking recording - is
-    // the controller's to decide, so this and the endpoint cannot disagree about it.
-    recordingController.report({ recording: isRecording, transcribing: isTranscribing });
-  }, [isRecording, isTranscribing]);
 
 
 

@@ -27,6 +27,8 @@
  * hero says "Listening" and offers to cancel, not "Recording - tap to stop" over an empty turn - and
  * this owner exists precisely so one truth drives every surface.
  */
+import { voiceSession } from './voiceSession';
+
 export type RecordPhase = 'idle' | 'listening' | 'recording' | 'transcribing';
 
 interface RecordingHandlers {
@@ -37,20 +39,8 @@ interface RecordingHandlers {
 
 type Listener = (phase: RecordPhase) => void;
 
-/** What the recorder reports. The phase is DERIVED from these and never written from outside. */
-interface RecordingFacts {
-  /** The recorder is open and capturing to a file. */
-  recording: boolean;
-  /** Hands-free: capturing, but nobody has spoken yet, so the turn has not begun. */
-  awaitingSpeech: boolean;
-  transcribing: boolean;
-}
-
 class RecordingController {
-  private phase: RecordPhase = 'idle';
-  private facts: RecordingFacts = { recording: false, awaitingSpeech: false, transcribing: false };
   private handlers: RecordingHandlers | null = null;
-  private readonly listeners = new Set<Listener>();
 
   /** The active recorder registers its concrete start/stop/cancel. Returns an
    *  unregister fn (call on unmount) so a stale recorder never receives intents. */
@@ -61,49 +51,35 @@ class RecordingController {
     };
   }
 
-  getPhase(): RecordPhase {
-    return this.phase;
-  }
-
   isRecording(): boolean {
     // Listening counts: the microphone IS open, so anything asking "are we capturing" must say yes -
     // otherwise a second tap starts a second recording, which is the bug this owner exists to stop.
-    return this.phase === 'recording' || this.phase === 'listening';
+    return voiceSession.micShouldBeOpen();
   }
 
   /**
-   * The recorder reports FACTS; this owner derives the phase from them.
+   * Derived from the session, never stored.
    *
-   * It used to take a phase directly, and two callers each computed one - the endpoint wrote
-   * listening/recording while the recorder wrote all four - so they disagreed and whoever ran last
-   * won. Facts cannot disagree: they are different fields.
+   * This used to hold its own phase and its own facts, which made it a SECOND state machine beside the
+   * voice session - two answers to "what is happening", kept in step by hand. It now owns only INTENTS:
+   * every microphone in the app dispatches start/stop/cancel here, and there is exactly one place that
+   * knows which recorder they reach.
    */
-  report(update: Partial<RecordingFacts>): void {
-    this.facts = { ...this.facts, ...update };
-    const derived = this.derive();
-    if (derived === this.phase) return;
-    this.phase = derived;
-    for (const l of this.listeners) l(derived);
-  }
-
-  private derive(): RecordPhase {
-    // Awaiting speech wins over recording: hands-free opens the recorder BEFORE the turn begins, so
-    // `recording` is already true while nobody has spoken, and saying "recording" then would tell
-    // someone their words are being captured before anything is listening for them.
-    if (this.facts.awaitingSpeech) return 'listening';
-    if (this.facts.recording) return 'recording';
-    if (this.facts.transcribing) return 'transcribing';
+  getPhase(): RecordPhase {
+    const { state, phase } = voiceSession.current();
+    if (state === 'listen') return phase === 'recording' ? 'recording' : 'listening';
+    if (state === 'speak') return phase === 'transcribing' ? 'transcribing' : 'recording';
     return 'idle';
   }
 
+  /** Forwards the SESSION's changes, so a surface subscribing here cannot see a different story. */
   subscribe(listener: Listener): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return voiceSession.subscribe(() => listener(this.getPhase()));
   }
 
   /** Start recording if idle. Decision is made from the authoritative phase. */
   start(): void {
-    if (this.phase !== 'idle' || !this.handlers) return;
+    if (this.getPhase() !== 'idle' || !this.handlers) return;
     void this.handlers.start();
   }
 
@@ -119,8 +95,8 @@ class RecordingController {
    *  starting a second recording (the hero tap-to-stop bug). Ignored while
    *  transcribing (the stop already happened). */
   toggle(): void {
-    if (this.phase === 'recording' || this.phase === 'listening') this.stop();
-    else if (this.phase === 'idle') this.start();
+    if (this.isRecording()) this.stop();
+    else if (this.getPhase() === 'idle') this.start();
   }
 
   cancel(): void {
@@ -128,11 +104,9 @@ class RecordingController {
     this.handlers.cancel();
   }
 
-  /** Test helper. */
+  /** Test helper. Only handlers are ours to forget; the phase belongs to the session. */
   _reset(): void {
-    this.phase = 'idle';
     this.handlers = null;
-    this.listeners.clear();
   }
 }
 

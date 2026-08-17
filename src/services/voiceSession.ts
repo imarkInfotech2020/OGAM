@@ -60,6 +60,12 @@ export const voiceSession = {
     for (const listener of listeners) listener(session);
   },
 
+  /** Test helper: module state outlives a test file, so each test needs a clean session. */
+  _resetForTesting(): void {
+    session = initialVoiceSession(handsFree());
+    listeners.clear();
+  },
+
   subscribe(listener: Listener): () => void {
     listeners.add(listener);
     return () => listeners.delete(listener);

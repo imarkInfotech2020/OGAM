@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react';
 import { useAppStore } from '../../stores';
-import { recordingController } from '../../services/recordingController';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { SpeechEndpointTimer, SPEECH_ONSET_LOOKBACK_MS } from '@offgrid/speech';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
@@ -53,7 +52,6 @@ export function useSilenceEndpoint(opts: {
   const stop = (): void => {
     awaitingRef.current = false;
     setIsAwaitingSpeech(false);
-    recordingController.report({ awaitingSpeech: false });
     endpointRef.current?.cancel();
     endpointRef.current = null;
     levelsOffRef.current?.();
@@ -84,9 +82,6 @@ export function useSilenceEndpoint(opts: {
     if (handsFree) {
       awaitingRef.current = true;
       setIsAwaitingSpeech(true);
-      // A fact, not a phase: recordingController derives what the hero and composer show, so this
-      // file never needs to know either exists.
-      recordingController.report({ awaitingSpeech: true });
     }
 
     const endpoint = new SpeechEndpointTimer(() => {
@@ -118,8 +113,7 @@ export function useSilenceEndpoint(opts: {
           callHook(HOOKS.audioStop);
         }
         setIsAwaitingSpeech(false);
-        recordingController.report({ awaitingSpeech: false });
-      }
+          }
     });
   };
 
