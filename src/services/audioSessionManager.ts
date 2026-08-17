@@ -20,13 +20,21 @@ import logger from '../utils/logger';
 type AudioSessionMode = 'playback' | 'record';
 
 /**
- * The mode the record session runs in, named ONCE.
+ * The mode the record session runs in when the mic must hear through our own speaker.
  *
- * `videoChat` runs iOS voice-processing I/O - hardware echo cancellation, so the mic does not hear our
- * own speaker - and selects the built-in speaker. (voiceChat cancels too but is the HANDSET mode: iOS
- * routes it to the receiver and playback went silent on device.)
+ * `videoChat` runs iOS voice-processing I/O - hardware echo cancellation - and selects the built-in
+ * speaker. (voiceChat cancels too but is the HANDSET mode: iOS routes it to the receiver, which made
+ * playback silent.)
+ *
+ * Used ONLY when something actually needs to listen while the assistant talks, because voice
+ * processing applies to OUTPUT as well as input: it degrades TTS, and `ensurePlayback` deliberately
+ * leaves an active record session alone, so one recorded turn would otherwise leave every later
+ * playback voice-processed. That is exactly how TTS went silent on device.
  */
-const RECORD_SESSION_MODE = 'videoChat';
+const ECHO_CANCELLING_RECORD_MODE = 'videoChat' as const;
+
+/** The mode for an ordinary recorded turn: nothing is playing, so nothing needs cancelling. */
+const PLAIN_RECORD_MODE = 'default' as const;
 
 /** iOS modes that run voice-processing I/O, and therefore cancel our output from the mic. */
 const ECHO_CANCELLING_MODES = new Set(['voiceChat', 'videoChat', 'gameChat']);
@@ -34,6 +42,9 @@ const ECHO_CANCELLING_MODES = new Set(['voiceChat', 'videoChat', 'gameChat']);
 class AudioSessionManager {
   /** The category currently applied to the AVAudioSession (null = never set). */
   private mode: AudioSessionMode | null = null;
+  /** Whether the NEXT record session should cancel our own output from the mic. Off by default: it
+   *  costs playback quality, so only a turn that listens through the speaker asks for it. */
+  private wantEchoCancellation = false;
 
   /** Serializes the check-then-apply of every session op so a mode guard is never
    *  evaluated against a stale value. Without this, a concurrent ensurePlayback +
@@ -57,7 +68,22 @@ class AudioSessionManager {
    */
   isEchoCancelled(): boolean {
     if (Platform.OS !== 'ios') return false;
-    return ECHO_CANCELLING_MODES.has(RECORD_SESSION_MODE);
+    return ECHO_CANCELLING_MODES.has(this.recordMode());
+  }
+
+  /**
+   * Ask for (or drop) echo cancellation on the next record session.
+   *
+   * Hands-free needs it - its mic is open while the assistant speaks. Nothing else does, and paying
+   * for it everywhere is what silenced TTS: voice processing shapes output too, and an active record
+   * session is left alone by ensurePlayback, so the mode outlived the turn that wanted it.
+   */
+  setEchoCancellation(enabled: boolean): void {
+    this.wantEchoCancellation = enabled;
+  }
+
+  private recordMode(): typeof ECHO_CANCELLING_RECORD_MODE | typeof PLAIN_RECORD_MODE {
+    return this.wantEchoCancellation ? ECHO_CANCELLING_RECORD_MODE : PLAIN_RECORD_MODE;
   }
 
   /** The mode last applied (testing/diagnostics). */
@@ -170,7 +196,7 @@ class AudioSessionManager {
         // the same cancellation from Oboe's VoiceCommunication input preset (patched).
         AudioManager.setAudioSessionOptions({
           iosCategory: 'playAndRecord',
-          iosMode: RECORD_SESSION_MODE,
+          iosMode: this.recordMode(),
           iosOptions: ['defaultToSpeaker', 'allowBluetoothHFP'],
         });
       }

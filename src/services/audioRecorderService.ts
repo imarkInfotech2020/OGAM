@@ -37,7 +37,21 @@ class AudioRecorderService {
    * react-native-audio-api, whose default preset (VoiceRecognition) deliberately disables AEC.
    */
   isEchoCancelled(): boolean {
-    return Platform.OS === 'ios' ? audioSessionManager.isEchoCancelled() : true;
+    // FALSE on both platforms, deliberately, and the reason is not a missing setting.
+    //
+    // An AVAudioSession MODE is only a hint. Real cancellation needs the voice-processing I/O unit to
+    // drive INPUT and OUTPUT together, so it has a reference signal for what the speaker is playing.
+    // Our TTS plays through an ordinary AudioContext, which that unit never sees - so on device the
+    // mic recorded the assistant, speech detection fired on the assistant's own voice, and the
+    // assistant cut itself off mid-sentence.
+    //
+    // Android is the same story from the other end: Oboe's VoiceCommunication preset asks the platform
+    // for a cancelling capture source, but our playback does not go out through that path either.
+    //
+    // Kept as a question with a single owner rather than deleted: when playback and capture share a
+    // voice-processing engine, this returns true and hands-free can listen through the assistant with
+    // no other change. Until then it waits for the assistant to finish, which is honest and works.
+    return false;
   }
 
   onAudioLevel(listener: AudioLevelListener): () => void {
