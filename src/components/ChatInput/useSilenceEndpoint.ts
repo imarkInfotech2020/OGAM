@@ -52,6 +52,7 @@ export function useSilenceEndpoint(opts: {
   const stop = (): void => {
     awaitingRef.current = false;
     setIsAwaitingSpeech(false);
+    recordingController.report({ awaitingSpeech: false });
     endpointRef.current?.cancel();
     endpointRef.current = null;
     levelsOffRef.current?.();
@@ -76,9 +77,9 @@ export function useSilenceEndpoint(opts: {
     if (handsFree) {
       awaitingRef.current = true;
       setIsAwaitingSpeech(true);
-      // recordingController is the one owner of record phase, so the hero can say "Listening"
-      // without this file knowing the hero exists.
-      recordingController.setPhase('listening');
+      // A fact, not a phase: recordingController derives what the hero and composer show, so this
+      // file never needs to know either exists.
+      recordingController.report({ awaitingSpeech: true });
     }
 
     const endpoint = new SpeechEndpointTimer(() => {
@@ -107,7 +108,7 @@ export function useSilenceEndpoint(opts: {
           callHook(HOOKS.audioStop);
         }
         setIsAwaitingSpeech(false);
-        recordingController.setPhase('recording');
+        recordingController.report({ awaitingSpeech: false });
       }
     });
   };

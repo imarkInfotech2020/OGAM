@@ -22,7 +22,7 @@ describe('recordingController', () => {
   it('toggle() stops when recording (does not start a second recording)', () => {
     const h = handlers();
     recordingController.registerHandlers(h);
-    recordingController.setPhase('recording');
+    recordingController.report({ recording: true });
     recordingController.toggle();
     expect(h.stop).toHaveBeenCalledTimes(1);
     expect(h.start).not.toHaveBeenCalled();
@@ -31,7 +31,7 @@ describe('recordingController', () => {
   it('toggle() is a no-op while transcribing (the stop already happened)', () => {
     const h = handlers();
     recordingController.registerHandlers(h);
-    recordingController.setPhase('transcribing');
+    recordingController.report({ recording: false, transcribing: true });
     recordingController.toggle();
     expect(h.start).not.toHaveBeenCalled();
     expect(h.stop).not.toHaveBeenCalled();
@@ -44,7 +44,7 @@ describe('recordingController', () => {
     expect(h.stop).not.toHaveBeenCalled();
     recordingController.start();
     expect(h.start).toHaveBeenCalledTimes(1);
-    recordingController.setPhase('recording');
+    recordingController.report({ recording: true });
     recordingController.start(); // already recording → ignored
     expect(h.start).toHaveBeenCalledTimes(1);
   });
@@ -52,10 +52,10 @@ describe('recordingController', () => {
   it('notifies subscribers on phase transitions only', () => {
     const seen: string[] = [];
     recordingController.subscribe((p) => seen.push(p));
-    recordingController.setPhase('recording');
-    recordingController.setPhase('recording'); // no change → no notify
-    recordingController.setPhase('transcribing');
-    recordingController.setPhase('idle');
+    recordingController.report({ recording: true });
+    recordingController.report({ recording: true }); // no change → no notify
+    recordingController.report({ recording: false, transcribing: true });
+    recordingController.report({ recording: false, awaitingSpeech: false, transcribing: false });
     expect(seen).toEqual(['recording', 'transcribing', 'idle']);
   });
 
@@ -69,7 +69,7 @@ describe('recordingController', () => {
 
   it('exposes isRecording from the authoritative phase', () => {
     expect(recordingController.isRecording()).toBe(false);
-    recordingController.setPhase('recording');
+    recordingController.report({ recording: true });
     expect(recordingController.isRecording()).toBe(true);
   });
 });

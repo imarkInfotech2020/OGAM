@@ -19,6 +19,18 @@ import logger from '../utils/logger';
 
 type AudioSessionMode = 'playback' | 'record';
 
+/**
+ * The mode the record session runs in, named ONCE.
+ *
+ * `videoChat` runs iOS voice-processing I/O - hardware echo cancellation, so the mic does not hear our
+ * own speaker - and selects the built-in speaker. (voiceChat cancels too but is the HANDSET mode: iOS
+ * routes it to the receiver and playback went silent on device.)
+ */
+const RECORD_SESSION_MODE = 'videoChat';
+
+/** iOS modes that run voice-processing I/O, and therefore cancel our output from the mic. */
+const ECHO_CANCELLING_MODES = new Set(['voiceChat', 'videoChat', 'gameChat']);
+
 class AudioSessionManager {
   /** The category currently applied to the AVAudioSession (null = never set). */
   private mode: AudioSessionMode | null = null;
@@ -33,6 +45,19 @@ class AudioSessionManager {
     const next = this.queue.then(fn, fn);
     this.queue = next.catch(() => {}); // never let a rejection wedge the chain
     return next;
+  }
+
+  /**
+   * Whether the record session cancels our own output from the microphone.
+   *
+   * DERIVED from the mode we actually apply, not asserted: a caller that decides whether it may listen
+   * while the assistant speaks must not carry its own copy of this belief. Change RECORD_SESSION_MODE
+   * back to 'default' and this turns false on its own, instead of leaving someone claiming
+   * cancellation that is no longer configured.
+   */
+  isEchoCancelled(): boolean {
+    if (Platform.OS !== 'ios') return false;
+    return ECHO_CANCELLING_MODES.has(RECORD_SESSION_MODE);
   }
 
   /** The mode last applied (testing/diagnostics). */
@@ -145,7 +170,7 @@ class AudioSessionManager {
         // the same cancellation from Oboe's VoiceCommunication input preset (patched).
         AudioManager.setAudioSessionOptions({
           iosCategory: 'playAndRecord',
-          iosMode: 'videoChat',
+          iosMode: RECORD_SESSION_MODE,
           iosOptions: ['defaultToSpeaker', 'allowBluetoothHFP'],
         });
       }

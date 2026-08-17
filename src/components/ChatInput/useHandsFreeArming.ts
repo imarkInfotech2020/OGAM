@@ -3,6 +3,7 @@ import { canArmHandsFreeTurn } from '@offgrid/speech';
 import { useAppStore, useChatStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { recordingController } from '../../services/recordingController';
+import { audioRecorderService } from '../../services/audioRecorderService';
 import logger from '../../utils/logger';
 
 /**
@@ -59,10 +60,9 @@ export function useHandsFreeArming(opts: {
         isTranscribing: isTranscribingRef.current(),
         isGenerating: useChatStore.getState().isStreaming,
         isAssistantSpeaking: callHook<boolean>(HOOKS.audioIsSpeaking) === true,
-        // Both platforms ask the OS to subtract our own output from the mic - iOS via the videoChat
-        // audio-session mode, Android via Oboe's VoiceCommunication input preset - so the mic can
-        // stay open while the assistant talks without recording the assistant.
-        echoCancelled: true,
+        // Asked, not assumed: the recorder owns how capture is configured on this platform, so a
+        // session mode changed back cannot leave this claiming a cancellation that is not there.
+        echoCancelled: audioRecorderService.isEchoCancelled(),
       });
       if (!armable) return;
       logger.log('[VAD] hands-free: opening the mic for the next turn');

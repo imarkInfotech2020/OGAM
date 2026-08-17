@@ -37,8 +37,18 @@ interface RecordingHandlers {
 
 type Listener = (phase: RecordPhase) => void;
 
+/** What the recorder reports. The phase is DERIVED from these and never written from outside. */
+interface RecordingFacts {
+  /** The recorder is open and capturing to a file. */
+  recording: boolean;
+  /** Hands-free: capturing, but nobody has spoken yet, so the turn has not begun. */
+  awaitingSpeech: boolean;
+  transcribing: boolean;
+}
+
 class RecordingController {
   private phase: RecordPhase = 'idle';
+  private facts: RecordingFacts = { recording: false, awaitingSpeech: false, transcribing: false };
   private handlers: RecordingHandlers | null = null;
   private readonly listeners = new Set<Listener>();
 
@@ -61,11 +71,29 @@ class RecordingController {
     return this.phase === 'recording' || this.phase === 'listening';
   }
 
-  /** The recorder reports lifecycle transitions here — the SINGLE writer of phase. */
-  setPhase(phase: RecordPhase): void {
-    if (phase === this.phase) return;
-    this.phase = phase;
-    for (const l of this.listeners) l(phase);
+  /**
+   * The recorder reports FACTS; this owner derives the phase from them.
+   *
+   * It used to take a phase directly, and two callers each computed one - the endpoint wrote
+   * listening/recording while the recorder wrote all four - so they disagreed and whoever ran last
+   * won. Facts cannot disagree: they are different fields.
+   */
+  report(update: Partial<RecordingFacts>): void {
+    this.facts = { ...this.facts, ...update };
+    const derived = this.derive();
+    if (derived === this.phase) return;
+    this.phase = derived;
+    for (const l of this.listeners) l(derived);
+  }
+
+  private derive(): RecordPhase {
+    // Awaiting speech wins over recording: hands-free opens the recorder BEFORE the turn begins, so
+    // `recording` is already true while nobody has spoken, and saying "recording" then would tell
+    // someone their words are being captured before anything is listening for them.
+    if (this.facts.awaitingSpeech) return 'listening';
+    if (this.facts.recording) return 'recording';
+    if (this.facts.transcribing) return 'transcribing';
+    return 'idle';
   }
 
   subscribe(listener: Listener): () => void {
@@ -79,9 +107,10 @@ class RecordingController {
     void this.handlers.start();
   }
 
-  /** Stop the in-flight recording (no-op unless actually recording). */
+  /** Stop the in-flight recording. Listening counts: the mic is open, so stop must reach it -
+   *  toggle() offered to stop a listening turn and this refused it. */
   stop(): void {
-    if (this.phase !== 'recording' || !this.handlers) return;
+    if (!this.isRecording() || !this.handlers) return;
     void this.handlers.stop();
   }
 

@@ -23,6 +23,23 @@ class AudioRecorderService {
    *
    * Returns an unsubscribe. Samples are reduced to one number here and never leave this service.
    */
+  /**
+   * Whether the platform is subtracting our own output from the microphone.
+   *
+   * The recorder answers this because it is what configures capture on each platform - iOS through the
+   * record session's mode, Android through Oboe's input preset. Callers that decide whether the mic
+   * may stay open while the assistant speaks ask HERE rather than hardcoding a belief about the
+   * platform, which is how a reverted session mode would otherwise become an assistant that
+   * interrupts itself with its own voice.
+   *
+   * Android: Oboe opens the input with the VoiceCommunication preset, which maps to
+   * VOICE_COMMUNICATION - a capture source the platform must back with an echo canceller. Patched into
+   * react-native-audio-api, whose default preset (VoiceRecognition) deliberately disables AEC.
+   */
+  isEchoCancelled(): boolean {
+    return Platform.OS === 'ios' ? audioSessionManager.isEchoCancelled() : true;
+  }
+
   onAudioLevel(listener: AudioLevelListener): () => void {
     this.levelListeners.add(listener);
     if (this.recorder && this.isRecording) this.attachLevelCallback(this.recorder);

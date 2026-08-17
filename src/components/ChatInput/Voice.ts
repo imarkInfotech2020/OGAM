@@ -319,19 +319,10 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     });
   }, []);
   useEffect(() => {
-    // Awaiting-speech wins: hands-free opens the recorder BEFORE the turn begins, so isRecording is
-    // true while nobody has spoken yet. Reporting "recording" then would tell the person their words
-    // are being captured before anything is listening for them.
-    recordingController.setPhase(
-      silence.isAwaitingSpeech
-        ? 'listening'
-        : isRecording
-          ? 'recording'
-          : isTranscribing
-            ? 'transcribing'
-            : 'idle',
-    );
-  }, [isRecording, isTranscribing, silence.isAwaitingSpeech]);
+    // Facts only. Which phase these add up to - including awaiting-speech outranking recording - is
+    // the controller's to decide, so this and the endpoint cannot disagree about it.
+    recordingController.report({ recording: isRecording, transcribing: isTranscribing });
+  }, [isRecording, isTranscribing]);
 
 
   useEffect(() => {
