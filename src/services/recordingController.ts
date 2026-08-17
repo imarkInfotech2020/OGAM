@@ -20,7 +20,14 @@
  */
 
 /** Explicit record lifecycle. `transcribing` is the post-stop window (whisper running). */
-export type RecordPhase = 'idle' | 'recording' | 'transcribing';
+/**
+ * 'listening' is hands-free before anyone has spoken: the microphone is open, the turn has NOT begun.
+ *
+ * A distinct phase rather than a flag on 'recording', because the difference is user-visible - the
+ * hero says "Listening" and offers to cancel, not "Recording - tap to stop" over an empty turn - and
+ * this owner exists precisely so one truth drives every surface.
+ */
+export type RecordPhase = 'idle' | 'listening' | 'recording' | 'transcribing';
 
 interface RecordingHandlers {
   start: () => void | Promise<void>;
@@ -49,7 +56,9 @@ class RecordingController {
   }
 
   isRecording(): boolean {
-    return this.phase === 'recording';
+    // Listening counts: the microphone IS open, so anything asking "are we capturing" must say yes -
+    // otherwise a second tap starts a second recording, which is the bug this owner exists to stop.
+    return this.phase === 'recording' || this.phase === 'listening';
   }
 
   /** The recorder reports lifecycle transitions here — the SINGLE writer of phase. */
@@ -81,7 +90,7 @@ class RecordingController {
    *  starting a second recording (the hero tap-to-stop bug). Ignored while
    *  transcribing (the stop already happened). */
   toggle(): void {
-    if (this.phase === 'recording') this.stop();
+    if (this.phase === 'recording' || this.phase === 'listening') this.stop();
     else if (this.phase === 'idle') this.start();
   }
 

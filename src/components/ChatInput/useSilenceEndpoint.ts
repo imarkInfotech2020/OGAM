@@ -1,0 +1,90 @@
+import { useRef, useState } from 'react';
+import { useAppStore } from '../../stores';
+import { recordingController } from '../../services/recordingController';
+import { audioRecorderService } from '../../services/audioRecorderService';
+import { SpeechEndpointTimer } from '@offgrid/speech';
+import logger from '../../utils/logger';
+
+/**
+ * When a spoken turn begins and when it ends.
+ *
+ * Its own hook because it is its own question. useVoiceInput owns the recorder lifecycle - permission,
+ * start, stop, transcribe, send - and "has this person finished talking" is a decision about audio
+ * that happens to interrupt that lifecycle. Keeping them apart is also what keeps useVoiceInput under
+ * the function-length limit, but the reason is the concern, not the line count.
+ *
+ * Wired to the FILE-recording path deliberately: that is what the record button actually takes.
+ * audioRecorderService records to a file and transcribeFile produces the transcript afterwards. The
+ * realtime whisper API is a different path that voice mode never calls - instrumenting it produced no
+ * logs at all, which cost hours.
+ */
+export interface SilenceEndpoint {
+  /** Begin watching the room. No-op unless voice mode and the setting allow it. */
+  listen: () => void;
+  /** Stop watching, however the turn ended. Safe to call when not listening. */
+  stop: () => void;
+  /** Hands-free only: the microphone is open but nobody has spoken, so the turn has not begun. */
+  isAwaitingSpeech: boolean;
+}
+
+export function useSilenceEndpoint(opts: {
+  /** Voice mode only - chat dictation must never be auto-stopped. */
+  isInAudioInterfaceMode: () => boolean;
+  /** The SAME stop the button runs, so a turn finalises identically however it ended. */
+  stopTurn: () => void;
+}): SilenceEndpoint {
+  const endpointRef = useRef<SpeechEndpointTimer | null>(null);
+  const levelsOffRef = useRef<(() => void) | null>(null);
+  const [isAwaitingSpeech, setIsAwaitingSpeech] = useState(false);
+
+  const stop = (): void => {
+    setIsAwaitingSpeech(false);
+    endpointRef.current?.cancel();
+    endpointRef.current = null;
+    levelsOffRef.current?.();
+    levelsOffRef.current = null;
+  };
+
+  const listen = (): void => {
+    stop();
+    // VOICE MODE ONLY. Chat-mode dictation is someone typing with their voice - they pause to think
+    // mid-sentence and expect the recorder to wait. Ending that turn on silence would cut them off.
+    if (!opts.isInAudioInterfaceMode()) return;
+
+    // Read at the START of each turn, so changing the setting takes effect on the very next turn
+    // rather than needing a reload.
+    const mode = useAppStore.getState().settings.voiceTurnMode ?? 'silence';
+    if (mode === 'tap') {
+      logger.log('[VAD] voice turns are tap-to-talk; not listening for silence');
+      return;
+    }
+    const handsFree = mode === 'handsfree';
+
+    if (handsFree) {
+      setIsAwaitingSpeech(true);
+      // recordingController is the one owner of record phase, so the hero can say "Listening"
+      // without this file knowing the hero exists.
+      recordingController.setPhase('listening');
+    }
+
+    const endpoint = new SpeechEndpointTimer(() => {
+      logger.log('[VAD] silence detected - ending the turn');
+      stop();
+      // Deferred off the audio callback: stopping the recorder from inside its own buffer callback
+      // tears down native state that the callback is still standing on.
+      setTimeout(() => opts.stopTurn(), 0);
+    }, line => logger.log(line));
+    endpointRef.current = endpoint;
+    endpoint.begin(Date.now(), { handsFree });
+    levelsOffRef.current = audioRecorderService.onAudioLevel(rms => {
+      const reading = endpoint.observeLevel(rms);
+      // The moment speech is first heard, the turn has genuinely begun.
+      if (handsFree && reading.speech) {
+        setIsAwaitingSpeech(false);
+        recordingController.setPhase('recording');
+      }
+    });
+  };
+
+  return { listen, stop, isAwaitingSpeech };
+}

@@ -5,9 +5,8 @@ import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
-import { SpeechEndpointTimer } from '../../services/speechEndpoint';
-import { useAppStore } from '../../stores';
 import { recordingController } from '../../services/recordingController';
+import { useSilenceEndpoint } from './useSilenceEndpoint';
 import { resolveTranscription } from './transcriptionOutcome';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
 import logger from '../../utils/logger';
@@ -31,6 +30,8 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   const { downloadedModelId } = useWhisperStore();
   const [isDirectRecording, setIsDirectRecording] = useState(false);
   const [isAudioModeRecording, setIsAudioModeRecording] = useState(false);
+  /** Hands-free: the mic is open but nobody has spoken yet, so the turn has not begun. */
+
   const [isTranscribingFile, setIsTranscribingFile] = useState(false);
   const [directError, setDirectError] = useState<string | null>(null);
 
@@ -77,49 +78,13 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // voiceAvailable: direct audio OR whisper downloaded
   const voiceAvailable = supportsDirectAudio() || !!downloadedModelId;
 
-  /**
-   * Ends a turn when the room goes quiet.
-   *
-   * Wired HERE because this is the path the record button actually takes: audioRecorderService
-   * records to a file and transcribeFile produces the transcript afterwards. The realtime API is a
-   * different path that voice mode never calls - instrumenting it produced no logs at all.
-   *
-   * AUTO_STOP is off while the audio side is being proven. With it off this only observes and logs,
-   * so a wrong threshold cannot end a turn early and nothing runs during recorder teardown.
-   */
-  const endpointRef = useRef<SpeechEndpointTimer | null>(null);
-  const levelsOffRef = useRef<(() => void) | null>(null);
-
-  const stopListeningForSilence = () => {
-    endpointRef.current?.cancel();
-    endpointRef.current = null;
-    levelsOffRef.current?.();
-    levelsOffRef.current = null;
-  };
-
-  const listenForSilence = () => {
-    stopListeningForSilence();
-    // VOICE MODE ONLY. Chat-mode dictation is the user typing with their voice - they pause to think
-    // mid-sentence and expect the recording to wait for them. Ending that turn on silence would cut
-    // people off while they are still composing.
-    if (!isInAudioInterfaceMode()) return;
-    // Read at the START of each turn, so toggling the setting takes effect on the very next turn
-    // rather than needing a reload.
-    if (useAppStore.getState().settings.autoStopOnSilence === false) {
-      logger.log('[VAD] stop-on-silence is off in settings');
-      return;
-    }
-    const endpoint = new SpeechEndpointTimer(() => {
-      logger.log('[VAD] silence detected - ending the turn');
-      stopListeningForSilence();
-      // Deferred off the audio callback: stopping the recorder from inside its own buffer
-      // callback tears down native state that the callback is still standing on.
-      setTimeout(() => { void stopRef.current(); }, 0);
-    });
-    endpointRef.current = endpoint;
-    endpoint.begin();
-    levelsOffRef.current = audioRecorderService.onAudioLevel(rms => endpoint.observeLevel(rms));
-  };
+  const silence = useSilenceEndpoint({
+    isInAudioInterfaceMode,
+    // stopRef is assigned below and kept current every render, so this is never a stale closure.
+    stopTurn: () => void stopRef.current(),
+  });
+  const listenForSilence = silence.listen;
+  const stopListeningForSilence = silence.stop;
 
   const startRecording = async () => {
     recordingConversationIdRef.current = conversationId || null;
@@ -338,6 +303,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
 
   return {
     isRecording,
+    isAwaitingSpeech: silence.isAwaitingSpeech,
     isModelLoading,
     isTranscribing,
     partialResult,

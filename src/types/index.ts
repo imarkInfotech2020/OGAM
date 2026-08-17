@@ -371,6 +371,15 @@ export interface ONNXImageModel {
 export type ImageGenerationMode = 'auto' | 'manual';
 export type AutoDetectMethod = 'pattern' | 'llm';
 export type CacheType = 'f16' | 'q8_0' | 'q4_0';
+
+/**
+ * How a voice turn begins and ends. Re-exported from @offgrid/speech, which OWNS it - desktop renders
+ * the same modes, so a second definition here is how the two would drift.
+ *
+ * Voice mode only. Chat dictation is someone typing with their voice - they pause to think, and the
+ * recorder must wait for them - so it always behaves as 'tap' regardless of this.
+ */
+export type { VoiceTurnMode } from '@offgrid/speech';
 export type InferenceBackend = 'cpu' | 'opencl' | 'htp' | 'metal';
 export type LiteRTBackend = 'cpu' | 'gpu' | 'npu';
 export const INFERENCE_BACKENDS = {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAppStore } from '../../stores';
-import { SegmentedRow, BOOL_OPTIONS } from './segmentedRow';
+import { VOICE_TURN_LABELS, type VoiceTurnMode } from '@offgrid/speech';
+import { SegmentedRow } from './segmentedRow';
 
 /**
  * Voice-input settings.
@@ -10,22 +11,33 @@ import { SegmentedRow, BOOL_OPTIONS } from './segmentedRow';
  */
 
 /**
- * Whether a spoken turn ends itself when the room goes quiet.
+ * How a spoken turn begins and ends.
+ *
+ * Three states, not a toggle, and labelled by what HAPPENS rather than by the technique: "VAD" means
+ * nothing to the person choosing it.
  *
  * Voice mode only. Chat dictation is someone typing with their voice - they pause to think
- * mid-sentence and expect the recorder to wait, so it is never auto-stopped.
+ * mid-sentence and expect the recorder to wait - so it always behaves as 'tap'.
  */
+// Names and descriptions come from @offgrid/speech, which owns them: desktop renders the same three
+// modes, and two settings screens describing one mode differently is the drift this prevents.
+const VOICE_TURN_ORDER: VoiceTurnMode[] = ['tap', 'silence', 'handsfree'];
+const VOICE_TURN_OPTIONS = VOICE_TURN_ORDER.map(id => ({
+  id,
+  label: VOICE_TURN_LABELS[id].label,
+}));
+
 export const VoiceActivityDetectionToggle: React.FC = () => {
   const { settings, updateSettings } = useAppStore();
-  const on = settings.autoStopOnSilence !== false;
+  const current = settings.voiceTurnMode ?? 'silence';
   return (
-    <SegmentedRow<'off' | 'on'>
-      label="Stop on silence"
-      description="In voice mode, end the turn when you stop speaking instead of tapping stop"
-      options={BOOL_OPTIONS}
-      current={on ? 'on' : 'off'}
-      onSelect={(id) => updateSettings({ autoStopOnSilence: id === 'on' })}
-      testIdFor={(id) => `vad-auto-stop-${id}-button`}
+    <SegmentedRow<VoiceTurnMode>
+      label="Voice turns"
+      description={VOICE_TURN_LABELS[current].description}
+      options={VOICE_TURN_OPTIONS}
+      current={current}
+      onSelect={(id) => updateSettings({ voiceTurnMode: id })}
+      testIdFor={(id) => `voice-turn-${id}-button`}
     />
   );
 };
