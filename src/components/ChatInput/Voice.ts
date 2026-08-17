@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
-import { useWhisperStore, useUiModeStore } from '../../stores';
+import { useWhisperStore, useUiModeStore, useChatStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { trimWavFront } from '../../services/wavTrimmer';
 import { whisperService } from '../../services/whisperService';
 import { recordingController } from '../../services/recordingController';
+import { conversationFloor } from '../../services/conversationFloor';
 import { useSilenceEndpoint } from './useSilenceEndpoint';
 import { useHandsFreeArming } from './useHandsFreeArming';
 import { resolveTranscription } from './transcriptionOutcome';
@@ -30,6 +31,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   const onAutoSendRef = useRef(onAutoSend);
   onAutoSendRef.current = onAutoSend;
   const { downloadedModelId } = useWhisperStore();
+  const isStreaming = useChatStore(state => state.isStreaming);
   const [isDirectRecording, setIsDirectRecording] = useState(false);
   const [isAudioModeRecording, setIsAudioModeRecording] = useState(false);
   /** Hands-free: the mic is open but nobody has spoken yet, so the turn has not begun. */
@@ -82,10 +84,8 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
 
   const handsFree = useHandsFreeArming({
     isInAudioInterfaceMode,
-    isTranscribing: () => isTranscribingRef.current,
     // No silencing: opening the mic must never stop speech that is already playing.
     startTurn: () => void startRef.current({ silenceAssistant: false }),
-    abandonTurn: () => void cancelRef.current(),
   });
   const silence = useSilenceEndpoint({
     isInAudioInterfaceMode,
@@ -323,7 +323,16 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     // Facts only. Which phase these add up to - including awaiting-speech outranking recording - is
     // the controller's to decide, so this and the endpoint cannot disagree about it.
     recordingController.report({ recording: isRecording, transcribing: isTranscribing });
+    // The same facts, to the owner of WHO HOLDS the conversation. The mic being open is the person's
+    // turn; transcription is the start of the assistant's, and the floor must not go free between them.
+    conversationFloor.report({ micOpen: isRecording, transcribing: isTranscribing });
   }, [isRecording, isTranscribing]);
+
+  // Generation is the middle of the assistant's turn. Reported here rather than sampled, so the floor
+  // is held from the last token of the person's speech to the last word of the reply.
+  useEffect(() => {
+    conversationFloor.report({ generating: isStreaming });
+  }, [isStreaming]);
 
 
   useEffect(() => {
