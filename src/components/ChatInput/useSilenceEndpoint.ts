@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useAppStore } from '../../stores';
 import { recordingController } from '../../services/recordingController';
 import { audioRecorderService } from '../../services/audioRecorderService';
-import { SpeechEndpointTimer } from '@offgrid/speech';
+import { SpeechEndpointTimer, SPEECH_ONSET_LOOKBACK_MS } from '@offgrid/speech';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import logger from '../../utils/logger';
 
@@ -26,6 +26,9 @@ export interface SilenceEndpoint {
   stop: () => void;
   /** Hands-free only: the microphone is open but nobody has spoken, so the turn has not begun. */
   isAwaitingSpeech: boolean;
+  /** Seconds of recording before the person actually started speaking, already offset by the
+   *  detection delay. 0 when nothing was heard or the mode never waited. */
+  silenceBeforeSpeech: () => number;
 }
 
 export function useSilenceEndpoint(opts: {
@@ -42,6 +45,9 @@ export function useSilenceEndpoint(opts: {
   const [isAwaitingSpeech, setIsAwaitingSpeech] = useState(false);
   /** Latched for the turn: barge-in fires once on the first speech, not on every loud buffer. */
   const awaitingRef = useRef(false);
+  /** When listening began, and when speech was first confirmed - the two the trim needs. */
+  const listenAtRef = useRef(0);
+  const speechAtRef = useRef(0);
 
   const stop = (): void => {
     awaitingRef.current = false;
@@ -84,13 +90,16 @@ export function useSilenceEndpoint(opts: {
       setTimeout(() => opts.stopTurn(), 0);
     }, line => logger.log(line));
     endpointRef.current = endpoint;
-    endpoint.begin(Date.now(), { handsFree });
+    listenAtRef.current = Date.now();
+    speechAtRef.current = 0;
+    endpoint.begin(listenAtRef.current, { handsFree });
     levelsOffRef.current = audioRecorderService.onAudioLevel(rms => {
       const reading = endpoint.observeLevel(rms);
       // The moment speech is first heard, the turn has genuinely begun.
       if (handsFree && reading.speech) {
         if (awaitingRef.current) {
           awaitingRef.current = false;
+          speechAtRef.current = Date.now();
           // BARGE-IN: the person talking wins. If the assistant is mid-sentence it stops here, which
           // is only safe because iOS voice-processing keeps its voice out of this mic in the first
           // place - otherwise the assistant would interrupt itself.
@@ -103,5 +112,11 @@ export function useSilenceEndpoint(opts: {
     });
   };
 
-  return { listen, stop, isAwaitingSpeech };
+  const silenceBeforeSpeech = (): number => {
+    if (!listenAtRef.current || !speechAtRef.current) return 0;
+    const elapsed = speechAtRef.current - listenAtRef.current - SPEECH_ONSET_LOOKBACK_MS;
+    return elapsed > 0 ? elapsed / 1000 : 0;
+  };
+
+  return { listen, stop, isAwaitingSpeech, silenceBeforeSpeech };
 }

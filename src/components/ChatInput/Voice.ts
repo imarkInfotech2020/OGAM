@@ -4,6 +4,7 @@ import { useWhisperStore, useUiModeStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
+import { trimWavFront } from '../../services/wavTrimmer';
 import { whisperService } from '../../services/whisperService';
 import { recordingController } from '../../services/recordingController';
 import { useSilenceEndpoint } from './useSilenceEndpoint';
@@ -158,9 +159,26 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
 
   // Direct-audio model: after stopping, transcribe and either auto-send (Audio Mode) or
   // attach the transcript (Chat mode). In ANY mode we send a TRANSCRIPT, never raw audio.
+  /**
+   * The recording as the person MEANT it.
+   *
+   * Hands-free opens the mic before anyone speaks, so the file starts with however long they took to
+   * begin. One helper because BOTH stop paths produce the same artifact - a note that plays back and
+   * syncs - and they must not disagree about what it is. The duration comes down with the audio, or
+   * the player would show time the file no longer contains.
+   */
+  const finaliseRecording = async (
+    recorded: { path: string; durationSeconds: number },
+  ): Promise<{ path: string; durationSeconds: number }> => {
+    const lead = silence.silenceBeforeSpeech();
+    if (lead <= 0) return recorded;
+    if (!(await trimWavFront(recorded.path, lead))) return recorded;
+    return { path: recorded.path, durationSeconds: Math.max(0, recorded.durationSeconds - lead) };
+  };
+
   const stopDirectRecording = async () => {
     try {
-      const { path, durationSeconds } = await audioRecorderService.stopRecording();
+      const { path, durationSeconds } = await finaliseRecording(await audioRecorderService.stopRecording());
       setIsDirectRecording(false);
       if (!recordingConversationIdRef.current || recordingConversationIdRef.current === conversationId) {
         const format = audioRecorderService.getFormat();
@@ -206,7 +224,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // Audio Mode with a Whisper model: stop, transcribe the file, then auto-send or attach.
   const stopAudioModeRecording = async () => {
     try {
-      const { path, durationSeconds } = await audioRecorderService.stopRecording();
+      const { path, durationSeconds } = await finaliseRecording(await audioRecorderService.stopRecording());
       setIsAudioModeRecording(false);
       if (recordingConversationIdRef.current && recordingConversationIdRef.current !== conversationId) {
         recordingConversationIdRef.current = null;
