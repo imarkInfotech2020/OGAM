@@ -83,8 +83,9 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   const handsFree = useHandsFreeArming({
     isInAudioInterfaceMode,
     isTranscribing: () => isTranscribingRef.current,
-    // No silencing: the assistant keeps the floor until real speech is heard (barge-in).
+    // No silencing: opening the mic must never stop speech that is already playing.
     startTurn: () => void startRef.current({ silenceAssistant: false }),
+    abandonTurn: () => void cancelRef.current(),
   });
   const silence = useSilenceEndpoint({
     isInAudioInterfaceMode,

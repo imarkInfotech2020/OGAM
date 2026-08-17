@@ -22,6 +22,17 @@ import logger from '../../utils/logger';
 /** How often hands-free checks whether it may listen again. Immediate to a person, free to a CPU. */
 const ARM_POLL_MS = 400;
 
+/**
+ * How many consecutive quiet ticks before the mic opens.
+ *
+ * There is a GAP between generation finishing and speech beginning - nothing is streaming and nothing
+ * is playing yet - and a single-tick check walked straight through it, opened the mic, and then the
+ * assistant started talking into it. Requiring the quiet to persist closes that window, at the cost of
+ * about a second before the mic opens. A person waiting for their turn does not notice; an assistant
+ * being cut off by its own voice is unusable.
+ */
+const SETTLE_TICKS = 4;
+
 export interface HandsFreeArming {
   /** A turn ended because the room went quiet, so the floor may come back automatically. */
   markEndedBySilence: () => void;
@@ -36,8 +47,11 @@ export function useHandsFreeArming(opts: {
   isInAudioInterfaceMode: () => boolean;
   /** Transcription is still running, so the turn is not over. */
   isTranscribing: () => boolean;
-  /** Opens the mic WITHOUT silencing the assistant - barge-in stops it on real speech instead. */
+  /** Opens the mic for a turn nobody asked for out loud yet. */
   startTurn: () => void;
+  /** Throw away an open turn. Used when the assistant starts speaking into a waiting mic: there is
+   *  nothing worth keeping, and keeping it would transcribe the assistant as the person. */
+  abandonTurn: () => void;
 }): HandsFreeArming {
   const endedBySilence = useRef(false);
   /** Latched by a deliberate stop. Without it the poll reopened the mic ~400ms after the stop button,
@@ -49,22 +63,44 @@ export function useHandsFreeArming(opts: {
   startRef.current = opts.startTurn;
   const inVoiceModeRef = useRef(opts.isInAudioInterfaceMode);
   inVoiceModeRef.current = opts.isInAudioInterfaceMode;
+  const abandonRef = useRef(opts.abandonTurn);
+  abandonRef.current = opts.abandonTurn;
+  const quietTicks = useRef(0);
 
   useEffect(() => {
     const tick = setInterval(() => {
       if (suspended.current) return;
+      const assistantSpeaking = callHook<boolean>(HOOKS.audioIsSpeaking) === true;
+
+      // The assistant started talking into a mic that was still waiting for the person. Close it:
+      // without echo cancellation those buffers are the assistant, and treating them as speech is
+      // what cut the assistant off mid-sentence. It re-opens once the assistant has finished.
+      if (assistantSpeaking && recordingController.getPhase() === 'listening') {
+        logger.log('[VAD] assistant is speaking - closing the waiting mic until it finishes');
+        quietTicks.current = 0;
+        abandonRef.current();
+        return;
+      }
+
       const armable = canArmHandsFreeTurn({
         mode: useAppStore.getState().settings.voiceTurnMode ?? 'silence',
         inVoiceMode: inVoiceModeRef.current(),
         isRecording: recordingController.isRecording(),
         isTranscribing: isTranscribingRef.current(),
         isGenerating: useChatStore.getState().isStreaming,
-        isAssistantSpeaking: callHook<boolean>(HOOKS.audioIsSpeaking) === true,
+        isAssistantSpeaking: assistantSpeaking,
         // Asked, not assumed: the recorder owns how capture is configured on this platform, so a
         // session mode changed back cannot leave this claiming a cancellation that is not there.
         echoCancelled: audioRecorderService.isEchoCancelled(),
       });
-      if (!armable) return;
+      if (!armable) {
+        quietTicks.current = 0;
+        return;
+      }
+      // Quiet has to HOLD. One quiet reading is the gap between generation and speech.
+      quietTicks.current += 1;
+      if (quietTicks.current < SETTLE_TICKS) return;
+      quietTicks.current = 0;
       logger.log('[VAD] hands-free: opening the mic for the next turn');
       startRef.current();
     }, ARM_POLL_MS);
