@@ -32,11 +32,14 @@ export function useChatAudioLifecycle(
   navigation: Pick<NavigationProp<RootStackParamList>, 'addListener'>,
 ): void {
   useEffect(() => {
+    // Leaving is unconditional. audioStop deliberately protects a warm-but-idle engine, which is
+    // right at the start of a turn and wrong here: a reply that had not begun playing yet survived the
+    // guard and started speaking into a screen the person had already left.
     const unsubscribeBlur = navigation.addListener('blur', () => {
-      callHook(HOOKS.audioStop);
+      callHook(HOOKS.audioStopForExit);
     });
     const unsubscribeRemove = navigation.addListener('beforeRemove', () => {
-      callHook(HOOKS.audioStop);
+      callHook(HOOKS.audioStopForExit);
     });
     const appStateSubscription = AppState.addEventListener(
       'change',

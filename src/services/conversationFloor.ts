@@ -1,4 +1,5 @@
 import { createConversationFloor } from '@offgrid/speech';
+import logger from '../utils/logger';
 
 /**
  * This app's conversation floor: who holds the turn, the assistant or the person.
@@ -10,4 +11,4 @@ import { createConversationFloor } from '@offgrid/speech';
  *
  * One instance per app, created here so every reporter and listener shares the same floor.
  */
-export const conversationFloor = createConversationFloor();
+export const conversationFloor = createConversationFloor(line => logger.log(line));

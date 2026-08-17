@@ -40,8 +40,13 @@ export const HOOKS = {
   /** () => boolean — whether speech is playing or being generated right now. Hands-free asks before
    *  it re-opens the mic, so the assistant is never recorded as if it were the person talking. */
   audioIsSpeaking: 'audio.isSpeaking',
-  /** () => void — stop any in-progress speech. */
+  /** () => void — stop speech that is running or pending, WITHOUT disturbing an idle engine. Fired at
+   *  the start of a turn to kill stale playback; must stay cheap because it runs constantly. */
   audioStop: 'audio.stop',
+  /** () => void — the person LEFT. Stop and tear down unconditionally: there is no warm engine worth
+   *  protecting for a screen nobody is on, and a guard that reasons about flags is exactly how audio
+   *  kept playing after the chat was closed. */
+  audioStopForExit: 'audio.stopForExit',
   /** (content: string) => void — fired as the assistant message streams; pro
    *  uses it to synthesize/play speech sentence-by-sentence while generation is
    *  still in progress (no-op unless voice mode + engine ready). */
