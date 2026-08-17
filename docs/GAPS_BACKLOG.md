@@ -1116,3 +1116,11 @@ notes below say exactly which part is proven and how.
   machine transitions are pure and typecheck/lint/package tests are clean, but no phone has run them:
   the replay-while-listening contention, the paused-replay hand-back, and the settings rows all need
   the on-device pass.
+- **A sender dying mid-batch leaves the receiver full of zombie rows.** Seen live: desktop was
+  sending a 90-item batch (its log shows one file importing every ~3s, serial); the desktop process
+  was killed mid-batch and Android's Sync activity froze with 35 rows at "Receiving - 0%, 0 B" from
+  the vanished peer. Two defects, both SSOT-shaped: (1) receiver rows are created at OFFER time and
+  nothing reconciles them when the sender disappears - no timeout, no failed transition, they sit
+  "in progress" forever; (2) admission marks the whole batch in-progress up front while transfer is
+  actually serial, so "35 in progress" describes the queue, not the wire. Any crash or quit
+  reproduces this; it does not need a kill.
