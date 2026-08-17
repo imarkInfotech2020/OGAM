@@ -34,6 +34,14 @@ async function takeFloor(
   tapped: boolean,
   tokenRef: { current: TurnToken | null },
 ): Promise<boolean> {
+  // NEVER queue behind ourselves. A person turn already holding the lock means a microphone is
+  // already open, and asking for it again waits for a release that only this turn could perform -
+  // 'person queued behind person' forever, with every tap adding another waiter. A tap in that state
+  // is a request to STOP, which the recording controller handles; there is nothing to start.
+  if (turnLock.holder() === 'person') {
+    logger.log('[TURN] start ignored - a person turn already holds the floor');
+    return false;
+  }
   if (tapped) {
     callHook(HOOKS.audioStop);
     tokenRef.current = await turnLock.acquire('person');
@@ -43,6 +51,13 @@ async function takeFloor(
   if (!token) return false; // someone holds the floor; the listener will offer it again
   tokenRef.current = token;
   return true;
+}
+
+/** Give the floor back. Safe to call on any path, including one that never opened a mic. */
+function dropFloor(tokenRef: { current: TurnToken | null }): void {
+  if (!tokenRef.current) return;
+  turnLock.release(tokenRef.current);
+  tokenRef.current = null;
 }
 
 export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment, onAutoSend }: UseVoiceInputParams) {
@@ -141,6 +156,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
         await audioRecorderService.startRecording();
         listenForSilence();
       } catch (err) {
+        dropFloor(turnTokenRef);
         setIsDirectRecording(false);
         const msg = err instanceof Error ? err.message : 'Recording failed';
         logger.error('[Voice] Direct audio recording error:', err);
@@ -155,6 +171,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
         await audioRecorderService.startRecording();
         listenForSilence();
       } catch (err) {
+        dropFloor(turnTokenRef);
         setIsAudioModeRecording(false);
         const msg = err instanceof Error ? err.message : 'Recording failed';
         logger.error('[Voice] Audio mode recording error:', err);
@@ -163,6 +180,9 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
       return;
     }
 
+    // The whisper path drives its own recorder, so this turn's token would otherwise be held by a
+    // mic this code never opened.
+    dropFloor(turnTokenRef);
     await startWhisperRecording();
   };
 
@@ -288,10 +308,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     // until the person taps for the floor again.
     logger.log('[TURN] stop requested');
     // Released on EVERY stop path, so a mic that closed can never keep the floor.
-    if (turnTokenRef.current) {
-      turnLock.release(turnTokenRef.current);
-      turnTokenRef.current = null;
-    }
+    dropFloor(turnTokenRef);
     handsFree.noteTurnStopped();
     stopListeningForSilence();
     if (isDirectRecording) {
