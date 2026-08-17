@@ -91,12 +91,16 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   const listenForSilence = silence.listen;
   const stopListeningForSilence = silence.stop;
 
-  const startRecording = async () => {
+  const startRecording = async (opts: { silenceAssistant?: boolean } = {}) => {
+    // Taking the floor by TAPPING silences the assistant, as it always did. A hands-free ARM must not:
+    // it opens the mic before the assistant has even started speaking, so stopping speech here killed
+    // autoplay outright. Echo cancellation is what makes the overlap safe, and barge-in stops the
+    // assistant on actual detected speech instead - which is the honest trigger for it.
+    const { silenceAssistant = true } = opts;
     recordingConversationIdRef.current = conversationId || null;
     setDirectError(null);
-    // Stop any TTS playback before recording — mic and speaker shouldn't overlap.
     // No-op without the pro audio feature.
-    callHook(HOOKS.audioStop);
+    if (silenceAssistant) callHook(HOOKS.audioStop);
 
     if (supportsDirectAudio()) {
       try {
@@ -329,7 +333,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
       });
       if (!armable) return;
       logger.log('[VAD] hands-free: opening the mic for the next turn');
-      void startRef.current();
+      void startRef.current({ silenceAssistant: false });
     }, HANDSFREE_ARM_POLL_MS);
     return () => clearInterval(tick);
   }, []);
