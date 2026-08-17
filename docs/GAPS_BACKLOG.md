@@ -1061,9 +1061,25 @@ notes below say exactly which part is proven and how.
   leaves an active record session alone, so one recorded turn in a voice-processing mode left every
   later playback voice-processed. Ordinary turns no longer request it. Guard rows are on the release
   checklist (#202, #203).
-- **The hands-free arm is a 400ms poll**, not an event. Four gating signals live in four places and
-  one (assistant speaking) is behind a pro hook core cannot subscribe to. Works, but the honest shape
-  is a subscription; desktop will need its own tick until then.
+- **THE design gap: speaking and listening are not serialized.** They are one resource with one
+  holder - the assistant or the person, never both - and the code models them as two independent
+  subsystems (TTS state in `pro`, mic phase in core) with a 400ms poll guessing when it is safe. Every
+  fault today came from that: TTS pausing the moment it started (the mic armed in the gap between
+  generation ending and speech beginning), autoplay killed by an arm, the assistant recorded as the
+  person. The settle-ticks and abandon-guard in `useHandsFreeArming` are symptoms, not a design.
+
+  **The shape it wants:** one owner of the floor with event-driven handoff -
+  `assistant speaking → person listening → recording → transcribing → generating → assistant speaking`.
+  Exactly one holder; illegal states (mic open while speaking, two turns at once) become
+  unrepresentable instead of raced against.
+
+  **What forces the poll:** there is no "the assistant finished speaking" EVENT. Core cannot subscribe
+  to pro's TTS state, so `audio.isSpeaking` is a question that must be re-asked. Needs an
+  `audio.onSpeechEnded` hook fired by pro on playback completion, a floor owner in core that serializes
+  transitions, and `useHandsFreeArming` collapsing into a listener on it rather than a timer. Three
+  files, no new behaviour - it makes today's behaviour correct by construction instead of by timing.
+  **Desktop should be wired to the floor owner, not to the poll.**
+
 - **Idle hands-free stalls rather than ends.** The wait for speech is 120s, so two devices left
   pointing at each other both go quiet and it reads as frozen, not finished.
 - **`@offgrid/speech` is a mixed package.** It was a gateway speech client (console/desktop) and now
