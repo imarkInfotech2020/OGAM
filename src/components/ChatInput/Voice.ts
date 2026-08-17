@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
-import { useWhisperStore, useUiModeStore } from '../../stores';
+import { useWhisperStore, useUiModeStore, useAppStore, useChatStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
 import { recordingController } from '../../services/recordingController';
 import { useSilenceEndpoint } from './useSilenceEndpoint';
+import { canArmHandsFreeTurn } from '@offgrid/speech';
 import { resolveTranscription } from './transcriptionOutcome';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
 import logger from '../../utils/logger';
+
+/** How often hands-free checks whether it may listen again. Fast enough to feel immediate after the
+ *  assistant stops talking, slow enough to be free. */
+const HANDSFREE_ARM_POLL_MS = 400;
 
 interface UseVoiceInputParams {
   conversationId?: string | null;
@@ -267,6 +272,8 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // owner, and report phase transitions to it (the controller is the one source of
   // truth every mic reads). Stable wrappers call the latest closures via refs so
   // re-registration isn't needed each render.
+  const isTranscribingRef = useRef(isTranscribing);
+  isTranscribingRef.current = isTranscribing;
   const startRef = useRef(startRecording);
   startRef.current = startRecording;
   const stopRef = useRef(stopRecording);
@@ -281,8 +288,46 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     });
   }, []);
   useEffect(() => {
-    recordingController.setPhase(isRecording ? 'recording' : isTranscribing ? 'transcribing' : 'idle');
-  }, [isRecording, isTranscribing]);
+    // Awaiting-speech wins: hands-free opens the recorder BEFORE the turn begins, so isRecording is
+    // true while nobody has spoken yet. Reporting "recording" then would tell the person their words
+    // are being captured before anything is listening for them.
+    recordingController.setPhase(
+      silence.isAwaitingSpeech
+        ? 'listening'
+        : isRecording
+          ? 'recording'
+          : isTranscribing
+            ? 'transcribing'
+            : 'idle',
+    );
+  }, [isRecording, isTranscribing, silence.isAwaitingSpeech]);
+
+  // ── Hands-free: re-open the mic when the conversation comes back to the person ──────────────────
+  //
+  // The endpoint decides when a turn ENDS. Nothing decided when the next one BEGAN, so hands-free was
+  // indistinguishable from tap-to-start: startRecording was the only caller of listenForSilence, and
+  // it only runs when the person taps. After a turn ended on silence the mic stayed shut.
+  //
+  // A poll rather than an effect over state: the four gating signals live in four places, and one of
+  // them - whether the assistant is speaking - is behind a pro hook that core cannot subscribe to. The
+  // tick is cheap, does nothing but read state until every condition holds, and the WHETHER is the
+  // shared pure predicate, so desktop reuses the decision and only writes its own tick.
+  useEffect(() => {
+    const tick = setInterval(() => {
+      const armable = canArmHandsFreeTurn({
+        mode: useAppStore.getState().settings.voiceTurnMode ?? 'silence',
+        inVoiceMode: isInAudioInterfaceMode(),
+        isRecording: recordingController.isRecording(),
+        isTranscribing: isTranscribingRef.current,
+        isGenerating: useChatStore.getState().isStreaming,
+        isAssistantSpeaking: callHook<boolean>(HOOKS.audioIsSpeaking) === true,
+      });
+      if (!armable) return;
+      logger.log('[VAD] hands-free: opening the mic for the next turn');
+      void startRef.current();
+    }, HANDSFREE_ARM_POLL_MS);
+    return () => clearInterval(tick);
+  }, []);
 
   useEffect(() => {
     if (recordingConversationIdRef.current && recordingConversationIdRef.current !== conversationId) {

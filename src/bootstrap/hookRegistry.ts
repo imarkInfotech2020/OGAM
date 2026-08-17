@@ -37,6 +37,9 @@ export const HOOKS = {
   audioCanSpeak: 'audio.canSpeak',
   /** (text: string, messageId: string) => void — speak a message aloud. */
   audioSpeak: 'audio.speak',
+  /** () => boolean — whether speech is playing or being generated right now. Hands-free asks before
+   *  it re-opens the mic, so the assistant is never recorded as if it were the person talking. */
+  audioIsSpeaking: 'audio.isSpeaking',
   /** () => void — stop any in-progress speech. */
   audioStop: 'audio.stop',
   /** (content: string) => void — fired as the assistant message streams; pro
