@@ -1033,3 +1033,47 @@ the surface. Two questions this run raises that the current estimator cannot ans
 
 **Cover it.** The journey is the regression test: any change to the cost model should be run against
 it, and `never resident at any stage: text` should become empty.
+
+
+## Voice: hands-free, barge-in and note trimming — 2026-08-17
+
+Built and merged in one session on `release/sync-feedback`. **None of it is device-verified**; the
+notes below say exactly which part is proven and how.
+
+### Open
+
+- **Desktop consumes none of it.** `@offgrid/speech` now owns the turn decision
+  (`SpeechEndpointTimer`, `canArmHandsFreeTurn`), the mode labels, the onset look-back and the WAV
+  trim math. Mobile uses all of it; desktop uses none. Parity was asked for explicitly, so SSOT here
+  is structural only until desktop's recorder is wired to the same package. **This is the top item.**
+- **Android AEC is unproven and has a known failure mode.** Echo cancellation comes from a
+  patch-package change to Oboe's builder (`setInputPreset(VoiceCommunication)`) — upstream never calls
+  `setInputPreset`, and its default (`VoiceRecognition`) deliberately disables AEC, so this is still
+  needed on the latest 0.13.3. Needs a NATIVE rebuild. Field reports (google/oboe#2123) say some
+  devices return BLANK audio with this preset rather than failing to open, which the builder's
+  fallback cannot catch because the stream opens fine. Symptom: Android hears nothing at all. Fix:
+  revert `patches/react-native-audio-api+0.11.7.patch`.
+- **The hands-free arm is a 400ms poll**, not an event. Four gating signals live in four places and
+  one (assistant speaking) is behind a pro hook core cannot subscribe to. Works, but the honest shape
+  is a subscription; desktop will need its own tick until then.
+- **Idle hands-free stalls rather than ends.** The wait for speech is 120s, so two devices left
+  pointing at each other both go quiet and it reads as frozen, not finished.
+- **`@offgrid/speech` is a mixed package.** It was a gateway speech client (console/desktop) and now
+  also holds on-device turn logic. Same domain, but the name promises less than it holds.
+
+### Verified, and how
+
+- **WAV trim math** — proven in node against real WAV bytes, not on device: chunk-walking finds `data`
+  behind a LIST chunk (offset 70), a 1.5s cut of a 2s file yields `copyFrom 48044 / copyBytes 16000`,
+  the rewritten header declares the kept length, and garbage / over-trim / zero-trim are all refused.
+  The **file I/O around it is NOT verified** — no trim has run on a device.
+- **VAD auto-stop** — verified on device earlier in the session, with rms/floor/speech in the log.
+
+### Fixed while doing this, worth knowing
+
+- `recordingController.stop()` required phase `'recording'` while `toggle()` offered to stop a
+  `'listening'` turn, so stop was silently refused mid-listen. Live in every hands-free build before
+  `42147394`.
+- Phase had two writers (endpoint + recorder) that could disagree; callers now report facts and the
+  controller derives. `echoCancelled` was hardcoded `true` away from the code that configures capture;
+  the recorder owns it and derives iOS's answer from the session mode actually applied.
