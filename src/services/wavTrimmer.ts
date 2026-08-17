@@ -24,10 +24,20 @@ import logger from '../utils/logger';
  * A multiple of 3 so each chunk's base64 has no interior padding (concatenated at byte offsets, a
  * padded chunk would shift everything after it), and even so a 16-bit frame is never split.
  */
-const COPY_CHUNK_BYTES = 3 * 64 * 1024;
+const COPY_CHUNK_BYTES = 3 * 256 * 1024;
+
+/**
+ * Below this there is nothing worth waiting for.
+ *
+ * The trim sits in the critical path - stop, trim, transcribe, send, generate, speak - so every
+ * millisecond here delays the reply. Half a second of dead air at the front of a note is not worth
+ * delaying the answer for; four seconds is.
+ */
+const MIN_WORTHWHILE_TRIM_SECONDS = 1;
 
 export async function trimWavFront(path: string, keepFromSeconds: number): Promise<boolean> {
-  if (!Number.isFinite(keepFromSeconds) || keepFromSeconds <= 0) return false;
+  if (!Number.isFinite(keepFromSeconds) || keepFromSeconds < MIN_WORTHWHILE_TRIM_SECONDS) return false;
+  const startedAt = Date.now();
 
   const temporary = `${path}.trim`;
   try {
@@ -58,7 +68,11 @@ export async function trimWavFront(path: string, keepFromSeconds: number): Promi
     // Swap last, so an interruption anywhere above leaves the original untouched.
     await RNFS.unlink(path);
     await RNFS.moveFile(temporary, path);
-    logger.log(`[VAD] trimmed ${plan.droppedSeconds.toFixed(2)}s of silence off the front`);
+    // Costed, not guessed: this runs before the reply can start, so its price belongs in the log.
+    logger.log(
+      `[VAD] trimmed ${plan.droppedSeconds.toFixed(2)}s of silence off the front ` +
+        `(${plan.copyBytes}B in ${Date.now() - startedAt}ms)`,
+    );
     return true;
   } catch (error) {
     await RNFS.unlink(temporary).catch(() => undefined);
