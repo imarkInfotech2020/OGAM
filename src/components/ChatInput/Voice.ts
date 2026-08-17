@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
 import { useWhisperStore, useUiModeStore, useAppStore, useChatStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
@@ -322,10 +321,11 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
         isTranscribing: isTranscribingRef.current,
         isGenerating: useChatStore.getState().isStreaming,
         isAssistantSpeaking: callHook<boolean>(HOOKS.audioIsSpeaking) === true,
-        // iOS only, and it is the session mode that earns it: `voiceChat` runs voice-processing I/O,
-        // which keeps our speaker out of our mic. Android's session options are not exposed by the
-        // audio library, so there the mic still waits for the assistant to finish.
-        echoCancelled: Platform.OS === 'ios',
+        // Both platforms now ask the OS to cancel our own output from the mic, which is what lets the
+        // mic stay open while the assistant talks: iOS via the `voiceChat` audio-session mode,
+        // Android via Oboe's VoiceCommunication input preset (patched into react-native-audio-api,
+        // whose default preset disables AEC).
+        echoCancelled: true,
       });
       if (!armable) return;
       logger.log('[VAD] hands-free: opening the mic for the next turn');
