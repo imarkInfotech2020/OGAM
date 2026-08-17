@@ -182,7 +182,12 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
           if (outcome.dispatch) {
             onAutoSendRef.current(outcome.text, { uri: path, format, durationSeconds });
           } else {
-            setDirectError(outcome.message);
+            // Nothing to send. Hands-free must NOT re-open the mic: on device that spun - record,
+            // hear the room, transcribe to nothing, arm again - three turns in eight seconds with no
+            // output. A person tapping the mic resumes it.
+            handsFree.suspend('nothing was transcribed');
+            handsFree.suspend('nothing was transcribed');
+        setDirectError(outcome.message);
             setTimeout(() => setDirectError(null), 3000);
           }
         } else {
@@ -196,7 +201,12 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
           if (outcome.dispatch) {
             onTranscriptRef.current(outcome.text);
           } else {
-            setDirectError(outcome.message);
+            // Nothing to send. Hands-free must NOT re-open the mic: on device that spun - record,
+            // hear the room, transcribe to nothing, arm again - three turns in eight seconds with no
+            // output. A person tapping the mic resumes it.
+            handsFree.suspend('nothing was transcribed');
+            handsFree.suspend('nothing was transcribed');
+        setDirectError(outcome.message);
             setTimeout(() => setDirectError(null), 3000);
           }
         }
@@ -238,6 +248,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
           onTranscriptRef.current(outcome.text);
         }
       } else {
+        handsFree.suspend('nothing was transcribed');
         setDirectError(outcome.message);
         setTimeout(() => setDirectError(null), 3000);
       }

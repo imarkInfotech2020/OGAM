@@ -26,6 +26,9 @@ export interface HandsFreeArming {
   noteTurnStopped: () => void;
   /** Someone tapped for the floor: arming resumes. */
   resume: () => void;
+  /** Stop arming until the person taps. Used when a turn produced nothing to send: re-opening the mic
+   *  on an empty transcript spins - record, hear noise, transcribe to nothing, re-arm, forever. */
+  suspend: (why: string) => void;
 }
 
 export function useHandsFreeArming(opts: {
@@ -87,6 +90,10 @@ export function useHandsFreeArming(opts: {
     },
     resume: () => {
       suspended.current = false;
+    },
+    suspend: (why: string) => {
+      suspended.current = true;
+      logger.log(`[VAD] hands-free suspended: ${why}`);
     },
   };
 }
