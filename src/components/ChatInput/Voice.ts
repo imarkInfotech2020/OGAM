@@ -5,8 +5,8 @@ import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
 import { recordingController } from '../../services/recordingController';
-import { useSilenceEndpoint } from './useSilenceEndpoint';
-import { finaliseRecording } from './finaliseRecording';
+import { useSilenceEndpoint, type SilenceEndpoint } from './useSilenceEndpoint';
+import { finaliseRecording, type RecordedAudio } from './finaliseRecording';
 import { useVoiceSessionDriver } from './useVoiceSessionDriver';
 import { voiceSession } from '../../services/voiceSession';
 import { resolveTranscription } from './transcriptionOutcome';
@@ -19,6 +19,16 @@ interface UseVoiceInputParams {
   onAudioAttachment?: (audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds?: number; transcription?: string }) => void;
   /** Called in Audio Mode to auto-send. Includes audio info so caller can build attachment atomically. */
   onAutoSend?: (text: string, audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number }) => void;
+}
+
+/** Stop the recorder and produce the note the person MEANT - dead air cut from both ends. The one
+ *  artifact every stop path shares, so two paths cannot disagree about what a recording is. */
+async function stopAndFinalise(silence: SilenceEndpoint): Promise<RecordedAudio> {
+  return finaliseRecording(
+    await audioRecorderService.stopRecording(),
+    silence.silenceBeforeSpeech(),
+    silence.silenceAfterSpeech(),
+  );
 }
 
 export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment, onAutoSend }: UseVoiceInputParams) {
@@ -165,7 +175,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // attach the transcript (Chat mode). In ANY mode we send a TRANSCRIPT, never raw audio.
   const stopDirectRecording = async () => {
     try {
-      const { path, durationSeconds } = await finaliseRecording(await audioRecorderService.stopRecording(), silence.silenceBeforeSpeech());
+      const { path, durationSeconds } = await stopAndFinalise(silence);
       setIsDirectRecording(false);
       if (!recordingConversationIdRef.current || recordingConversationIdRef.current === conversationId) {
         const format = audioRecorderService.getFormat();
@@ -221,7 +231,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // Audio Mode with a Whisper model: stop, transcribe the file, then auto-send or attach.
   const stopAudioModeRecording = async () => {
     try {
-      const { path, durationSeconds } = await finaliseRecording(await audioRecorderService.stopRecording(), silence.silenceBeforeSpeech());
+      const { path, durationSeconds } = await stopAndFinalise(silence);
       setIsAudioModeRecording(false);
       if (recordingConversationIdRef.current && recordingConversationIdRef.current !== conversationId) {
         recordingConversationIdRef.current = null;
@@ -356,9 +366,12 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     partialResult,
     error,
     voiceAvailable,
-    startRecording,
-    stopRecording,
-    cancelRecording,
+    // INTENTS, not mechanics: the controller's registered handlers own the session decisions
+    // (userStart out of stopped, userStop on a deliberate hands-free stop). Handing out the raw
+    // closures let the stop button bypass that - the stop read as a captured turn and re-armed.
+    startRecording: () => recordingController.start(),
+    stopRecording: () => recordingController.stop(),
+    cancelRecording: () => recordingController.cancel(),
     clearResult,
     /** True when model accepts audio directly (no Whisper needed) */
     isDirectAudioMode: supportsDirectAudio(),

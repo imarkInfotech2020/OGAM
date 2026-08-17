@@ -33,6 +33,10 @@ export interface SilenceEndpoint {
   /** Seconds of recording before the person actually started speaking, already offset by the
    *  detection delay. 0 when nothing was heard or the mode never waited. */
   silenceBeforeSpeech: () => number;
+  /** Seconds of dead air at the END of the turn - the quiet since the last heard speech, less the
+   *  hangover. When the turn ended on silence this is the person's whole chosen window; on a manual
+   *  stop it is however long they had already been quiet. 0 when nothing was watching. */
+  silenceAfterSpeech: () => number;
 }
 
 export function useSilenceEndpoint(opts: {
@@ -49,13 +53,17 @@ export function useSilenceEndpoint(opts: {
   const [isAwaitingSpeech, setIsAwaitingSpeech] = useState(false);
   /** Latched for the turn: barge-in fires once on the first speech, not on every loud buffer. */
   const awaitingRef = useRef(false);
-  /** When listening began, and when speech was first confirmed - the two the trim needs. */
+  /** When listening began, and when speech was first confirmed - the two the front-trim needs. */
   const listenAtRef = useRef(0);
   const speechAtRef = useRef(0);
+  /** Dead air at the turn's end, captured from the endpoint at the moment watching stops - the
+   *  endpoint is gone by the time the recording finalises, so the number must be taken here. */
+  const tailRef = useRef(0);
 
   const stop = (): void => {
     awaitingRef.current = false;
     setIsAwaitingSpeech(false);
+    if (endpointRef.current) tailRef.current = endpointRef.current.quietTailSeconds();
     endpointRef.current?.cancel();
     endpointRef.current = null;
     levelsOffRef.current?.();
@@ -70,6 +78,7 @@ export function useSilenceEndpoint(opts: {
     // own. Cutting the front off audio nobody was watching is silent data loss.
     listenAtRef.current = 0;
     speechAtRef.current = 0;
+    tailRef.current = 0;
     // VOICE MODE ONLY. Chat-mode dictation is someone typing with their voice - they pause to think
     // mid-sentence and expect the recorder to wait. Ending that turn on silence would cut them off.
     if (!opts.isInAudioInterfaceMode()) return;
@@ -131,5 +140,7 @@ export function useSilenceEndpoint(opts: {
     return elapsed > 0 ? elapsed / 1000 : 0;
   };
 
-  return { listen, stop, isAwaitingSpeech, silenceBeforeSpeech };
+  const silenceAfterSpeech = (): number => tailRef.current;
+
+  return { listen, stop, isAwaitingSpeech, silenceBeforeSpeech, silenceAfterSpeech };
 }

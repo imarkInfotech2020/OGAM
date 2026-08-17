@@ -1,4 +1,4 @@
-import { trimWavFront } from '../../services/wavTrimmer';
+import { trimWavSilence } from '../../services/wavTrimmer';
 import logger from '../../utils/logger';
 
 /**
@@ -22,16 +22,23 @@ export async function finaliseRecording(
   recorded: RecordedAudio,
   /** Seconds of recording before speech actually began; 0 when nothing was watching. */
   silenceBeforeSpeech: number,
+  /** Seconds of dead air at the end - the quiet that ENDED the turn, whatever window the person
+   *  chose; 0 when nothing was watching. */
+  silenceAfterSpeech: number = 0,
 ): Promise<RecordedAudio> {
   logger.log(
     `[TURN] finalise path=${recorded.path.slice(-24)} ` +
-      `duration=${recorded.durationSeconds.toFixed(2)}s lead=${silenceBeforeSpeech.toFixed(2)}s`,
+      `duration=${recorded.durationSeconds.toFixed(2)}s lead=${silenceBeforeSpeech.toFixed(2)}s ` +
+      `tail=${silenceAfterSpeech.toFixed(2)}s`,
   );
-  if (silenceBeforeSpeech <= 0) return recorded;
-  if (!(await trimWavFront(recorded.path, silenceBeforeSpeech))) return recorded;
+  if (silenceBeforeSpeech <= 0 && silenceAfterSpeech <= 0) return recorded;
+  if (!(await trimWavSilence(recorded.path, silenceBeforeSpeech, silenceAfterSpeech))) return recorded;
   // The duration comes down with the audio, or the player shows time the file no longer contains.
   return {
     path: recorded.path,
-    durationSeconds: Math.max(0, recorded.durationSeconds - silenceBeforeSpeech),
+    durationSeconds: Math.max(
+      0,
+      recorded.durationSeconds - silenceBeforeSpeech - silenceAfterSpeech,
+    ),
   };
 }

@@ -4,12 +4,13 @@ import { WAV_HEADER_BYTES, WAV_HEADER_SCAN_BYTES, planWavTrim } from '@offgrid/s
 import logger from '../utils/logger';
 
 /**
- * Cut the dead air off the front of a recording, in place.
+ * Cut the dead air off both ends of a recording, in place.
  *
  * Hands-free opens the microphone before anyone speaks, so the first word is never clipped - loudness
  * only tells you speech began about 300ms AFTER it began, so a recorder that waits for detection
- * always starts mid-word. The cost is a note that opens with however long the person took to start,
- * and voice notes here play back and sync, so that silence is not cosmetic.
+ * always starts mid-word. And a turn that ends on silence carries the whole end-of-turn window as
+ * dead air at its end - a 0:02 label over a seven-second file. Voice notes here play back and sync,
+ * so that silence is not cosmetic.
  *
  * This is the I/O half only. WHERE to cut is `planWavTrim` in `@offgrid/speech` - pure, shared with
  * desktop, and tested on real WAV bytes. This file reads, writes and swaps.
@@ -35,8 +36,15 @@ const COPY_CHUNK_BYTES = 3 * 256 * 1024;
  */
 const MIN_WORTHWHILE_TRIM_SECONDS = 1;
 
-export async function trimWavFront(path: string, keepFromSeconds: number): Promise<boolean> {
-  if (!Number.isFinite(keepFromSeconds) || keepFromSeconds < MIN_WORTHWHILE_TRIM_SECONDS) return false;
+export async function trimWavSilence(
+  path: string,
+  dropFrontSeconds: number,
+  dropTailSeconds: number = 0,
+): Promise<boolean> {
+  const front = Number.isFinite(dropFrontSeconds) ? Math.max(0, dropFrontSeconds) : 0;
+  const tail = Number.isFinite(dropTailSeconds) ? Math.max(0, dropTailSeconds) : 0;
+  // Gated on the TOTAL: half a second at each end is a second of dead air, and worth the same wait.
+  if (front + tail < MIN_WORTHWHILE_TRIM_SECONDS) return false;
   const startedAt = Date.now();
 
   const temporary = `${path}.trim`;
@@ -47,11 +55,13 @@ export async function trimWavFront(path: string, keepFromSeconds: number): Promi
       Buffer.from(await RNFS.read(path, WAV_HEADER_SCAN_BYTES, 0, 'base64'), 'base64'),
     );
 
-    const plan = planWavTrim(head, keepFromSeconds, fileBytes);
+    const plan = planWavTrim(head, front, fileBytes, tail);
     if (!plan) {
       // Says WHICH nothing happened: an unreadable header, nothing worth dropping, or a trim that
       // would have left no audio. Without it a note that kept its silence looks like a trim that ran.
-      logger.log(`[VAD] trim skipped (nothing to cut in ${fileBytes}B, wanted ${keepFromSeconds.toFixed(2)}s)`);
+      logger.log(
+        `[VAD] trim skipped (nothing to cut in ${fileBytes}B, wanted front=${front.toFixed(2)}s tail=${tail.toFixed(2)}s)`,
+      );
       return false;
     }
 
@@ -70,8 +80,8 @@ export async function trimWavFront(path: string, keepFromSeconds: number): Promi
     await RNFS.moveFile(temporary, path);
     // Costed, not guessed: this runs before the reply can start, so its price belongs in the log.
     logger.log(
-      `[VAD] trimmed ${plan.droppedSeconds.toFixed(2)}s of silence off the front ` +
-        `(${plan.copyBytes}B in ${Date.now() - startedAt}ms)`,
+      `[VAD] trimmed ${plan.droppedSeconds.toFixed(2)}s of silence (front=${front.toFixed(2)}s ` +
+        `tail=${tail.toFixed(2)}s) leaving ${plan.copyBytes}B in ${Date.now() - startedAt}ms`,
     );
     return true;
   } catch (error) {
