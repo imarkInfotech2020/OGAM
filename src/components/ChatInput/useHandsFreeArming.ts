@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { SPEAKER_DRAIN_MS } from '@offgrid/speech';
 import { useAppStore } from '../../stores';
-import { conversationFloor } from '../../services/conversationFloor';
+import { turnLock } from '../../services/turnLock';
 import logger from '../../utils/logger';
 
 /**
@@ -14,9 +13,10 @@ import logger from '../../utils/logger';
  * own voice read as the person interrupting. Settle-ticks and an abandon guard were added for that
  * window; both were symptoms of asking four questions instead of having one answer.
  *
- * `conversationFloor` holds the floor continuously across the whole of the assistant's turn -
- * transcribing, generating and speaking are one stretch - so the "free" event fires once, when the turn
- * is genuinely over. Nothing is guessed, so nothing needs settling: there is no delay in this file.
+ * `turnLock` is a LOCK, not an observer: the recorder cannot open a mic and a reply cannot speak
+ * without holding it, so "mic open while the assistant speaks" is unconstructable rather than handled.
+ * It fires free exactly once per turn, after the speaker has drained, and it owns that delay - which is
+ * why there is no timer left in this file.
  */
 
 export interface HandsFreeArming {
@@ -46,36 +46,20 @@ export function useHandsFreeArming(opts: {
   const inVoiceModeRef = useRef(opts.isInAudioInterfaceMode);
   inVoiceModeRef.current = opts.isInAudioInterfaceMode;
 
-  /** Pending drain wait, cancelled the moment anyone takes the floor back. */
-  const drainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const cancelDrain = (): void => {
-      if (drainTimer.current) clearTimeout(drainTimer.current);
-      drainTimer.current = null;
-    };
-    const unsubscribe = conversationFloor.subscribe(holder => {
-      // Anyone taking the floor cancels a pending open - including the assistant starting a new
-      // sentence during the drain, which is exactly when the mic must NOT appear.
-      cancelDrain();
-      if (holder !== 'idle') return;
-      if (suspended.current) return;
-      if (!inVoiceModeRef.current()) return;
-      if ((useAppStore.getState().settings.voiceTurnMode ?? 'silence') !== 'handsfree') return;
-      // Let the speaker drain first: the engine reports stopped before the sound has left the room,
-      // and without echo cancellation the mic would capture the assistant's own tail as a question.
-      drainTimer.current = setTimeout(() => {
-        drainTimer.current = null;
-        if (!conversationFloor.isFree()) return; // taken while we waited
-        logger.log('[VAD] floor is free and drained - hands-free opening the mic');
+  useEffect(
+    () =>
+      // Fires whenever the lock changes hands. Free means the previous turn is over AND the room has
+      // drained - the lock owns that delay, so this file no longer schedules anything.
+      turnLock.subscribe(holder => {
+        if (holder !== null) return;
+        if (suspended.current) return;
+        if (!inVoiceModeRef.current()) return;
+        if ((useAppStore.getState().settings.voiceTurnMode ?? 'silence') !== 'handsfree') return;
+        logger.log('[VAD] lock is free - hands-free taking the floor');
         startRef.current();
-      }, SPEAKER_DRAIN_MS);
-    });
-    return () => {
-      cancelDrain();
-      unsubscribe();
-    };
-  }, []);
+      }),
+    [],
+  );
 
   return {
     markEndedBySilence: () => {
