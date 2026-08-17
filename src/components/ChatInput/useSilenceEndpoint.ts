@@ -61,6 +61,12 @@ export function useSilenceEndpoint(opts: {
 
   const listen = (): void => {
     stop();
+    // Cleared BEFORE any early return below. These two drive the front-trim, and every path that
+    // declines to watch a turn - tap mode, chat dictation - used to leave the PREVIOUS hands-free
+    // turn's numbers in place, so the next recording was trimmed against timings that were not its
+    // own. Cutting the front off audio nobody was watching is silent data loss.
+    listenAtRef.current = 0;
+    speechAtRef.current = 0;
     // VOICE MODE ONLY. Chat-mode dictation is someone typing with their voice - they pause to think
     // mid-sentence and expect the recorder to wait. Ending that turn on silence would cut them off.
     if (!opts.isInAudioInterfaceMode()) return;
@@ -92,7 +98,6 @@ export function useSilenceEndpoint(opts: {
     }, line => logger.log(line));
     endpointRef.current = endpoint;
     listenAtRef.current = Date.now();
-    speechAtRef.current = 0;
     endpoint.begin(listenAtRef.current, { handsFree });
     levelsOffRef.current = audioRecorderService.onAudioLevel(rms => {
       const reading = endpoint.observeLevel(rms);
