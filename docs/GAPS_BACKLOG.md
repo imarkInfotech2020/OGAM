@@ -1101,3 +1101,18 @@ notes below say exactly which part is proven and how.
 - Phase had two writers (endpoint + recorder) that could disagree; callers now report facts and the
   controller derives. `echoCancelled` was hardcoded `true` away from the code that configures capture;
   the recorder owns it and derives iOS's answer from the session mode actually applied.
+
+### Open, added while making the voice delays user-chosen + putting replay in the session
+
+- **Trailing silence is not trimmed.** `finaliseRecording` calls `trimWavFront` only, so the person's
+  chosen end-of-turn window (up to 5s of dead air) rides into every file and Whisper transcribes
+  through it. The tail cut belongs in the same pure planner (`wav-trim.ts`), keeping ~300ms of
+  hangover so the last syllable is not clipped. Shortening the window in settings shrinks the tail but
+  does not remove it.
+- **Post-reply hand-back overhead beyond the drain is unmeasured.** The chosen drain accounts for the
+  speaker's tail; whatever the device adds on top (mic spin-up, audio-session switching) has never been
+  read off a real log. Measure before tuning anything.
+- **Replay-in-the-session and the two delay settings are code-complete, NOT device-verified.** The
+  machine transitions are pure and typecheck/lint/package tests are clean, but no phone has run them:
+  the replay-while-listening contention, the paused-replay hand-back, and the settings rows all need
+  the on-device pass.

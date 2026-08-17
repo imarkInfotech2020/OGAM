@@ -73,6 +73,8 @@ export const resetStores = (): void => {
       cacheType: 'q8_0',
       showGenerationDetails: false,
       voiceTurnMode: 'silence' as const,
+      voiceSilenceAfterSpeechMs: 5_000,
+      voiceSpeakerDrainMs: 2_000,
       enhanceImagePrompts: false,
       enabledTools: ['calculator', 'get_current_datetime'],
       thinkingEnabled: true,

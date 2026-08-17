@@ -1,7 +1,11 @@
 import { useRef, useState } from 'react';
 import { useAppStore } from '../../stores';
 import { audioRecorderService } from '../../services/audioRecorderService';
-import { SpeechEndpointTimer, SPEECH_ONSET_LOOKBACK_MS } from '@offgrid/speech';
+import {
+  SpeechEndpointTimer,
+  SPEECH_ONSET_LOOKBACK_MS,
+  DEFAULT_SILENCE_AFTER_SPEECH_MS,
+} from '@offgrid/speech';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { voiceSession } from '../../services/voiceSession';
 import logger from '../../utils/logger';
@@ -72,7 +76,8 @@ export function useSilenceEndpoint(opts: {
 
     // Read at the START of each turn, so changing the setting takes effect on the very next turn
     // rather than needing a reload.
-    const mode = useAppStore.getState().settings.voiceTurnMode ?? 'silence';
+    const { voiceTurnMode, voiceSilenceAfterSpeechMs } = useAppStore.getState().settings;
+    const mode = voiceTurnMode ?? 'silence';
     if (mode === 'tap') {
       logger.log('[VAD] voice turns are tap-to-talk; not listening for silence');
       return;
@@ -94,7 +99,10 @@ export function useSilenceEndpoint(opts: {
     }, line => logger.log(line));
     endpointRef.current = endpoint;
     listenAtRef.current = Date.now();
-    endpoint.begin(listenAtRef.current, { handsFree });
+    endpoint.begin(listenAtRef.current, {
+      handsFree,
+      silenceAfterSpeechMs: voiceSilenceAfterSpeechMs ?? DEFAULT_SILENCE_AFTER_SPEECH_MS,
+    });
     levelsOffRef.current = audioRecorderService.onAudioLevel(rms => {
       // Unless the session is LISTENING, these buffers are not a person. With no echo cancellation the
       // microphone hears our own speaker, and treating that as speech is what made a reply stop itself

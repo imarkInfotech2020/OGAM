@@ -3,6 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RecordProvenance } from '@offgrid/sync';
+import {
+  DEFAULT_SILENCE_AFTER_SPEECH_MS,
+  DEFAULT_SPEAKER_DRAIN_MS,
+} from '@offgrid/speech';
 import { APP_CONFIG } from '../constants';
 import { VoiceTurnMode,
   DeviceInfo,
@@ -85,6 +89,12 @@ export type AppSettings = {
    *  - 'handsfree' you start listening, it begins when you speak and ends when you stop
    */
   voiceTurnMode: VoiceTurnMode;
+  /** The pause that ends a spoken turn, in ms. The person's trade between lag and being cut off
+   *  mid-thought; defaults and choices live in @offgrid/speech. */
+  voiceSilenceAfterSpeechMs: number;
+  /** The wait after a reply finishes before the mic may reopen, in ms. Covers the speaker's
+   *  physical tail - too short and the recorder hears the assistant's own voice. */
+  voiceSpeakerDrainMs: number;
   enabledTools: string[];
   thinkingEnabled: boolean;
   inferenceBackend: InferenceBackend;
@@ -241,6 +251,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Ends on silence by default: a turn that waits for a tap is the thing people ask us to fix.
   // 'tap' is for anyone who pauses mid-thought and wants the recorder to keep waiting.
   voiceTurnMode: 'silence' as VoiceTurnMode,
+  voiceSilenceAfterSpeechMs: DEFAULT_SILENCE_AFTER_SPEECH_MS,
+  voiceSpeakerDrainMs: DEFAULT_SPEAKER_DRAIN_MS,
   enabledTools: ['web_search', 'read_url', 'search_knowledge_base'],
   thinkingEnabled: false,
   liteRTBackend: 'gpu',

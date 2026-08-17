@@ -11,7 +11,7 @@ import { createStyles } from './styles';
 import { SystemPromptSection } from './SystemPromptSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
-import { VoiceActivityDetectionToggle } from '../../components/settings/voiceSections';
+import { VoiceTurnSettings } from '../../components/settings/voiceSections';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { WhisperPickerSheet } from '../../components/models/WhisperPickerSheet';
 import {
@@ -141,7 +141,7 @@ export const ModelSettingsScreen: React.FC = () => {
               <Icon name="chevron-right" size={18} color={colors.textMuted} />
             </TouchableOpacity>
             {/* Voice mode ends a turn on silence. Lives with STT because it is about listening. */}
-            <VoiceActivityDetectionToggle />
+            <VoiceTurnSettings />
           </View>
         )}
 

@@ -928,6 +928,8 @@ describe('ModelSettingsScreen', () => {
           cacheType: undefined as any,
           showGenerationDetails: undefined as any,
           voiceTurnMode: 'silence' as const,
+          voiceSilenceAfterSpeechMs: 5_000,
+          voiceSpeakerDrainMs: 2_000,
           enhanceImagePrompts: undefined as any,
           enabledTools: undefined as any,
           thinkingEnabled: undefined as any,
