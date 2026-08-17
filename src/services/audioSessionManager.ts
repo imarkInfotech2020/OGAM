@@ -133,16 +133,19 @@ class AudioSessionManager {
       if (mode === 'playback') {
         AudioManager.setAudioSessionOptions({ iosCategory: 'playback', iosMode: 'default' });
       } else {
-        // `voiceChat` turns on iOS's voice-processing I/O: hardware echo cancellation, so the mic
-        // does NOT hear our own speaker. That is what lets someone talk over the assistant without
-        // the assistant's voice being recorded as theirs - the same platform path the hosted
-        // voice-agent products use rather than shipping an echo canceller of their own.
+        // `videoChat` runs iOS voice-processing I/O - hardware echo cancellation, so the mic does NOT
+        // hear our own speaker. That is what lets someone talk over the assistant without the
+        // assistant's voice being recorded as theirs.
         //
-        // Android has no equivalent here: this library's session options are iOS-only, and the
-        // Android fix needs the VOICE_COMMUNICATION audio source at the native recorder.
+        // videoChat rather than voiceChat: both cancel echo, but voiceChat is the HANDSET mode and
+        // iOS routes it to the receiver with voice-processed output, which made playback silent on
+        // device. videoChat selects the built-in speaker - the speakerphone shape this actually is.
+        //
+        // Android has no equivalent here: the library's session options are iOS-only, so Android gets
+        // the same cancellation from Oboe's VoiceCommunication input preset (patched).
         AudioManager.setAudioSessionOptions({
           iosCategory: 'playAndRecord',
-          iosMode: 'voiceChat',
+          iosMode: 'videoChat',
           iosOptions: ['defaultToSpeaker', 'allowBluetoothHFP'],
         });
       }

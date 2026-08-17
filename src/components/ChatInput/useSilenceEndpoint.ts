@@ -33,6 +33,9 @@ export function useSilenceEndpoint(opts: {
   isInAudioInterfaceMode: () => boolean;
   /** The SAME stop the button runs, so a turn finalises identically however it ended. */
   stopTurn: () => void;
+  /** Told the turn ended because the room went quiet, NOT because someone pressed stop. Hands-free
+   *  only hands the floor back by itself in the first case; a deliberate stop has to mean stop. */
+  onEndedBySilence?: () => void;
 }): SilenceEndpoint {
   const endpointRef = useRef<SpeechEndpointTimer | null>(null);
   const levelsOffRef = useRef<(() => void) | null>(null);
@@ -74,6 +77,7 @@ export function useSilenceEndpoint(opts: {
 
     const endpoint = new SpeechEndpointTimer(() => {
       logger.log('[VAD] silence detected - ending the turn');
+      opts.onEndedBySilence?.();
       stop();
       // Deferred off the audio callback: stopping the recorder from inside its own buffer callback
       // tears down native state that the callback is still standing on.

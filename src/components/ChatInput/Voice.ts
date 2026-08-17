@@ -1,20 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
-import { useWhisperStore, useUiModeStore, useAppStore, useChatStore } from '../../stores';
+import { useWhisperStore, useUiModeStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
 import { recordingController } from '../../services/recordingController';
 import { useSilenceEndpoint } from './useSilenceEndpoint';
-import { canArmHandsFreeTurn } from '@offgrid/speech';
+import { useHandsFreeArming } from './useHandsFreeArming';
 import { resolveTranscription } from './transcriptionOutcome';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
 import logger from '../../utils/logger';
-
-/** How often hands-free checks whether it may listen again. Fast enough to feel immediate after the
- *  assistant stops talking, slow enough to be free. */
-const HANDSFREE_ARM_POLL_MS = 400;
 
 interface UseVoiceInputParams {
   conversationId?: string | null;
@@ -83,10 +79,17 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // voiceAvailable: direct audio OR whisper downloaded
   const voiceAvailable = supportsDirectAudio() || !!downloadedModelId;
 
+  const handsFree = useHandsFreeArming({
+    isInAudioInterfaceMode,
+    isTranscribing: () => isTranscribingRef.current,
+    // No silencing: the assistant keeps the floor until real speech is heard (barge-in).
+    startTurn: () => void startRef.current({ silenceAssistant: false }),
+  });
   const silence = useSilenceEndpoint({
     isInAudioInterfaceMode,
     // stopRef is assigned below and kept current every render, so this is never a stale closure.
     stopTurn: () => void stopRef.current(),
+    onEndedBySilence: handsFree.markEndedBySilence,
   });
   const listenForSilence = silence.listen;
   const stopListeningForSilence = silence.stop;
@@ -97,6 +100,8 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     // autoplay outright. Echo cancellation is what makes the overlap safe, and barge-in stops the
     // assistant on actual detected speech instead - which is the honest trigger for it.
     const { silenceAssistant = true } = opts;
+    // A tap (silenceAssistant) is a person asking for the floor back - that resumes hands-free.
+    if (silenceAssistant) handsFree.resume();
     recordingConversationIdRef.current = conversationId || null;
     setDirectError(null);
     // No-op without the pro audio feature.
@@ -239,6 +244,10 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   };
 
   const stopRecording = async () => {
+    // The ONE place that learns how this turn ended, because every path - button, silence, cancel -
+    // arrives here. A stop that silence did not cause is a deliberate one, and it suspends hands-free
+    // until the person taps for the floor again.
+    handsFree.noteTurnStopped();
     stopListeningForSilence();
     if (isDirectRecording) {
       await stopDirectRecording();
@@ -306,37 +315,6 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     );
   }, [isRecording, isTranscribing, silence.isAwaitingSpeech]);
 
-  // ── Hands-free: re-open the mic when the conversation comes back to the person ──────────────────
-  //
-  // The endpoint decides when a turn ENDS. Nothing decided when the next one BEGAN, so hands-free was
-  // indistinguishable from tap-to-start: startRecording was the only caller of listenForSilence, and
-  // it only runs when the person taps. After a turn ended on silence the mic stayed shut.
-  //
-  // A poll rather than an effect over state: the four gating signals live in four places, and one of
-  // them - whether the assistant is speaking - is behind a pro hook that core cannot subscribe to. The
-  // tick is cheap, does nothing but read state until every condition holds, and the WHETHER is the
-  // shared pure predicate, so desktop reuses the decision and only writes its own tick.
-  useEffect(() => {
-    const tick = setInterval(() => {
-      const armable = canArmHandsFreeTurn({
-        mode: useAppStore.getState().settings.voiceTurnMode ?? 'silence',
-        inVoiceMode: isInAudioInterfaceMode(),
-        isRecording: recordingController.isRecording(),
-        isTranscribing: isTranscribingRef.current,
-        isGenerating: useChatStore.getState().isStreaming,
-        isAssistantSpeaking: callHook<boolean>(HOOKS.audioIsSpeaking) === true,
-        // Both platforms now ask the OS to cancel our own output from the mic, which is what lets the
-        // mic stay open while the assistant talks: iOS via the `voiceChat` audio-session mode,
-        // Android via Oboe's VoiceCommunication input preset (patched into react-native-audio-api,
-        // whose default preset disables AEC).
-        echoCancelled: true,
-      });
-      if (!armable) return;
-      logger.log('[VAD] hands-free: opening the mic for the next turn');
-      void startRef.current({ silenceAssistant: false });
-    }, HANDSFREE_ARM_POLL_MS);
-    return () => clearInterval(tick);
-  }, []);
 
   useEffect(() => {
     if (recordingConversationIdRef.current && recordingConversationIdRef.current !== conversationId) {
