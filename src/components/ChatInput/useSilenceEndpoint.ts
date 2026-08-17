@@ -4,6 +4,7 @@ import { recordingController } from '../../services/recordingController';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { SpeechEndpointTimer, SPEECH_ONSET_LOOKBACK_MS } from '@offgrid/speech';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
+import { voiceSession } from '../../services/voiceSession';
 import logger from '../../utils/logger';
 
 /**
@@ -100,14 +101,10 @@ export function useSilenceEndpoint(opts: {
     listenAtRef.current = Date.now();
     endpoint.begin(listenAtRef.current, { handsFree });
     levelsOffRef.current = audioRecorderService.onAudioLevel(rms => {
-      // While the assistant is speaking, this microphone is hearing the ASSISTANT. We have no echo
-      // cancellation, so the buffers are indistinguishable from a person - and on device that meant a
-      // reply was detected as an interruption 95ms after it started playing, and stopped itself.
-      //
-      // The floor cannot express this: micOpen outranks assistantSpeaking, so a mic opened BEFORE the
-      // reply began stays "the person's" while the reply plays over it. Dropping these buffers is what
-      // keeps a turn from hearing itself; the turn resumes listening when the assistant finishes.
-      if (callHook<boolean>(HOOKS.audioIsSpeaking) === true) return;
+      // Unless the session is LISTENING, these buffers are not a person. With no echo cancellation the
+      // microphone hears our own speaker, and treating that as speech is what made a reply stop itself
+      // 95ms after it started playing.
+      if (!voiceSession.micShouldBeOpen()) return;
       const reading = endpoint.observeLevel(rms);
       // The moment speech is first heard, the turn has genuinely begun.
       if (handsFree && reading.speech) {

@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWhisperTranscription } from '../../hooks/useWhisperTranscription';
-import { useWhisperStore, useUiModeStore } from '../../stores';
-import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
+import { useWhisperStore, useUiModeStore, useAppStore } from '../../stores';
 import { activeModelService } from '../../services/activeModelService';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { whisperService } from '../../services/whisperService';
 import { recordingController } from '../../services/recordingController';
-import { turnLock } from '../../services/turnLock';
-import type { TurnToken } from '@offgrid/speech';
 import { useSilenceEndpoint } from './useSilenceEndpoint';
 import { finaliseRecording } from './finaliseRecording';
-import { useHandsFreeArming } from './useHandsFreeArming';
+import { useVoiceSessionDriver } from './useVoiceSessionDriver';
+import { voiceSession } from '../../services/voiceSession';
 import { resolveTranscription } from './transcriptionOutcome';
 import { ensureWhisperForTranscription } from './ensureWhisperForTranscription';
 import logger from '../../utils/logger';
@@ -23,47 +21,8 @@ interface UseVoiceInputParams {
   onAutoSend?: (text: string, audio: { uri: string; format: 'wav' | 'mp3'; durationSeconds: number }) => void;
 }
 
-/**
- * Take the audio lock before a mic is ever opened.
- *
- * A hands-free arm may only take a FREE lock - never queue - because when the current turn ends the
- * lock's listener fires and it decides again with current information. A tap is a deliberate request
- * for the floor, so it stops whatever is speaking and then waits its turn.
- */
-async function takeFloor(
-  tapped: boolean,
-  tokenRef: { current: TurnToken | null },
-): Promise<boolean> {
-  // NEVER queue behind ourselves. A person turn already holding the lock means a microphone is
-  // already open, and asking for it again waits for a release that only this turn could perform -
-  // 'person queued behind person' forever, with every tap adding another waiter. A tap in that state
-  // is a request to STOP, which the recording controller handles; there is nothing to start.
-  if (turnLock.holder() === 'person') {
-    logger.log('[TURN] start ignored - a person turn already holds the floor');
-    return false;
-  }
-  if (tapped) {
-    callHook(HOOKS.audioStop);
-    tokenRef.current = await turnLock.acquire('person');
-    return true;
-  }
-  const token = turnLock.tryAcquire('person');
-  if (!token) return false; // someone holds the floor; the listener will offer it again
-  tokenRef.current = token;
-  return true;
-}
-
-/** Give the floor back. Safe to call on any path, including one that never opened a mic. */
-function dropFloor(tokenRef: { current: TurnToken | null }): void {
-  if (!tokenRef.current) return;
-  turnLock.release(tokenRef.current);
-  tokenRef.current = null;
-}
-
 export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment, onAutoSend }: UseVoiceInputParams) {
   const recordingConversationIdRef = useRef<string | null>(null);
-  /** Held for exactly as long as this app has a microphone open. */
-  const turnTokenRef = useRef<TurnToken | null>(null);
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
   const onAudioAttachmentRef = useRef(onAudioAttachment);
@@ -121,16 +80,15 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   // voiceAvailable: direct audio OR whisper downloaded
   const voiceAvailable = supportsDirectAudio() || !!downloadedModelId;
 
-  const handsFree = useHandsFreeArming({
-    isInAudioInterfaceMode,
-    // No silencing: opening the mic must never stop speech that is already playing.
+  useVoiceSessionDriver({
+    // No silencing here: a reply may only play while the session is speaking, so an opening mic
+    // cannot collide with it.
     startTurn: () => void startRef.current({ silenceAssistant: false }),
   });
   const silence = useSilenceEndpoint({
     isInAudioInterfaceMode,
     // stopRef is assigned below and kept current every render, so this is never a stale closure.
     stopTurn: () => void stopRef.current(),
-    onEndedBySilence: handsFree.markEndedBySilence,
   });
   const listenForSilence = silence.listen;
   const stopListeningForSilence = silence.stop;
@@ -141,12 +99,14 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     // autoplay outright. Echo cancellation is what makes the overlap safe, and barge-in stops the
     // assistant on actual detected speech instead - which is the honest trigger for it.
     const { silenceAssistant = true } = opts;
-    if (!(await takeFloor(silenceAssistant, turnTokenRef))) return;
+    // The session decides whether a mic may be open. Nothing else needs asking.
+    if (!voiceSession.micShouldBeOpen()) {
+      logger.log('[TURN] start refused - session is not listening');
+      return;
+    }
     logger.log(
       `[TURN] start (${silenceAssistant ? 'tapped' : 'hands-free arm'}) direct=${supportsDirectAudio()} file=${shouldUseFilePath()}`,
     );
-    // A tap (silenceAssistant) is a person asking for the floor back - that resumes hands-free.
-    if (silenceAssistant) handsFree.resume();
     recordingConversationIdRef.current = conversationId || null;
     setDirectError(null);
 
@@ -156,7 +116,6 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
         await audioRecorderService.startRecording();
         listenForSilence();
       } catch (err) {
-        dropFloor(turnTokenRef);
         setIsDirectRecording(false);
         const msg = err instanceof Error ? err.message : 'Recording failed';
         logger.error('[Voice] Direct audio recording error:', err);
@@ -171,7 +130,6 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
         await audioRecorderService.startRecording();
         listenForSilence();
       } catch (err) {
-        dropFloor(turnTokenRef);
         setIsAudioModeRecording(false);
         const msg = err instanceof Error ? err.message : 'Recording failed';
         logger.error('[Voice] Audio mode recording error:', err);
@@ -182,7 +140,6 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
 
     // The whisper path drives its own recorder, so this turn's token would otherwise be held by a
     // mic this code never opened.
-    dropFloor(turnTokenRef);
     await startWhisperRecording();
   };
 
@@ -228,8 +185,8 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
             // Nothing to send. Hands-free must NOT re-open the mic: on device that spun - record,
             // hear the room, transcribe to nothing, arm again - three turns in eight seconds with no
             // output. A person tapping the mic resumes it.
-            handsFree.suspend('nothing was transcribed');
-            handsFree.suspend('nothing was transcribed');
+            voiceSession.dispatch('nothingHeard');
+            voiceSession.dispatch('nothingHeard');
         setDirectError(outcome.message);
             setTimeout(() => setDirectError(null), 3000);
           }
@@ -247,8 +204,8 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
             // Nothing to send. Hands-free must NOT re-open the mic: on device that spun - record,
             // hear the room, transcribe to nothing, arm again - three turns in eight seconds with no
             // output. A person tapping the mic resumes it.
-            handsFree.suspend('nothing was transcribed');
-            handsFree.suspend('nothing was transcribed');
+            voiceSession.dispatch('nothingHeard');
+            voiceSession.dispatch('nothingHeard');
         setDirectError(outcome.message);
             setTimeout(() => setDirectError(null), 3000);
           }
@@ -291,7 +248,7 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
           onTranscriptRef.current(outcome.text);
         }
       } else {
-        handsFree.suspend('nothing was transcribed');
+        voiceSession.dispatch('nothingHeard');
         setDirectError(outcome.message);
         setTimeout(() => setDirectError(null), 3000);
       }
@@ -307,9 +264,10 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
     // arrives here. A stop that silence did not cause is a deliberate one, and it suspends hands-free
     // until the person taps for the floor again.
     logger.log('[TURN] stop requested');
+    // The person's turn is over and there is audio to work on, so the assistant takes the floor now -
+    // before any reply exists. That is what keeps the mic shut while it transcribes and thinks.
+    voiceSession.dispatch('turnCaptured');
     // Released on EVERY stop path, so a mic that closed can never keep the floor.
-    dropFloor(turnTokenRef);
-    handsFree.noteTurnStopped();
     stopListeningForSilence();
     if (isDirectRecording) {
       await stopDirectRecording();
@@ -358,7 +316,15 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   useEffect(() => {
     return recordingController.registerHandlers({
       start: () => startRef.current(),
-      stop: () => stopRef.current(),
+      stop: () => {
+        // In hands-free there was no tap to start, so the stop button means STOP THE SESSION - and a
+        // user-induced stop never returns to listening on its own. In the tapped modes the same button
+        // is how a person ends their question, so it just hands the floor over and the answer follows.
+        if ((useAppStore.getState().settings.voiceTurnMode ?? 'silence') === 'handsfree') {
+          voiceSession.dispatch('userStop');
+        }
+        stopRef.current();
+      },
       cancel: () => cancelRef.current(),
     });
   }, []);
