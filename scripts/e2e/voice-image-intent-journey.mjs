@@ -26,6 +26,7 @@ import { connectSurface } from './sync-surface.mjs';
 import {
   ensureChat,
   OUTCOMES,
+  outcomeBaseline,
   readResidency,
   speakTurn,
   waitForOutcome,
@@ -42,6 +43,7 @@ await mkdir(evidenceDir, { recursive: true });
 const surface = await connectSurface({ ...specFor(primaryKind), passive: true });
 const readings = [];
 let outcome = 'not reached';
+let endedBy = 'not reached';
 
 try {
   console.log(`\n${primaryKind} -> voice image-intent journey`);
@@ -56,11 +58,15 @@ try {
   // THE ACTION: say it out loud. Everything after this is the app's own doing - transcribe, route to
   // image intent, enhance the prompt, load the image model behind whatever already holds memory.
   await ensureChat(surface, 'voice');
+  // Counted BEFORE speaking: a chat keeps every picture it has made, so "an image is on screen" is
+  // already true on a second run and would pass without the app doing anything.
+  const baseline = await outcomeBaseline(surface, OUTCOMES);
   console.log(autoStop ? '\nspeaking, then NOT tapping stop...' : '');
   const turn = await speakTurn(surface, spoken, { autoStop });
+  endedBy = turn.endedBy;
   console.log(`\nSPOKE  "${spoken}"  (turn ended by: ${turn.endedBy})`);
 
-  const settled = await waitForOutcome(surface, OUTCOMES, { timeoutMs: 8 * 60_000 });
+  const settled = await waitForOutcome(surface, OUTCOMES, { timeoutMs: 8 * 60_000, baseline });
   outcome = settled.outcome;
   console.log(`\nRESULT ${outcome}`);
   if (outcome === 'refused') {
@@ -76,7 +82,7 @@ try {
 } finally {
   await writeFile(
     join(evidenceDir, 'voice-image-intent.json'),
-    `${JSON.stringify({ runId, primaryKind, spoken, autoStop, outcome, readings }, null, 2)}\n`,
+    `${JSON.stringify({ runId, primaryKind, spoken, autoStop, outcome, endedBy, readings }, null, 2)}\n`,
   );
   console.log(`\nresult: ${join(evidenceDir, 'voice-image-intent.json')}`);
   await Promise.resolve(surface.close()).catch(() => undefined);

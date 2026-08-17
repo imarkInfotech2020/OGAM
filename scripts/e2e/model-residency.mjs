@@ -166,21 +166,37 @@ export const speakTurn = async (surface, text, { settleMs = 1_500, autoStop = fa
     return { text, endedBy: 'tap' };
   }
 
-  // Nothing is pressed. The turn has to end by itself, which is the whole claim: the silence endpoint
-  // sees the transcript settle and stops the session. Waited out rather than assumed - if the button
-  // still reads "tap to stop" after the window, auto-stop did not happen and the run should say so.
-  const deadline = Date.now() + 20_000;
+  // Nothing is pressed. The turn has to end by itself, which is the whole claim.
+  //
+  // The BEFORE state is asserted first. "Not recording any more" is free if recording never started -
+  // the tap could have missed, or the mic permission dialog could have eaten it - and a check that
+  // only looks at the after-state calls that a pass. It is also why this waits for the label to
+  // actually READ as recording before it starts timing the silence.
+  const recording = async () =>
+    (await surface.ui.labels()).some((label) => /recording|tap to stop/i.test(label.trim()));
+
+  const armedBy = Date.now() + 8_000;
+  let started = false;
+  while (Date.now() < armedBy && !started) {
+    started = await recording();
+    if (!started) await sleep(500);
+  }
+  if (!started) {
+    console.log('  NEVER STARTED recording - the record tap did not take; not an auto-stop result');
+    return { text, endedBy: 'never started' };
+  }
+
+  const quietFrom = Date.now();
+  const deadline = quietFrom + 25_000;
   while (Date.now() < deadline) {
-    await sleep(1_000);
-    const labels = (await surface.ui.labels()).map((label) => label.trim());
-    const stillRecording = labels.some((label) => /recording|tap to stop/i.test(label));
-    if (!stillRecording) {
-      const waited = Math.round((Date.now() - (deadline - 20_000)) / 100) / 10;
-      console.log(`  auto-stopped on silence after ~${waited}s of quiet`);
+    await sleep(500);
+    if (!(await recording())) {
+      const waited = Math.round((Date.now() - quietFrom) / 100) / 10;
+      console.log(`  auto-stopped after ~${waited}s (measured from confirmed recording state)`);
       return { text, endedBy: 'silence', quietSeconds: waited };
     }
   }
-  console.log('  STILL RECORDING after 20s - auto-stop did not fire; tapping stop');
+  console.log('  STILL RECORDING after 25s - auto-stop did not fire; tapping stop');
   await surface.ui.tapWhenReady('voice-record-button-audio', { timeoutMs: 20_000 });
   return { text, endedBy: 'tap (auto-stop failed)' };
 };
@@ -191,19 +207,34 @@ export const speakTurn = async (surface, text, { settleMs = 1_500, autoStop = fa
  * Journeys care about "the picture appeared OR the app refused" far more than about a single happy
  * label, and a refusal that is reported as a timeout hides the very message we want to read.
  */
-export const waitForOutcome = async (surface, outcomes, { timeoutMs, pollMs = 3_000 } = {}) => {
+export const waitForOutcome = async (surface, outcomes, { timeoutMs, pollMs = 3_000, baseline } = {}) => {
   const deadline = Date.now() + (timeoutMs ?? 6 * 60_000);
+  // How many already matched BEFORE the request. A chat keeps every picture it has ever produced, so
+  // "a generated image is on screen" is true the moment a second run starts - it would pass without
+  // the app doing anything at all. Only an INCREASE counts.
+  const counts = (labels, pattern) => labels.filter((label) => pattern.test(label)).length;
+  const before = baseline ?? {};
   let lastLabels = [];
   while (Date.now() < deadline) {
     lastLabels = await labelsOf(surface);
     for (const [name, pattern] of Object.entries(outcomes)) {
-      if (lastLabels.some((label) => pattern.test(label))) {
+      if (counts(lastLabels, pattern) > (before[name] ?? 0)) {
         return { outcome: name, labels: lastLabels };
       }
     }
     await sleep(pollMs);
   }
   return { outcome: 'timeout', labels: lastLabels };
+};
+
+/** Count each outcome BEFORE acting, so waitForOutcome can require a new one rather than any one. */
+export const outcomeBaseline = async (surface, outcomes) => {
+  const labels = await labelsOf(surface);
+  const baseline = {};
+  for (const [name, pattern] of Object.entries(outcomes)) {
+    baseline[name] = labels.filter((label) => pattern.test(label)).length;
+  }
+  return baseline;
 };
 
 /** The labels a residency journey watches for, in one place so the journeys cannot drift apart. */
