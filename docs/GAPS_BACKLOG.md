@@ -1116,6 +1116,13 @@ notes below say exactly which part is proven and how.
   machine transitions are pure and typecheck/lint/package tests are clean, but no phone has run them:
   the replay-while-listening contention, the paused-replay hand-back, and the settings rows all need
   the on-device pass.
+- **Queued outbound transfers do not follow a peer to its new address, and never expire.** Seen live:
+  the phone's pending WAVs all say "To OGAD x.x.x.64" while discovery is finding the same Mac at
+  .31 - inbound from .31 completes in seconds, outbound to .64 sits at 0% forever. The durable
+  SQLite op-store makes these rows survive restarts (correctly), which turns two missing rules into
+  a permanent pileup: (1) re-target queued items when the same device id is rediscovered at a new
+  host - the sibling of the existing "follow a peer that comes back on a new port" fix; (2) an
+  expiry/failed transition for a peer that stays unreachable, instead of pending-forever.
 - **A sender dying mid-batch leaves the receiver full of zombie rows.** Seen live: desktop was
   sending a 90-item batch (its log shows one file importing every ~3s, serial); the desktop process
   was killed mid-batch and Android's Sync activity froze with 35 rows at "Receiving - 0%, 0 B" from
