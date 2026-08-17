@@ -81,6 +81,18 @@ function scheduleFlush(): void {
   timer = setTimeout(() => { flush().catch(() => {}); }, FLUSH_MS);
 }
 
+/**
+ * Write everything buffered RIGHT NOW, without waiting for the flush timer.
+ *
+ * For a line you must not lose. The timer-based flush is scheduled work, so a step that blocks the
+ * JS thread - or a process the OS is about to kill - never reaches it, and the log stops exactly
+ * where the interesting part begins. That is how an 11-second main-thread block left no trace.
+ */
+export function flushDebugLogNow(): void {
+  if (!enabled) return;
+  flush().catch(() => {});
+}
+
 /** Begin capturing to the file. Idempotent; no-op outside __DEV__. */
 export function initDebugLogFile(): void {
   if (!__DEV__ || enabled) return;
