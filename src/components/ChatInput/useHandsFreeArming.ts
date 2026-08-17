@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { SPEAKER_DRAIN_MS } from '@offgrid/speech';
 import { useAppStore } from '../../stores';
 import { conversationFloor } from '../../services/conversationFloor';
 import logger from '../../utils/logger';
@@ -42,18 +43,36 @@ export function useHandsFreeArming(opts: {
   const inVoiceModeRef = useRef(opts.isInAudioInterfaceMode);
   inVoiceModeRef.current = opts.isInAudioInterfaceMode;
 
-  useEffect(
-    () =>
-      conversationFloor.subscribe(holder => {
-        if (holder !== 'idle') return; // someone is mid-turn; the floor is not ours to take
-        if (suspended.current) return;
-        if (!inVoiceModeRef.current()) return;
-        if ((useAppStore.getState().settings.voiceTurnMode ?? 'silence') !== 'handsfree') return;
-        logger.log('[VAD] floor is free - hands-free opening the mic');
+  /** Pending drain wait, cancelled the moment anyone takes the floor back. */
+  const drainTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const cancelDrain = (): void => {
+      if (drainTimer.current) clearTimeout(drainTimer.current);
+      drainTimer.current = null;
+    };
+    const unsubscribe = conversationFloor.subscribe(holder => {
+      // Anyone taking the floor cancels a pending open - including the assistant starting a new
+      // sentence during the drain, which is exactly when the mic must NOT appear.
+      cancelDrain();
+      if (holder !== 'idle') return;
+      if (suspended.current) return;
+      if (!inVoiceModeRef.current()) return;
+      if ((useAppStore.getState().settings.voiceTurnMode ?? 'silence') !== 'handsfree') return;
+      // Let the speaker drain first: the engine reports stopped before the sound has left the room,
+      // and without echo cancellation the mic would capture the assistant's own tail as a question.
+      drainTimer.current = setTimeout(() => {
+        drainTimer.current = null;
+        if (!conversationFloor.isFree()) return; // taken while we waited
+        logger.log('[VAD] floor is free and drained - hands-free opening the mic');
         startRef.current();
-      }),
-    [],
-  );
+      }, SPEAKER_DRAIN_MS);
+    });
+    return () => {
+      cancelDrain();
+      unsubscribe();
+    };
+  }, []);
 
   return {
     markEndedBySilence: () => {
