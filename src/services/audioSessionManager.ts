@@ -133,9 +133,16 @@ class AudioSessionManager {
       if (mode === 'playback') {
         AudioManager.setAudioSessionOptions({ iosCategory: 'playback', iosMode: 'default' });
       } else {
+        // `voiceChat` turns on iOS's voice-processing I/O: hardware echo cancellation, so the mic
+        // does NOT hear our own speaker. That is what lets someone talk over the assistant without
+        // the assistant's voice being recorded as theirs - the same platform path the hosted
+        // voice-agent products use rather than shipping an echo canceller of their own.
+        //
+        // Android has no equivalent here: this library's session options are iOS-only, and the
+        // Android fix needs the VOICE_COMMUNICATION audio source at the native recorder.
         AudioManager.setAudioSessionOptions({
           iosCategory: 'playAndRecord',
-          iosMode: 'default',
+          iosMode: 'voiceChat',
           iosOptions: ['defaultToSpeaker', 'allowBluetoothHFP'],
         });
       }

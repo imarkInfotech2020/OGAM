@@ -3,6 +3,7 @@ import { useAppStore } from '../../stores';
 import { recordingController } from '../../services/recordingController';
 import { audioRecorderService } from '../../services/audioRecorderService';
 import { SpeechEndpointTimer } from '@offgrid/speech';
+import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import logger from '../../utils/logger';
 
 /**
@@ -36,8 +37,11 @@ export function useSilenceEndpoint(opts: {
   const endpointRef = useRef<SpeechEndpointTimer | null>(null);
   const levelsOffRef = useRef<(() => void) | null>(null);
   const [isAwaitingSpeech, setIsAwaitingSpeech] = useState(false);
+  /** Latched for the turn: barge-in fires once on the first speech, not on every loud buffer. */
+  const awaitingRef = useRef(false);
 
   const stop = (): void => {
+    awaitingRef.current = false;
     setIsAwaitingSpeech(false);
     endpointRef.current?.cancel();
     endpointRef.current = null;
@@ -61,6 +65,7 @@ export function useSilenceEndpoint(opts: {
     const handsFree = mode === 'handsfree';
 
     if (handsFree) {
+      awaitingRef.current = true;
       setIsAwaitingSpeech(true);
       // recordingController is the one owner of record phase, so the hero can say "Listening"
       // without this file knowing the hero exists.
@@ -80,6 +85,14 @@ export function useSilenceEndpoint(opts: {
       const reading = endpoint.observeLevel(rms);
       // The moment speech is first heard, the turn has genuinely begun.
       if (handsFree && reading.speech) {
+        if (awaitingRef.current) {
+          awaitingRef.current = false;
+          // BARGE-IN: the person talking wins. If the assistant is mid-sentence it stops here, which
+          // is only safe because iOS voice-processing keeps its voice out of this mic in the first
+          // place - otherwise the assistant would interrupt itself.
+          logger.log('[VAD] speech detected - the person has the floor');
+          callHook(HOOKS.audioStop);
+        }
         setIsAwaitingSpeech(false);
         recordingController.setPhase('recording');
       }
