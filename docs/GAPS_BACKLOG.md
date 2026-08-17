@@ -1046,13 +1046,21 @@ notes below say exactly which part is proven and how.
   (`SpeechEndpointTimer`, `canArmHandsFreeTurn`), the mode labels, the onset look-back and the WAV
   trim math. Mobile uses all of it; desktop uses none. Parity was asked for explicitly, so SSOT here
   is structural only until desktop's recorder is wired to the same package. **This is the top item.**
-- **Android AEC is unproven and has a known failure mode.** Echo cancellation comes from a
-  patch-package change to Oboe's builder (`setInputPreset(VoiceCommunication)`) — upstream never calls
-  `setInputPreset`, and its default (`VoiceRecognition`) deliberately disables AEC, so this is still
-  needed on the latest 0.13.3. Needs a NATIVE rebuild. Field reports (google/oboe#2123) say some
-  devices return BLANK audio with this preset rather than failing to open, which the builder's
-  fallback cannot catch because the stream opens fine. Symptom: Android hears nothing at all. Fix:
-  revert `patches/react-native-audio-api+0.11.7.patch`.
+- **Barge-in is NOT possible on this audio stack, and the attempt is backed out.** Talking over the
+  assistant cannot interrupt it. An AVAudioSession MODE is only a hint; real cancellation needs the
+  voice-processing I/O unit driving INPUT and OUTPUT together so it has a reference for what the
+  speaker plays. Our TTS goes out through an ordinary `AudioContext`, which that unit never sees, so on
+  device the mic recorded the assistant and speech detection fired on the assistant's own voice - iOS
+  AND Android alike. The Oboe `VoiceCommunication` patch was reverted for the same reason: it asks for
+  a cancelling capture source while playback leaves by another path, so it bought nothing and carried a
+  blank-audio risk on some devices (google/oboe#2123). `audioRecorderService.isEchoCancelled()` is the
+  single owner and returns false; when playback and capture share a voice-processing engine it returns
+  true and hands-free listens through the assistant with no other change. **Real fix: give TTS playback
+  and mic capture one voice-processing engine** - native/library work, not a setting.
+- **Voice processing degrades PLAYBACK, which is how TTS went silent.** `ensurePlayback` deliberately
+  leaves an active record session alone, so one recorded turn in a voice-processing mode left every
+  later playback voice-processed. Ordinary turns no longer request it. Guard rows are on the release
+  checklist (#202, #203).
 - **The hands-free arm is a 400ms poll**, not an event. Four gating signals live in four places and
   one (assistant speaking) is behind a pro hook core cannot subscribe to. Works, but the honest shape
   is a subscription; desktop will need its own tick until then.
