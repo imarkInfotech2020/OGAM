@@ -91,7 +91,7 @@ export function startStartupMemoryProbe(): void {
   timer = setInterval(tick, TICK_MS);
 }
 
-export function stopStartupMemoryProbe(): void {
+function stopStartupMemoryProbe(): void {
   if (!timer) return;
   clearInterval(timer);
   timer = null;

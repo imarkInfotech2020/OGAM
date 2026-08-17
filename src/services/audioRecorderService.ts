@@ -7,7 +7,7 @@ import logger from '../utils/logger';
 type AudioInputFormat = 'wav' | 'mp3';
 
 /** How loud the microphone is right now, 0 upwards. RMS of one buffer of PCM samples. */
-export type AudioLevelListener = (rms: number) => void;
+type AudioLevelListener = (rms: number) => void;
 
 class AudioRecorderService {
   private recorder: AudioRecorder | null = null;
