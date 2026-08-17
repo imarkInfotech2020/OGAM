@@ -80,6 +80,10 @@ class RecordingController {
   /** Start recording if idle. Decision is made from the authoritative phase. */
   start(): void {
     if (this.getPhase() !== 'idle' || !this.handlers) return;
+    // The person asking to begin is the ONLY way out of a stopped session, and this is where that ask
+    // arrives from every microphone in the app. Without it a stop was permanent: the tap reached the
+    // recorder, the recorder asked the session whether it may listen, and the answer was always no.
+    voiceSession.dispatch('userStart');
     void this.handlers.start();
   }
 
