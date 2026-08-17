@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useAppStore } from '../../stores';
+import { useAppStore, useUiModeStore } from '../../stores';
 import { turnLock } from '../../services/turnLock';
 import logger from '../../utils/logger';
 
@@ -46,20 +46,34 @@ export function useHandsFreeArming(opts: {
   const inVoiceModeRef = useRef(opts.isInAudioInterfaceMode);
   inVoiceModeRef.current = opts.isInAudioInterfaceMode;
 
-  useEffect(
-    () =>
-      // Fires whenever the lock changes hands. Free means the previous turn is over AND the room has
-      // drained - the lock owns that delay, so this file no longer schedules anything.
-      turnLock.subscribe(holder => {
-        if (holder !== null) return;
-        if (suspended.current) return;
-        if (!inVoiceModeRef.current()) return;
-        if ((useAppStore.getState().settings.voiceTurnMode ?? 'silence') !== 'handsfree') return;
-        logger.log('[VAD] lock is free - hands-free taking the floor');
-        startRef.current();
-      }),
-    [],
-  );
+  /**
+   * Take the floor if it is genuinely ours to take.
+   *
+   * Read from the store at the MOMENT of arming rather than captured, so switching mode takes effect on
+   * the next opportunity instead of needing a reload.
+   */
+  const maybeArm = (): void => {
+    if (suspended.current) return;
+    if (!turnLock.isFree()) return;
+    if (!inVoiceModeRef.current()) return;
+    if ((useAppStore.getState().settings.voiceTurnMode ?? 'silence') !== 'handsfree') return;
+    logger.log('[VAD] lock is free - hands-free taking the floor');
+    startRef.current();
+  };
+
+  // The lock changing hands is an EDGE. On its own that is not enough: entering voice mode with the
+  // lock already free produces no edge at all, so hands-free sat there doing nothing while the setting
+  // said hands-free. Both triggers are needed - the edge for turns that end, and the checks below for
+  // arriving in the mode.
+  useEffect(() => turnLock.subscribe(holder => { if (holder === null) maybeArm(); }), []);
+
+  // Arriving in hands-free voice mode, by any route: mounting here, switching the interface to voice,
+  // or changing the turn mode in settings.
+  const interfaceMode = useUiModeStore(state => state.interfaceMode);
+  const turnMode = useAppStore(state => state.settings.voiceTurnMode);
+  useEffect(() => {
+    maybeArm();
+  }, [interfaceMode, turnMode]);
 
   return {
     markEndedBySilence: () => {
