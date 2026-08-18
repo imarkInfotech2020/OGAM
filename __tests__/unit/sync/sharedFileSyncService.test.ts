@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MAX_SHARED_FILE_BYTES } from '@offgrid/sync';
+import {
+  createSharedFileStateFields,
+  createSharedFileTransferMetadata,
+  MAX_SHARED_FILE_BYTES,
+} from '@offgrid/sync';
 import type { SyncMutation } from '@offgrid/core/services/sync/mutation';
 
 // The service reaches Sync, which reaches the sockets and the discovery service. Those are the device,
@@ -516,33 +520,130 @@ describe('the files this phone offers the rest of the mesh', () => {
     it('waits for the bytes when only the record has arrived', async () => {
       await launch();
 
-      service.applyControlPut(ARRIVING_ID, {
-        kind: 'generated_media',
-        name: 'from-the-mac.png',
-        mimeType: 'image/png',
-        fileSize: 1024,
-        createdAt: '2026-08-04T09:00:00.000Z',
-      });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
 
       // A received record is not one of this phone's active outgoing controls.
       expect(service.files()).toEqual([]);
       expect(service.canPublishControl('the-ipad', ARRIVING_ID)).toBe(false);
     });
 
-    it('stops waiting when the record is withdrawn again', async () => {
+    /**
+     * The bytes, staged exactly where the transfer sink leaves them.
+     *
+     * Not a shortcut past the transfer: this IS the boundary a completed transfer hands over - a metadata
+     * file and the payload beside it, under the staging root. Everything after it (does the description
+     * match, where does the file belong, what is it hashed as) is the real code under test.
+     */
+    async function bytesStagedFor(control: {
+      syncId: string;
+      kind: string;
+      name: string;
+      mimeType: string;
+      fileSize: number;
+      createdAt: string;
+    }): Promise<void> {
+      const directory = `/caches/sync-shared-files/${encodeURIComponent(control.syncId)}`;
+      await fs.mkdir(directory);
+      // Built by the SENDER's own builder, not hand-rolled here: the envelope carries a type and a
+      // version the receiver checks, and a literal in a test would drift from them silently.
+      await fs.writeFile(
+        `${directory}/metadata.json`,
+        JSON.stringify(createSharedFileTransferMetadata(control as never)),
+        'utf8',
+      );
+      await write(`${directory}/${control.name}`, control.fileSize);
+    }
+
+    /**
+     * The file as the far device describes it.
+     *
+     * Turned into BOTH shapes by the producers the app uses - `createSharedFileStateFields` for the
+     * record on the wire (snake_case) and `createSharedFileTransferMetadata` for the envelope beside the
+     * bytes (camelCase). Written by hand, the two drift, and the control parser rejects an unknown key
+     * outright: a camelCase `mimeType` makes the whole control parse as null, so nothing happens at all
+     * and a test asserting "no file yet" passes for the wrong reason.
+     */
+    const ARRIVING = {
+      syncId: ARRIVING_ID,
+      kind: 'generated_media' as const,
+      name: 'from-the-mac.png',
+      mimeType: 'image/png',
+      fileSize: 1024,
+      createdAt: '2026-08-04T09:00:00.000Z',
+    };
+    const ARRIVING_RECORD = createSharedFileStateFields(ARRIVING as never);
+
+    /** Where an imported shared file lands. Composed the way the importer composes it. */
+    const IMPORTED_PATH = `/docs/shared_files/${ARRIVING.kind}/${ARRIVING_ID}-${ARRIVING.name}`;
+
+    const FROM_THE_MAC = {
+      originDeviceId: 'fp-the-mac',
+      originDeviceName: 'Off Grid AI Desktop',
+    };
+
+    it('is imported, and becomes a file this phone actually holds', async () => {
       await launch();
-      service.applyControlPut(ARRIVING_ID, {
-        kind: 'generated_media',
-        name: 'from-the-mac.png',
-        mimeType: 'image/png',
-        fileSize: 1024,
-        createdAt: '2026-08-04T09:00:00.000Z',
-      });
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await bytesStagedFor(ARRIVING);
+
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+
+      // The record is the phone's now: listed as a transferred file, owned by the device that sent it,
+      // and sitting under this app's own storage rather than in the staging area it arrived in.
+      const [file] = service.files();
+      expect(file?.syncId).toBe(ARRIVING_ID);
+      expect(file?.name).toBe(ARRIVING.name);
+      expect(file?.localPath).toBe(IMPORTED_PATH);
+      expect(file?.provenance?.originDeviceId).toBe(FROM_THE_MAC.originDeviceId);
+      // AVAILABLE, which is a different claim from "a record exists": the bytes are here, so this phone
+      // can serve them back to a peer whose copy went missing.
+      expect(file?.available).toBe(true);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(true);
+      // Stamped with what the bytes ARE. The record id is re-minted on identity churn; this is not.
+      expect(file?.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('is deleted from this phone, bytes included, when the far device withdraws it', async () => {
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+      // Precondition, so the removal below is an observed transition rather than an always-true.
+      expect(service.files()).toHaveLength(1);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(true);
 
       service.applyControlDelete(ARRIVING_ID);
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await settle();
+
+      // A person who deletes a file means it, on every device. The row goes AND the bytes go - leaving
+      // the file behind would keep the storage this phone is holding for a record nobody can see.
+      expect(service.files()).toEqual([]);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(false);
+    });
+
+    it('is not imported at all when the bytes are described differently', async () => {
+      await launch();
+      // Same file, but the staged envelope says it is bigger than the record claims.
+      await bytesStagedFor({ ...ARRIVING, fileSize: 2048 });
+
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+
+      // Identity has to agree before anything is written into the library. These are the last bytes that
+      // can be checked against the description, so a disagreement discards them rather than importing a
+      // file under a record that does not describe it.
+      expect(service.files()).toEqual([]);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(false);
+    });
+
+    it('stops waiting when the record is withdrawn again', async () => {
+      await launch();
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+
+      service.applyControlDelete(ARRIVING_ID);
+      await settle();
 
       // Deleted on the far device before its bytes ever got here. Nothing is left waiting for a transfer
       // that will never be asked for.
