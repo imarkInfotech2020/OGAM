@@ -1131,3 +1131,27 @@ notes below say exactly which part is proven and how.
   "in progress" forever; (2) admission marks the whole batch in-progress up front while transfer is
   actually serial, so "35 in progress" describes the queue, not the wire. Any crash or quit
   reproduces this; it does not need a kill.
+
+## Voice: the three RED realtime tests are GREEN, but NOT device-verified (2026-08-18)
+
+All three had ONE root cause. `recordingController.start()` both dispatched `userStart` - which the
+session driver obeys by opening the microphone - AND called `handlers.start()`. One tap therefore ran
+`startRealtimeTranscription` twice and entered the native `transcribeRealtime` twice while the first
+session was still coming up. That is the "State: -100" collision (B12), and it never needed a
+double-tap. Stack-captured at the boundary, not inferred.
+
+Fixed: a synchronous in-flight latch in `useWhisperTranscription` (the old guard read `isRecording`
+from a closure and `whisperService.isTranscribing` was only set after an await for permissions, so two
+asks fit inside the window); `useVoiceSessionDriver` made edge-triggered, which is what its contract
+already claimed; `nextVoiceSession` `userStart` made a no-op when already listening.
+
+**Still owed: a device pass.** Every symptom in this area's history (B12, B26, B28) was device-only, and
+these fixes are verified against faked native leaves. Three flows to run on a phone:
+1. Text model resident, tap mic, speak - does the transcript land? (was the silent-empty-composer case)
+2. Tap the mic twice quickly - any "State: -100", or does the transcript arrive?
+3. Fresh voice-model download, then tap mic - does the spinner become a live recording?
+
+**Do not make `useVoiceSessionDriver` level-triggered again.** `voiceSession.dispatch` notifies on a
+phase change so the hero can show "Recording you now"; with a level-triggered driver that same
+notification opens a second recording mid-turn. The two belong together and each says so in a comment.
+
