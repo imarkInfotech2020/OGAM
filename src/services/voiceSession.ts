@@ -6,7 +6,7 @@ import {
   type VoiceSession,
   type VoiceSessionEvent,
 } from '@offgrid/speech';
-import { useAppStore } from '../stores';
+import { useAppStore, useUiModeStore } from '../stores';
 import logger from '../utils/logger';
 
 /**
@@ -33,6 +33,18 @@ const handsFree = (): boolean =>
   (useAppStore.getState().settings.voiceTurnMode ?? 'silence') === 'handsfree';
 
 /**
+ * Whether the app is actually in the voice interface right now.
+ *
+ * `voiceTurnMode` is a GLOBAL setting, and hands-free makes the session start in `listen`. Nothing
+ * re-initialises the session when the interface mode changes, so without this gate a hands-free
+ * setting armed the microphone in a TEXT or IMAGE chat too - the composer showed "Slide to cancel"
+ * over a keyboard-less text chat, always listening. Hands-free is a voice-mode setting; it may only
+ * open the mic while the voice interface is up.
+ */
+const inVoiceInterface = (): boolean =>
+  useUiModeStore.getState().interfaceMode === 'audio';
+
+/**
  * Built on FIRST USE, never at module load.
  *
  * `handsFree()` reads the app store, and this module is reachable from that store's own import graph:
@@ -47,8 +59,16 @@ const current = (): VoiceSession => (session ??= initialVoiceSession(handsFree()
 export const voiceSession = {
   current: (): VoiceSession => current(),
 
-  /** The microphone may be open only while listening. */
-  micShouldBeOpen: (): boolean => micShouldBeOpen(current()),
+  /**
+   * The microphone may be open only while listening AND while the voice interface is actually up.
+   *
+   * The single choke point every mic-open path funnels through (the session driver on mount, its
+   * transition subscriber, `startRecording`, and the silence endpoint), and evaluated fresh on every
+   * call - so it is the one honest place to also require voice mode. Gating the session's INITIAL
+   * state instead would cache wrong: the session is built once, so a session built in text mode would
+   * stay stopped even after switching to voice.
+   */
+  micShouldBeOpen: (): boolean => inVoiceInterface() && micShouldBeOpen(current()),
 
   /** Audio may play only while speaking - so a reply after a stop stays silent. */
   speechMayPlay: (): boolean => speechMayPlay(current()),
