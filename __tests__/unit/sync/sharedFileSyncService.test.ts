@@ -637,6 +637,147 @@ describe('the files this phone offers the rest of the mesh', () => {
       expect(await fs.exists(IMPORTED_PATH)).toBe(false);
     });
 
+    /**
+     * The same picture, offered again under a fresh record id.
+     *
+     * Identities are re-minted - a device repairs its install, a record is re-admitted - and the file
+     * itself does not change when that happens. So an arriving record has to be recognised by what its
+     * bytes ARE, not by the id it wears, or one download becomes a pile of identical files each
+     * re-offered to every other device.
+     */
+    it('is not imported again when the same bytes arrive under a new id', async () => {
+      const REMINTED_ID = '88888888-8888-4888-8888-888888888888';
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+      await settle();
+      const contentHash = service.files()[0]?.contentHash;
+      expect(contentHash).toMatch(/^[0-9a-f]{64}$/);
+
+      // The far device now describes the same file under a new id, and sends the bytes again.
+      const REMINTED = { ...ARRIVING, syncId: REMINTED_ID, contentHash };
+      await bytesStagedFor(REMINTED);
+      service.applyControlPut(
+        REMINTED_ID,
+        createSharedFileStateFields(REMINTED as never),
+        FROM_THE_MAC,
+      );
+      await settle();
+
+      // One file, still the one already here. A second row would show the user the same picture twice,
+      // and this phone would then offer both of them on to every other device it is paired with.
+      expect(service.files().map(file => file.syncId)).toEqual([ARRIVING_ID]);
+      expect(
+        await fs.exists(
+          `/docs/shared_files/${ARRIVING.kind}/${REMINTED_ID}-${ARRIVING.name}`,
+        ),
+      ).toBe(false);
+      // And the bytes that came with it are dropped rather than left in the staging area, which would
+      // hold storage for a copy nothing will ever read.
+      expect(
+        await fs.exists(
+          `/caches/sync-shared-files/${REMINTED_ID}/${ARRIVING.name}`,
+        ),
+      ).toBe(false);
+    });
+
+    /** Make the platform refuse to hash one path, without touching any other file. */
+    function hashingFailsFor(path: string): () => void {
+      const hash = fs.hash as unknown as jest.Mock;
+      const real = hash.getMockImplementation()!;
+      hash.mockImplementation(async (target: string, algorithm: string) => {
+        if (target === path) throw new Error('Could not read the file');
+        return real(target, algorithm);
+      });
+      return () => hash.mockImplementation(real);
+    }
+
+    it('still arrives when the phone cannot hash it', async () => {
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      const restore = hashingFailsFor(IMPORTED_PATH);
+
+      try {
+        service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+        await settle();
+      } finally {
+        restore();
+      }
+
+      // The hash is how duplicates are spotted later; it is not what makes the file usable now. A file
+      // the user can open, with no content claim on it, is the right outcome - refusing the import over
+      // a failed digest would lose a file that arrived perfectly well.
+      const [file] = service.files();
+      expect(file?.localPath).toBe(IMPORTED_PATH);
+      expect(await fs.exists(IMPORTED_PATH)).toBe(true);
+      expect(file?.contentHash).toBeUndefined();
+    });
+
+    it('is hashed on the next launch, and then recognises its own bytes coming back', async () => {
+      const REMINTED_ID = '99999999-9999-4999-8999-999999999999';
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      const restore = hashingFailsFor(IMPORTED_PATH);
+      try {
+        service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+        await settle();
+      } finally {
+        restore();
+      }
+      expect(service.files()[0]?.contentHash).toBeUndefined();
+
+      // The imported file is on the phone's disk now, and disk outlives a launch.
+      disk.push({ path: IMPORTED_PATH, bytes: ARRIVING.fileSize });
+      await relaunch();
+      // Only once state has replayed does the library mean anything, so that is when it is repaired.
+      await service.stateReady(PREFERENCES);
+      await settle();
+
+      // Stamped from the bytes this device actually holds. This is what repairs a library admitted
+      // before the field existed, or by a launch where hashing failed.
+      const contentHash = service.files()[0]?.contentHash;
+      expect(contentHash).toMatch(/^[0-9a-f]{64}$/);
+
+      // And the point of stamping it: the guard now works for the file that was already here. Without
+      // the backfill a record making no content claim cannot recognise an echo of itself, so the same
+      // download lands again on every identity change.
+      const REMINTED = { ...ARRIVING, syncId: REMINTED_ID, contentHash };
+      await bytesStagedFor(REMINTED);
+      service.applyControlPut(
+        REMINTED_ID,
+        createSharedFileStateFields(REMINTED as never),
+        FROM_THE_MAC,
+      );
+      await settle();
+
+      expect(service.files().map(file => file.syncId)).toEqual([ARRIVING_ID]);
+    });
+
+    it('is left unhashed when its bytes are no longer on the phone', async () => {
+      await launch();
+      await bytesStagedFor(ARRIVING);
+      const restore = hashingFailsFor(IMPORTED_PATH);
+      try {
+        service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
+        await settle();
+      } finally {
+        restore();
+      }
+
+      // Relaunched without replaying the imported file: the bytes are gone, the record is not.
+      await relaunch();
+      await service.stateReady(PREFERENCES);
+      await settle();
+
+      // Nothing to hash, so nothing is claimed. Stamping a record whose file has gone would give the
+      // duplicate guard a content claim this device cannot serve, and the phone would then refuse the
+      // very copy a peer could have used to heal it.
+      const [file] = service.files();
+      expect(file?.syncId).toBe(ARRIVING_ID);
+      expect(file?.contentHash).toBeUndefined();
+      expect(file?.available).toBe(false);
+    });
+
     it('stops waiting when the record is withdrawn again', async () => {
       await launch();
       service.applyControlPut(ARRIVING_ID, ARRIVING_RECORD, FROM_THE_MAC);
