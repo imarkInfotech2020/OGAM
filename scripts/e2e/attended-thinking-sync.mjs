@@ -1311,9 +1311,11 @@ const prepareNoTools = async surface => {
     },
   );
   const ready = await capture(surface, 'no-tools-ready');
-  // The sheet is a toggle, so close it the same way it was opened.
+  // While the sheet is open Android exposes only the sheet rows, not the toolbar button that
+  // opened it. Back is the shared close gesture on both mobile platforms and does not depend on an
+  // element hidden behind the modal accessibility tree.
   if ((await surface.ui.labels()).includes('quick-tools')) {
-    await surface.ui.tapLabel('quick-settings-button');
+    await surface.ui.back();
   }
   await surface.ui.waitForLabel('chat-screen', {
     label: `${surface.platform} chat with no tools`,
