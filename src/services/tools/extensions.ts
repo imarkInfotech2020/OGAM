@@ -12,6 +12,15 @@ export interface ToolExtension {
   canHandle(toolName: string): boolean;
   execute(call: ToolCall): Promise<ToolResult>;
   enabledToolCount(): number;
+  /**
+   * Notify when the answer to `enabledToolCount` may have changed.
+   *
+   * The count is read imperatively at render time, so a surface showing it never re-renders on its
+   * own when the extension's backing store moves - deactivating an MCP server left the chat's
+   * "Pro Tools" badge at the old count until the screen was remounted. Optional: an extension whose
+   * count is constant (email/calendar returns 0) has nothing to report.
+   */
+  subscribe?(listener: () => void): () => void;
 }
 
 const extensions: ToolExtension[] = [];

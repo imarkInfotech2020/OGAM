@@ -28,6 +28,7 @@ import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores';
 import { getToolExtensions } from '../../services/tools/extensions';
+import { useExtensionToolCount } from '../../services/tools/useExtensionToolCount';
 import { AVAILABLE_TOOLS } from '../../services/tools';
 import { useOpenProTools } from '../../hooks/useOpenProTools';
 import { useIsProActive } from '../../hooks/useIsProActive';
@@ -170,10 +171,9 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   useIsProActive();
   // extToolCount is the live MCP tool count (the email/calendar extension reports 0
   // here because those live in settings.enabledTools — see EmailCalendarExtension).
-  const extToolCount = getToolExtensions().reduce(
-    (n, e) => n + e.enabledToolCount(),
-    0,
-  );
+  // Subscribed, not read at render: deactivating an MCP server cleared the store but the mounted
+  // chat never re-rendered, so the badge said 3 while the Pro tools screen said none.
+  const extToolCount = useExtensionToolCount();
   // Pro tools (email/calendar) are toggled through settings.enabledTools, so count
   // how many of them are on and fold MCP in — this is the "Pro Tools" badge.
   const proToolIds = getToolExtensions().flatMap(e =>
