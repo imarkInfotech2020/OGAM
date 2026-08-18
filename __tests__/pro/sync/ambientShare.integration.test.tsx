@@ -363,7 +363,6 @@ describe('mobile ambient sharing journey', () => {
       stageStateMutation: mutation => stateSyncService.stageMutation(mutation),
       recordStateMutation: mutation =>
         stateSyncService.recordMutation(mutation),
-      requestStateSync: deviceId => stateSyncService.requestSync(deviceId),
       // Wired as the app wires it. Without this the control record is never published and every send
       // throws "This shared file is not ready to send" - which reads as a transfer failure and is
       // actually a half-built service.
@@ -620,7 +619,13 @@ describe('mobile ambient sharing journey', () => {
     expect(ui.getByText(retriedScreenshot.name)).toBeTruthy();
     // One line says where it went, instead of an origin ("This phone") and a count ("Shared with 1
     // device") that the reader had to put together.
-    expect(ui.getAllByText(`Sent to ${desktopDevice.name}`).length).toBe(4);
+    //
+    // ONE row, not four. Four files were sent and all four completed, but the library lists only the
+    // kinds the sharing catalogue marks `library: 'listed'`. Generated media lives in the gallery and
+    // the chat that made it; a message attachment lives in its bubble. Listing them here too is the
+    // bug the catalogue removed - it "showed hundreds of apparent files nobody shared". So the
+    // screenshot is the only row, and what is asserted is the LABEL, which was this journey's point.
+    expect(ui.getAllByText(`Sent to ${desktopDevice.name}`).length).toBe(1);
 
     // Filters are behind a disclosure on this screen, the same two taps a user makes.
     fireEvent.press(ui.getByTestId('sync-files-open-filters'));

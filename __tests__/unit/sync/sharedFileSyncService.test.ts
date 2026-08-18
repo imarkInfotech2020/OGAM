@@ -248,6 +248,11 @@ describe('the files this phone offers the rest of the mesh', () => {
         width: 512,
         height: 512,
         metadata_json: expect.stringContaining('lighthouse'),
+        // What the bytes ARE, which the record id cannot say: a re-mint gives the same picture a new
+        // id, so a peer keyed only on the id cannot see an echo of a file it already holds. Matched as
+        // a sha256 rather than a literal, because pinning the fixture's digest would make an unrelated
+        // change to the sample bytes look like a wire-format regression.
+        content_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
       });
     });
 

@@ -97,8 +97,6 @@ beforeAll(async () => {
       stateSync.stateSyncService.stageMutation(mutation),
     recordStateMutation: (mutation: never) =>
       stateSync.stateSyncService.recordMutation(mutation),
-    requestStateSync: (deviceId: string) =>
-      stateSync.stateSyncService.requestSync(deviceId),
     publishControl: (deviceId: string, syncId: string) =>
       stateSync.stateSyncService.sendSharedFileRecord(deviceId, syncId),
   } as never);
