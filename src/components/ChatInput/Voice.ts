@@ -91,9 +91,18 @@ export function useVoiceInput({ conversationId, onTranscript, onAudioAttachment,
   const voiceAvailable = supportsDirectAudio() || !!downloadedModelId;
 
   useVoiceSessionDriver({
-    // No silencing here: a reply may only play while the session is speaking, so an opening mic
+    // Hands-free AUTO-ARM belongs to the voice interface only. `voiceTurnMode` is a global setting and
+    // leaves the session in `listen`, and nothing re-initialises the session when the mode changes -
+    // so without this gate the mic opened on mount in a TEXT or IMAGE chat too, showing "Slide to
+    // cancel" over a keyboard-less chat. Tap-to-dictate is deliberately NOT gated: it goes through
+    // recordingController, not this driver, so a person can still tap the mic to dictate in text mode.
+    //
+    // No silencing here either: a reply may only play while the session is speaking, so an opening mic
     // cannot collide with it.
-    startTurn: () => void startRef.current({ silenceAssistant: false }),
+    startTurn: () => {
+      if (!isInAudioInterfaceMode()) return;
+      void startRef.current({ silenceAssistant: false });
+    },
   });
   const silence = useSilenceEndpoint({
     isInAudioInterfaceMode,
