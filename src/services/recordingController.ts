@@ -77,12 +77,18 @@ class RecordingController {
     return voiceSession.subscribe(() => listener(this.getPhase()));
   }
 
-  /** Start recording if idle. Decision is made from the authoritative phase. */
+  /**
+   * Ask to begin. Two owners answer this, and that is fine - the recorder absorbs the duplicate.
+   *
+   * `dispatch` moves the session to listening, which `useVoiceSessionDriver` obeys by opening the
+   * microphone; `handlers.start()` is the direct route for a surface with no driver mounted. Both used
+   * to reach `startRealtimeTranscription` for ONE tap, entering the native `transcribeRealtime` twice
+   * while the first session was still coming up - the "State: -100" collision (B12), which never needed
+   * a double-tap. The latch that stops it lives in the recorder, not here: it has to hold for every
+   * duplicate ask, not just the two this method happens to make.
+   */
   start(): void {
     if (this.getPhase() !== 'idle' || !this.handlers) return;
-    // The person asking to begin is the ONLY way out of a stopped session, and this is where that ask
-    // arrives from every microphone in the app. Without it a stop was permanent: the tap reached the
-    // recorder, the recorder asked the session whether it may listen, and the answer was always no.
     voiceSession.dispatch('userStart');
     void this.handlers.start();
   }

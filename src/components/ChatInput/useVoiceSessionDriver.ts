@@ -16,10 +16,17 @@ export function useVoiceSessionDriver(opts: { startTurn: () => void }): void {
   startRef.current = opts.startTurn;
 
   useEffect(() => {
-    // Fires on every transition INTO listen - a fresh hands-free session, a reply finishing, or the
-    // person tapping start after a stop.
+    // EDGE, not level: a turn begins on the transition INTO listen, never on any notification that
+    // happens to arrive while already listening. Read level-triggered, this opened a SECOND recording
+    // every time anything else about the session changed mid-turn - and `phase` changes mid-turn by
+    // design (`listening` -> `recording` the moment a voice is heard). The contract was always "on
+    // every transition INTO listen"; this is that, actually implemented.
+    let wasListening = voiceSession.current().state === 'listen';
     const stop = voiceSession.subscribe(session => {
-      if (session.state === 'listen') startRef.current();
+      const listening = session.state === 'listen';
+      const entered = listening && !wasListening;
+      wasListening = listening;
+      if (entered) startRef.current();
       // A replay seizing the floor is the one exit from LISTEN the recorder does not drive itself:
       // stop and silence both flow through the recorder before the session moves. Cancel rather than
       // stop - pressing play on a saved message abandons the open turn, it does not finish it, so
