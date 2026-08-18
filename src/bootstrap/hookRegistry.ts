@@ -71,6 +71,10 @@ export const HOOKS = {
   /** (mutation: SyncMutation) => void — a core data owner committed a record
    *  change. Pro records it in the state-sync op-log; free builds do nothing. */
   syncRecordLocalMutation: 'sync.recordLocalMutation',
+  /** (conversationId: string) => void — a local resend/regenerate replaced the reply. Pro drops the
+   *  live previews it holds for the conversation; the durable tombstone is emitted by the caller. */
+  chatStreamDiscardConversation: 'chatStream.discardConversation',
+
   /** (mutation: KnowledgeDocumentMutation) => void — the RAG owner committed
    *  a document lifecycle change. Pro transfers or reconciles it with peers. */
   syncKnowledgeDocumentMutation: 'sync.knowledgeDocumentMutation',

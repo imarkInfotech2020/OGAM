@@ -180,7 +180,6 @@ export function useChatScreenActions({
       handleRetryMessageFn(message, generationDeps, {
         activeConversationId,
         hasActiveModel,
-        activeConversation,
         deleteMessagesAfter,
         setDebugInfo,
       }),
@@ -193,7 +192,6 @@ export function useChatScreenActions({
         newContent,
         activeConversationId,
         hasActiveModel,
-        activeConversation,
         updateMessageContent,
         deleteMessagesAfter,
         setDebugInfo,
