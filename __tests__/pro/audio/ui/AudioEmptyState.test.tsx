@@ -20,15 +20,17 @@ jest.mock('react-native-vector-icons/Feather', () => {
 
 import { AudioEmptyState } from '@offgrid/pro/audio/ui/AudioEmptyState';
 import { recordingController } from '@offgrid/core/services/recordingController';
+import { voiceSession } from '@offgrid/core/services/voiceSession';
 
 afterEach(() => {
   // No pollution: the controller is a module singleton — reset phase/handlers/listeners.
   recordingController._reset();
+    voiceSession._resetForTesting();
 });
 
 function registerRecorder() {
-  const start = jest.fn(() => recordingController.report({ recording: true }));
-  const stop = jest.fn(() => recordingController.report({ recording: false, transcribing: true }));
+  const start = jest.fn(() => (voiceSession.dispatch('userStart'), voiceSession.dispatch('speechHeard')));
+  const stop = jest.fn(() => voiceSession.dispatch('turnCaptured'));
   const cancel = jest.fn();
   const unregister = recordingController.registerHandlers({ start, stop, cancel });
   return { start, stop, cancel, unregister };
@@ -85,7 +87,7 @@ describe('AudioEmptyState', () => {
 
     // A phase change from ANOTHER mic (footer) — the hero reads the same source.
     act(() => {
-      recordingController.report({ recording: true });
+      (voiceSession.dispatch('userStart'), voiceSession.dispatch('speechHeard'));
     });
 
     expect(screen.getByTestId('icon-square')).toBeTruthy();
@@ -96,6 +98,6 @@ describe('AudioEmptyState', () => {
     const { unmount } = render(<AudioEmptyState />);
     unmount();
     // Would throw "update on unmounted" if the effect cleanup did not unsubscribe.
-    expect(() => act(() => recordingController.report({ recording: true }))).not.toThrow();
+    expect(() => act(() => (voiceSession.dispatch('userStart'), voiceSession.dispatch('speechHeard')))).not.toThrow();
   });
 });
