@@ -785,6 +785,35 @@ one.
 
 - **Copying OUTSIDE the app** reflects in the in-app clipboard, on both Android and iOS.
 
+#### Android external clipboard capture is not available through Accessibility
+
+**Verdict:** platform-limit; replace the false automatic path with an explicit Android
+`ACTION_PROCESS_TEXT` selection action.
+
+Verified on a physical Android 16 Oppo device on 2026-08-20. Clipboard Sync was enabled, the React
+Native observer was active, and Android reported `SyncClipboardAccessibilityService` as both enabled
+and bound. A Chrome select-all followed by the system floating-toolbar Copy still produced no local
+clipboard item:
+
+- Chrome emitted no `TYPE_VIEW_TEXT_SELECTION_CHANGED` event for the selection.
+- The system floating toolbar emitted no Accessibility event for its Copy action.
+- `ClipboardManager.OnPrimaryClipChangedListener` was not called while Off Grid was in the
+  background.
+- `flagIncludeNotImportantViews` did not change those results.
+
+This is the Android security contract, not a permission-refresh bug. From Android 10, a background app
+cannot read clipboard data unless it has focus or is the default input method. An Accessibility grant
+is not an exception. The current service can help only in apps and system builds that voluntarily emit
+both the selection and Copy events, so it cannot support the product claim that anything copied on
+Android is captured.
+
+The maintainable end state is an explicit `ACTION_PROCESS_TEXT` action in Android's text-selection
+menu, labelled "Copy to Off Grid". The selected app sends the text directly to Off Grid under the
+user's tap, so no background clipboard read, default-keyboard role, focus-stealing overlay, polling,
+or broad screen traversal is required. The Android UI must describe this explicit action and must not
+present Accessibility as universal clipboard access. Keep the existing native observer only as a
+best-effort capability where the OS supplies the required events.
+
 ### Ambient sharing, both ways round
 
 Each of these needs the negative case as well as the positive, because a permission that fails open
