@@ -13,9 +13,10 @@ import { serializeMessageContext } from './messageContext';
 
 /** Stable wire entity names shared with Off Grid Desktop. */
 export const CORE_SYNC_ENTITIES = {
+  // Dependency order is wire order: parents must materialize before children.
+  project: 'project',
   conversation: 'conversation',
   message: 'message',
-  project: 'project',
   knowledgeDocument: KNOWLEDGE_DOCUMENT_ENTITY,
   sharedFile: SHARED_FILE_ENTITY,
   modelSetting: 'model_setting',
