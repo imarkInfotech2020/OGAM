@@ -12,6 +12,18 @@ Verdict legend:
 
 ---
 
+## Projects screen does not refresh after desktop project sync - 2026-08-20
+
+**Verdict: instrument-and-revisit.**
+
+Observed during the attended desktop-to-mobile E2E: a project created on desktop and populated with
+the four Off Grid AI fixture documents reached the sync mesh, but the already-open mobile Projects
+screen did not show the new project in real time. Determine whether the project row was materialized
+while the screen's query/cache failed to invalidate, or whether materialization itself was delayed.
+The acceptance case is that an open Projects screen updates without navigation, rescan, or restart.
+
+---
+
 ## Tooling gates — remaining follow-ups
 
 The tooling spine is installed + enforced (depcruise 0 violations, knip 0 issues, sonarjs wired,
@@ -1154,4 +1166,3 @@ these fixes are verified against faked native leaves. Three flows to run on a ph
 **Do not make `useVoiceSessionDriver` level-triggered again.** `voiceSession.dispatch` notifies on a
 phase change so the hero can show "Recording you now"; with a level-triggered driver that same
 notification opens a second recording mid-turn. The two belong together and each says so in a comment.
-
