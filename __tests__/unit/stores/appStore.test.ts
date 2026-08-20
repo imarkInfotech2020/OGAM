@@ -1436,6 +1436,26 @@ describe('appStore', () => {
       expect(result.settings.maxTokens).toBe(8192);
     });
 
+    it('re-bases generated images after iOS changes the app container', () => {
+      const merge = getMergeFn();
+      const result = merge(
+        {
+          generatedImages: [
+            createGeneratedImage({
+              id: 'restored-image',
+              imagePath:
+                '/var/mobile/Containers/Data/Application/OLD-UUID/Documents/generated_images/restored.png',
+            }),
+          ],
+        },
+        useAppStore.getState(),
+      );
+
+      expect(result.generatedImages[0].imagePath).toBe(
+        '/mock/documents/generated_images/restored.png',
+      );
+    });
+
     it('keeps a user maxTokens above the boost value even when context was boosted', () => {
       const merge = getMergeFn();
       const result = merge(

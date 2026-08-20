@@ -12,6 +12,11 @@ interface PersistedSettings {
   liteRTMaxTokens: number;
   [key: string]: unknown;
 }
+
+interface PersistedStateMigrationContext {
+  defaultSettings: PersistedSettings;
+  documentsPath?: string;
+}
 import { Platform } from 'react-native';
 import { INFERENCE_BACKENDS } from '../types';
 
@@ -57,12 +62,13 @@ function migrateBoostedContext(
 export function migratePersistedState<TState>(
   persistedState: any,
   currentState: TState,
-  DEFAULT_SETTINGS: PersistedSettings,
+  context: PersistedStateMigrationContext,
 ): TState {
+  const { defaultSettings, documentsPath } = context;
   const merged = {
     ...currentState,
     ...persistedState,
-    settings: { ...DEFAULT_SETTINGS, ...persistedState?.settings },
+    settings: { ...defaultSettings, ...persistedState?.settings },
   };
   // Drop legacy download tracking fields. The unified downloadStore (backed
   // by the native Room DB) is now the source of truth. Persisted entries
@@ -100,9 +106,25 @@ export function migratePersistedState<TState>(
   )
     merged.checklistDismissed = false;
   migrateEnabledTools(merged);
-  migrateBoostedContext(merged, DEFAULT_SETTINGS);
+  migrateBoostedContext(merged, defaultSettings);
   migrateGeneratedImageTimestamps(merged);
+  migrateGeneratedImagePaths(merged, documentsPath);
   return merged as TState;
+}
+
+/** Keep generated-image paths valid when iOS gives the app a new container UUID on install. */
+function migrateGeneratedImagePaths(merged: any, documentsPath?: string): void {
+  if (!documentsPath || !Array.isArray(merged.generatedImages)) return;
+  merged.generatedImages = merged.generatedImages.map((image: any) => {
+    if (typeof image?.imagePath !== 'string') return image;
+    const match =
+      /\/Containers\/Data\/Application\/[^/]+\/Documents\/(generated_images\/.+)$/.exec(
+        image.imagePath,
+      );
+    return match
+      ? { ...image, imagePath: `${documentsPath}/${match[1]}` }
+      : image;
+  });
 }
 
 /**

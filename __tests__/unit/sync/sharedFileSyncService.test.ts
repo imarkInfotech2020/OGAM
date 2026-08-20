@@ -543,7 +543,9 @@ describe('the files this phone offers the rest of the mesh', () => {
       fileSize: number;
       createdAt: string;
     }): Promise<void> {
-      const directory = `/caches/sync-shared-files/${encodeURIComponent(control.syncId)}`;
+      const directory = `/caches/sync-shared-files/${encodeURIComponent(
+        control.syncId,
+      )}`;
       await fs.mkdir(directory);
       // Built by the SENDER's own builder, not hand-rolled here: the envelope carries a type and a
       // version the receiver checks, and a literal in a test would drift from them silently.
@@ -595,13 +597,87 @@ describe('the files this phone offers the rest of the mesh', () => {
       expect(file?.syncId).toBe(ARRIVING_ID);
       expect(file?.name).toBe(ARRIVING.name);
       expect(file?.localPath).toBe(IMPORTED_PATH);
-      expect(file?.provenance?.originDeviceId).toBe(FROM_THE_MAC.originDeviceId);
+      expect(file?.provenance?.originDeviceId).toBe(
+        FROM_THE_MAC.originDeviceId,
+      );
       // AVAILABLE, which is a different claim from "a record exists": the bytes are here, so this phone
       // can serve them back to a peer whose copy went missing.
       expect(file?.available).toBe(true);
       expect(await fs.exists(IMPORTED_PATH)).toBe(true);
       // Stamped with what the bytes ARE. The record id is re-minted on identity churn; this is not.
       expect(file?.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('re-homes a peer image when the durable winner corrects attachment to generated media', async () => {
+      const name = 'corrected-image.png';
+      const attachment = {
+        syncId: ARRIVING_ID,
+        kind: 'message_attachment' as const,
+        name,
+        mimeType: 'image/jpeg',
+        fileSize: 1024,
+        createdAt: '2026-08-04T09:00:00.000Z',
+        conversationId: CONVERSATION_ID,
+        messageId: MESSAGE_ID,
+      };
+      const generated = {
+        ...attachment,
+        kind: 'generated_media' as const,
+        mimeType: 'image/png',
+        metadataJson: JSON.stringify({ prompt: 'a corrected image' }),
+      };
+      const oldPath = `/docs/shared_files/message_attachment/${ARRIVING_ID}-${name}`;
+      const newPath = `/docs/shared_files/generated_media/${ARRIVING_ID}-${name}`;
+      useChatStore.setState({
+        conversations: [
+          {
+            id: CONVERSATION_ID,
+            title: 'Image from the Mac',
+            messages: [
+              {
+                id: 'local-message',
+                uuid: MESSAGE_ID,
+                role: 'assistant',
+                content: 'Generated image',
+                timestamp: 1_700_000_000_000,
+                attachments: [],
+              },
+            ],
+            createdAt: 1_700_000_000_000,
+            updatedAt: 1_700_000_000_000,
+          },
+        ],
+      } as never);
+      await launch();
+      await bytesStagedFor(attachment);
+      service.applyControlPut(
+        ARRIVING_ID,
+        createSharedFileStateFields(attachment),
+        FROM_THE_MAC,
+      );
+      await settle();
+      expect(await fs.exists(oldPath)).toBe(true);
+
+      const durableFields = createSharedFileStateFields(generated);
+      service.setDurableControlLog({
+        fields: syncId => (syncId === ARRIVING_ID ? durableFields : undefined),
+        entityIds: () => [ARRIVING_ID],
+      });
+      await settle();
+
+      expect(service.files()[0]).toMatchObject({
+        syncId: ARRIVING_ID,
+        kind: 'generated_media',
+        localPath: newPath,
+        provenance: FROM_THE_MAC,
+      });
+      expect(await fs.exists(newPath)).toBe(true);
+      expect(await fs.exists(oldPath)).toBe(false);
+
+      mutations = [];
+      await service.stateReady(PREFERENCES);
+      await settle();
+      expect(putIds()).not.toContain(ARRIVING_ID);
     });
 
     it('is deleted from this phone, bytes included, when the far device withdraws it', async () => {

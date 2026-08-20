@@ -2,13 +2,15 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import RNFS from 'react-native-fs';
 import type { RecordProvenance } from '@offgrid/sync';
 import {
   DEFAULT_SILENCE_AFTER_SPEECH_MS,
   DEFAULT_SPEAKER_DRAIN_MS,
 } from '@offgrid/speech';
 import { APP_CONFIG } from '../constants';
-import { VoiceTurnMode,
+import {
+  VoiceTurnMode,
   DeviceInfo,
   DownloadedModel,
   ModelRecommendation,
@@ -450,7 +452,10 @@ export const useAppStore = create<AppState>()(
       name: 'local-llm-app-storage',
       storage: createJSONStorage(() => AsyncStorage),
       merge: (persisted, current) =>
-        migratePersistedState(persisted, current, DEFAULT_SETTINGS),
+        migratePersistedState(persisted, current, {
+          defaultSettings: DEFAULT_SETTINGS,
+          documentsPath: RNFS.DocumentDirectoryPath,
+        }),
       partialize: state => ({
         themeMode: state.themeMode,
         hasCompletedOnboarding: state.hasCompletedOnboarding,
