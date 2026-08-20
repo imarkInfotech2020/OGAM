@@ -37,7 +37,13 @@ export async function fileTransferChecksum(
     // RNFS.hash on iOS creates one NSData for the complete file. A multi-gigabyte model therefore
     // makes iOS kill the app before the transfer starts. Our native boundary reads a fixed-size
     // chunk at a time and keeps memory use constant.
-    const hex = await (streamingHashModule()?.sha512(path) ??
+    const nativeStreamingHash = streamingHashModule();
+    if (nativeStreamingHash) {
+      logger.log(
+        `[Checksum] streaming ${Math.round(size / 1_000_000)}MB through iOS`,
+      );
+    }
+    const hex = await (nativeStreamingHash?.sha512(path) ??
       RNFS.hash(path, 'sha512'));
     return checksumFromSha512Hex(hex);
   } catch (error) {

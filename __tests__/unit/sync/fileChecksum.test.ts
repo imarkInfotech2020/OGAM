@@ -46,6 +46,7 @@ describe('the checksum a transfer is verified against', () => {
   beforeEach(() => {
     modelTransferFsBoundary.reset();
     NativeModules.StreamingHashModule = undefined;
+    jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
@@ -142,6 +143,9 @@ describe('the checksum a transfer is verified against', () => {
     expect(sha512).toHaveBeenCalledWith('/docs/model.gguf');
     expect(fs.hash).not.toHaveBeenCalled();
     expect(fs.read).not.toHaveBeenCalled();
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringContaining('[Checksum] streaming 1MB through iOS'),
+    );
   });
 
   it('says in the log why it is about to read a large file the slow way', async () => {

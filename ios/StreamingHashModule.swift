@@ -10,8 +10,19 @@ enum StreamingFileHasher {
     defer { try? handle.close() }
 
     var hasher = SHA512()
-    while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
-      hasher.update(data: chunk)
+    while true {
+      // FileHandle can back each Swift Data with an autoreleased NSData. This work runs in one
+      // long-lived GCD block, so the queue's outer autorelease pool is not drained until the whole
+      // multi-gigabyte file is complete. Drain once per chunk or resident memory grows to the file
+      // size even though the algorithm itself is streaming.
+      let consumed = try autoreleasepool { () throws -> Bool in
+        guard let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty else {
+          return false
+        }
+        hasher.update(data: chunk)
+        return true
+      }
+      if !consumed { break }
     }
     return hasher.finalize().map { String(format: "%02x", $0) }.joined()
   }
