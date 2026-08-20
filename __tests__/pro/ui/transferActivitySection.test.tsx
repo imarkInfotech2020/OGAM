@@ -304,6 +304,89 @@ describePro('the Activity list', () => {
     // whether to keep the phone awake. Both are on the row.
     expect(ui.getByText(/25%/)).toBeTruthy();
     expect(ui.getByText(/MB \/ /)).toBeTruthy();
+    expect(ui.queryByText(/MB\/s/)).toBeNull();
+  });
+
+  it('shows one model job instead of one raw row for every file in a vision package', async () => {
+    if (!guard()) return;
+    const acts = handlers();
+    const modelJob = {
+      id: 'vision-job',
+      direction: 'send',
+      peerDeviceId: THE_MAC,
+      peerName: 'The Mac',
+      modelId: 'google/gemma-vision',
+      modelName: 'Gemma Vision',
+      fileCount: 2,
+      bytesTotal: 8 * 1024 * 1024,
+      bytesTransferred: 4 * 1024 * 1024,
+      phase: 'transferring',
+      startedAt: NOW - 10_000,
+      transferStartedAt: NOW - 3_000,
+      transferStartedBytes: 1 * 1024 * 1024,
+      updatedAt: NOW,
+      packageId: 'vision-package',
+      requestIds: ['model-primary', 'model-projector'],
+    } as const;
+    const projection = project(acts, {
+      modelJobs: [modelJob] as never,
+      transfers: [
+        {
+          requestId: 'model-projector',
+          deviceId: THE_MAC,
+          fileName: 'gemma-mmproj-F16.gguf',
+          direction: 'send',
+          status: 'transferring',
+          bytesTransferred: 500,
+          totalBytes: 1_000,
+          mimeType: 'application/vnd.offgrid.model',
+          kind: 'model',
+        },
+        {
+          requestId: 'ordinary-file',
+          deviceId: THE_MAC,
+          fileName: 'Notes.txt',
+          direction: 'send',
+          status: 'transferring',
+          bytesTransferred: 50,
+          totalBytes: 100,
+          mimeType: 'text/plain',
+          kind: 'files',
+        },
+      ] as never,
+      completedTransfers: [
+        {
+          requestId: 'model-primary',
+          deviceId: THE_MAC,
+          deviceName: 'The Mac',
+          fileName: 'gemma-Q4_K_M.gguf',
+          direction: 'send',
+          status: 'completed',
+          bytesTransferred: 2_000,
+          totalBytes: 2_000,
+          updatedAt: NOW - 1,
+          mimeType: 'application/vnd.offgrid.model',
+          kind: 'model',
+        },
+      ] as never,
+    });
+
+    const ui = render(
+      <TransferActivitySection projection={projection} onOpen={jest.fn()} />,
+    );
+
+    expect(ui.getAllByText('Gemma Vision')).toHaveLength(1);
+    expect(ui.queryByText('gemma-Q4_K_M.gguf')).toBeNull();
+    expect(ui.queryByText('gemma-mmproj-F16.gguf')).toBeNull();
+    expect(ui.getByText('Notes.txt')).toBeTruthy();
+    expect(ui.getByText('4.0 MB / 8.0 MB · 1.0 MB/s')).toBeTruthy();
+
+    fireEvent.press(
+      ui.getByTestId(`sync-activity-cancel-model:${modelJob.id}`),
+    );
+    await Promise.resolve();
+    expect(acts.cancelModel).toHaveBeenCalledWith(modelJob.id);
+    expect(acts.cancelTransfer).not.toHaveBeenCalled();
   });
 
   /**
