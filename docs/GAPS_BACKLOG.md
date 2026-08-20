@@ -24,6 +24,26 @@ The acceptance case is that an open Projects screen updates without navigation, 
 
 ---
 
+## Synced iPhone image is missing from the Desktop Gallery - 2026-08-20
+
+**Verdict: instrument-and-revisit.**
+
+Observed during the physical iPhone generated-image journey. The iPhone showed the live generation,
+the final image, and the new Gallery item. Desktop received and decoded the same image in the synced
+chat, and the PNG exists in Desktop's uploads directory. However, Desktop's
+`listGeneratedImages()` result has no entry for that file, so the Generated Images Gallery does not
+show it.
+
+Evidence: `.artifacts/e2e-flows/generated-image-sync/ios-to-mesh-2026-08-20T05-07-45-131Z/`.
+The received file id is `5579552F-121E-4228-9BB7-B9F9C7541D69.png`.
+
+Determine whether the desktop sync importer skips Gallery metadata registration, or whether the
+Gallery reads a separate index that does not refresh after a synced image arrives. The acceptance
+case is that one synced generated image appears in both the receiving chat and the Desktop Gallery
+without a restart or manual refresh.
+
+---
+
 ## Tooling gates — remaining follow-ups
 
 The tooling spine is installed + enforced (depcruise 0 violations, knip 0 issues, sonarjs wired,
