@@ -1,0 +1,47 @@
+import CryptoKit
+import Foundation
+
+enum StreamingFileHasher {
+  static let defaultChunkSize = 1_048_576
+
+  static func sha512Hex(at url: URL, chunkSize: Int = defaultChunkSize) throws -> String {
+    precondition(chunkSize > 0)
+    let handle = try FileHandle(forReadingFrom: url)
+    defer { try? handle.close() }
+
+    var hasher = SHA512()
+    while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
+      hasher.update(data: chunk)
+    }
+    return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+  }
+}
+
+@objc(StreamingHashModule)
+final class StreamingHashModule: NSObject {
+  @objc
+  static func requiresMainQueueSetup() -> Bool {
+    false
+  }
+
+  @objc
+  func sha512(
+    _ path: String,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.global(qos: .utility).async {
+      do {
+        let url = URL(string: path).flatMap { $0.isFileURL ? $0 : nil }
+          ?? URL(fileURLWithPath: path)
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer {
+          if scoped { url.stopAccessingSecurityScopedResource() }
+        }
+        resolve(try StreamingFileHasher.sha512Hex(at: url))
+      } catch {
+        reject("streaming_hash_failed", error.localizedDescription, error)
+      }
+    }
+  }
+}
