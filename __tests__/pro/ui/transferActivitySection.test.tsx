@@ -379,7 +379,7 @@ describePro('the Activity list', () => {
     expect(ui.queryByText('gemma-Q4_K_M.gguf')).toBeNull();
     expect(ui.queryByText('gemma-mmproj-F16.gguf')).toBeNull();
     expect(ui.getByText('Notes.txt')).toBeTruthy();
-    expect(ui.getByText('4.0 MB / 8.0 MB · 1.0 MB/s')).toBeTruthy();
+    expect(ui.getByText('4 MB / 8 MB · 1.0 MB/s')).toBeTruthy();
 
     fireEvent.press(
       ui.getByTestId(`sync-activity-cancel-model:${modelJob.id}`),

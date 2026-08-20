@@ -65,6 +65,7 @@ describePro('the model transfer card', () => {
   it('shows megabytes moved, total megabytes, and the transfer rate', () => {
     expect(
       formatModelTransferDetail({
+        phase: 'transferring',
         bytesTransferred: 1_500_000_000,
         bytesTotal: 5_500_000_000,
         startedAt: 1_000,
@@ -78,6 +79,7 @@ describePro('the model transfer card', () => {
   it('does not count resumed bytes as bytes moved during this transfer interval', () => {
     expect(
       formatModelTransferDetail({
+        phase: 'transferring',
         bytesTransferred: 2_500_000_000,
         bytesTotal: 5_500_000_000,
         startedAt: 1_000,
@@ -91,6 +93,7 @@ describePro('the model transfer card', () => {
   it('shows an unknown rate until payload bytes move', () => {
     expect(
       formatModelTransferDetail({
+        phase: 'queued',
         bytesTransferred: 0,
         bytesTotal: 5_500_000_000,
         startedAt: 1_000,
