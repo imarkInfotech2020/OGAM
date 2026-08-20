@@ -157,13 +157,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onLongPress,
   onMenuOpen,
 }) => {
-  const toolsBeforeActiveThinking = Boolean(
-    isStreaming &&
-      message.toolArtifacts?.length &&
-      (message.isThinking ||
-        (parsedContent.thinking && !parsedContent.response.trim())),
-  );
-
   return (
     <TouchableOpacity
       testID={isUser ? 'user-message' : 'assistant-message'}
@@ -175,14 +168,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       onLongPress={onLongPress}
       delayLongPress={300}
     >
-      {toolsBeforeActiveThinking && (
-        <SyncedToolArtifacts
-          message={message}
-          styles={styles}
-          colors={colors}
-        />
-      )}
-
       <View testID="message-bubble" style={bubbleStyle}>
         {!!supportingContextParsedContent?.thinking && (
           <ThinkingBlock
@@ -215,13 +200,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         />
       </View>
 
-      {!toolsBeforeActiveThinking && (
-        <SyncedToolArtifacts
-          message={message}
-          styles={styles}
-          colors={colors}
-        />
-      )}
+      <SyncedToolArtifacts message={message} styles={styles} colors={colors} />
 
       <RoutedToolsRow
         message={message}
