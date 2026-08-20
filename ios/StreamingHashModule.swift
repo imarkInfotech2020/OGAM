@@ -4,7 +4,11 @@ import Foundation
 enum StreamingFileHasher {
   static let defaultChunkSize = 1_048_576
 
-  static func sha512Hex(at url: URL, chunkSize: Int = defaultChunkSize) throws -> String {
+  static func sha512Hex(
+    at url: URL,
+    chunkSize: Int = defaultChunkSize,
+    didConsumeChunk: (() -> Void)? = nil
+  ) throws -> String {
     precondition(chunkSize > 0)
     let handle = try FileHandle(forReadingFrom: url)
     defer { try? handle.close() }
@@ -23,6 +27,7 @@ enum StreamingFileHasher {
         return true
       }
       if !consumed { break }
+      didConsumeChunk?()
     }
     return hasher.finalize().map { String(format: "%02x", $0) }.joined()
   }

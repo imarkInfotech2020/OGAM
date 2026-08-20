@@ -1,5 +1,6 @@
 import XCTest
 import PDFKit
+import Darwin
 
 @testable import OffgridMobile
 
@@ -34,6 +35,42 @@ final class StreamingFileHasherTests: XCTestCase {
         "2192992a274fc1a836ba3c23a3feebbd" +
         "454d4423643ce80e2a9ac94fa54ca49f"
     )
+  }
+
+  func testLargeFileHashKeepsAConstantMemoryFootprint() throws {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    FileManager.default.createFile(atPath: url.path, contents: nil)
+    let writer = try FileHandle(forWritingTo: url)
+    let block = Data(repeating: 0xa5, count: 1_048_576)
+    for _ in 0..<96 { try writer.write(contentsOf: block) }
+    try writer.close()
+
+    let baseline = residentFootprintBytes()
+    var peak = baseline
+    _ = try StreamingFileHasher.sha512Hex(at: url) {
+      peak = max(peak, self.residentFootprintBytes())
+    }
+
+    XCTAssertLessThan(
+      peak - baseline,
+      32 * 1_048_576,
+      "streaming a 96 MiB file must not retain its consumed chunks"
+    )
+  }
+
+  private func residentFootprintBytes() -> UInt64 {
+    var info = task_vm_info_data_t()
+    var count = mach_msg_type_number_t(
+      MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+    let status = withUnsafeMutablePointer(to: &info) { pointer in
+      pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+        task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+      }
+    }
+    return status == KERN_SUCCESS ? info.phys_footprint : 0
   }
 }
 
