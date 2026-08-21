@@ -582,6 +582,22 @@ describe('mobile clipboard Sync journey', () => {
 
     fireEvent.press(ui.getByTestId('open-clipboard-history'));
     await waitFor(() => expect(ui!.getByText('copied on iPhone')).toBeTruthy());
+    const clipboardPageToggle = ui.getByTestId('clipboard-page-sync-toggle');
+    expect(clipboardPageToggle.props.value).toBe(true);
+    fireEvent(clipboardPageToggle, 'valueChange', false);
+    await waitFor(() =>
+      expect(ui!.getByTestId('clipboard-page-sync-toggle').props.value).toBe(
+        false,
+      ),
+    );
+    expect(nativeClipboardEnabled).toBe(false);
+    fireEvent(clipboardPageToggle, 'valueChange', true);
+    await waitFor(() =>
+      expect(ui!.getByTestId('clipboard-page-sync-toggle').props.value).toBe(
+        true,
+      ),
+    );
+    expect(nativeClipboardEnabled).toBe(true);
     const clipboardList = ui.UNSAFE_getByType(FlatList);
     expect(clipboardList.props.initialNumToRender).toBe(8);
     expect(clipboardList.props.windowSize).toBe(7);
@@ -633,7 +649,10 @@ describe('mobile clipboard Sync journey', () => {
 
     ui = render(
       <NavigationContainer>
-        <SyncSharingSettingsScreen />
+        <>
+          <SyncSharingSettingsScreen />
+          <ClipboardScreen />
+        </>
       </NavigationContainer>,
     );
 
@@ -648,5 +667,8 @@ describe('mobile clipboard Sync journey', () => {
     );
     expect(ui.queryByText('Clipboard access')).toBeNull();
     expect(ui.queryByText(/Accessibility/i)).toBeNull();
+    expect(ui.getByTestId('clipboard-android-copy-hint')).toHaveTextContent(
+      'On Android, select text, then choose Copy to Off Grid AI.',
+    );
   });
 });
