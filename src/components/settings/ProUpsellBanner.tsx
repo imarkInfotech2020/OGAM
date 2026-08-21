@@ -7,7 +7,12 @@ import { selectHasProAccess } from '../../stores/proAccessSlice';
 import { useAppStore } from '../../stores';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors, ThemeShadows } from '../../theme';
-import { SPACING, TYPOGRAPHY, OFF_GRID_DESKTOP_URL } from '../../constants';
+import {
+  SPACING,
+  TYPOGRAPHY,
+  OFF_GRID_DESKTOP_BENEFIT,
+  OFF_GRID_DESKTOP_URL,
+} from '../../constants';
 import { withUtm } from '../../utils/utm';
 import { getPricingCopy } from '../../utils/proPricing';
 
@@ -85,7 +90,7 @@ export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro }) => {
           accessibilityLabel="Get Off Grid AI Desktop"
         >
           <Icon name="monitor" size={14} color={colors.textMuted} />
-          <Text style={styles.desktopLinkText}>Off Grid AI Desktop is free for Mac. Get it.</Text>
+          <Text style={styles.desktopLinkText}>{OFF_GRID_DESKTOP_BENEFIT}</Text>
         </TouchableOpacity>
       </View>
     </AnimatedEntry>
