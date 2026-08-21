@@ -657,9 +657,7 @@ describe('mobile clipboard Sync journey', () => {
     );
 
     expect(
-      ui.getByText(
-        'Automatic background capture is unavailable because Android blocks clipboard access for normal apps. Select text, then choose Copy to Off Grid AI.',
-      ),
+      ui.getAllByText('Select text, then choose Copy to Off Grid AI.'),
     ).toBeTruthy();
     fireEvent(ui.getByTestId('sync-clipboard-toggle'), 'valueChange', true);
     await waitFor(() =>
@@ -668,7 +666,7 @@ describe('mobile clipboard Sync journey', () => {
     expect(ui.queryByText('Clipboard access')).toBeNull();
     expect(ui.queryByText(/Accessibility/i)).toBeNull();
     expect(ui.getByTestId('clipboard-android-copy-hint')).toHaveTextContent(
-      'On Android, select text, then choose Copy to Off Grid AI.',
+      'Select text, then choose Copy to Off Grid AI.',
     );
   });
 });

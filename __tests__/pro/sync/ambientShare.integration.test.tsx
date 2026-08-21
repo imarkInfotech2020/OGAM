@@ -604,6 +604,10 @@ describe('mobile ambient sharing journey', () => {
       const completedActivity = ui!.getByTestId(`sync-activity-${activityId}`);
       expect(within(completedActivity).getByText(/Sent/)).toBeTruthy();
     });
+    fireEvent.press(ui.getByTestId('sync-activity-clear'));
+    await waitFor(() =>
+      expect(ui!.queryByTestId(`sync-activity-${activityId}`)).toBeNull(),
+    );
     expect(ui.queryByText('SHARED FILES')).toBeNull();
 
     fireEvent.press(ui.getByLabelText('Back'));
