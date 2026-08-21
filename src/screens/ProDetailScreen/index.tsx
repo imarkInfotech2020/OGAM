@@ -47,8 +47,8 @@ const PILLARS = [
   },
   {
     icon: 'refresh-cw',
-    title: 'One mind across devices',
-    desc: 'Your laptop knows your work, your phone knows your life. They sync over your own network, never a cloud relay.',
+    title: 'Live sync across your devices',
+    desc: 'Your chats, projects, files, models, and copied text stay current over your own network, never a cloud relay.',
   },
   {
     icon: 'check-circle',

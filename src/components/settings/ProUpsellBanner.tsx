@@ -13,7 +13,7 @@ import { getPricingCopy } from '../../utils/proPricing';
 
 const FEATURE_ROWS = [
   [{ icon: 'layers', label: 'AMBIENT' }, { icon: 'sunrise', label: 'PROACTIVE' }],
-  [{ icon: 'shield', label: 'PRIVATE' }, { icon: 'refresh-cw', label: 'CROSS-DEVICE' }],
+  [{ icon: 'shield', label: 'PRIVATE' }, { icon: 'refresh-cw', label: 'LIVE SYNC' }],
 ];
 
 interface Props {
@@ -49,7 +49,7 @@ export const ProUpsellBanner: React.FC<Props> = ({ trigger, onGetPro }) => {
           <View style={styles.headerText}>
             <Text style={styles.title}>Off Grid AI Pro</Text>
             <Text style={styles.desc}>
-              Intelligence, democratized and on your device. Ambient, proactive, and private.
+              Your private AI stays current across your devices with live sync.
             </Text>
           </View>
           <TouchableOpacity
