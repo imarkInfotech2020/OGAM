@@ -385,9 +385,9 @@ describe('a model arriving on this device', () => {
       const again = receive(TEXT_MANIFEST, 0, TEXT_BYTES);
 
       // The one thing worth refusing outright, and the reason travels back to the sending device to be shown
-      // there. "already has this model" is something a person can act on; a path or a code is not.
+      // there. Name the model and the destination state; "this" leaves both facts ambiguous.
       await expect(again.sink.prepare()).rejects.toThrow(
-        'this device already has this model',
+        'Mobile Text is already installed on the receiving device',
       );
     });
 

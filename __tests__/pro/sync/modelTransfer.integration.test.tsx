@@ -188,7 +188,14 @@ describe('Pro mobile model transfer journey', () => {
       createSink: async (_deviceId, request) => {
         const received = Buffer.alloc(request.payload.fileSize);
         return {
-          prepare: async () => 0,
+          prepare: async () => {
+            if (returnedModel) {
+              throw new Error(
+                'Gemma Mobile is already installed on the receiving device',
+              );
+            }
+            return 0;
+          },
           write: async (offset: number, data: Uint8Array) => {
             Buffer.from(data).copy(received, offset);
           },
@@ -379,6 +386,15 @@ describe('Pro mobile model transfer journey', () => {
     );
     expect(returnedFileName).toBe(fileName);
     expect(returnedModel).toEqual(payload);
+
+    fireEvent.press(ui.getByTestId('send-selected-model'));
+    await waitFor(() =>
+      expect(
+        ui!.getByText(
+          `Gemma Mobile is already installed on ${remoteDevice.name}. Open Models on ${remoteDevice.name} to use or remove it.`,
+        ),
+      ).toBeTruthy(),
+    );
     // Not asserted: the sheet's "Sent <file>" progress line. The completion state replaces it, so
     // matching it means catching a moment that has already passed - and the outcome is covered twice
     // over, by the sentence the user reads and by the peer holding the exact bytes.
