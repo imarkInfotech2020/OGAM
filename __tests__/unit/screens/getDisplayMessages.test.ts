@@ -195,11 +195,7 @@ describe('getDisplayMessages', () => {
     });
   });
 
-  it('does not repeat a peer\'s tool calls under the answer they already appear above', () => {
-    // Every ordinary tool call arrives as its own synced message and is drawn inline, in order,
-    // with the duration it took. Carrying them on the preview too put a SECOND copy of every call
-    // at the end of the transcript, and when the preview retired that copy vanished - which reads
-    // as tool calls being eaten mid-run.
+  it('keeps a peer\'s tool calls on the live preview until the durable answer replaces it', () => {
     const out = getDisplayMessages(msgs, {
       ...base(),
       remotePreviews: [
@@ -217,7 +213,10 @@ describe('getDisplayMessages', () => {
       ],
     });
 
-    expect(out.at(-1)?.toolArtifacts).toBeUndefined();
+    expect(out.at(-1)?.toolArtifacts).toEqual([
+      { name: 'search_knowledge_base', result: 'Found it.', status: 'completed' },
+      { name: 'web_search', result: 'Found more.', status: 'completed' },
+    ]);
   });
 
   it('removes a remote preview when its durable message is visible', () => {

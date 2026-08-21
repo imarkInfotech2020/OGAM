@@ -160,7 +160,7 @@ describe('ChatMessage', () => {
       );
     });
 
-    it('keeps active thinking below synced tool rows', () => {
+    it('keeps synced tool rows below active thinking', () => {
       const message = createMessage({
         role: 'assistant',
         content: '',
@@ -172,8 +172,8 @@ describe('ChatMessage', () => {
       const tree = JSON.stringify(view.toJSON());
 
       expect(view.getAllByText('Thinking...').length).toBeGreaterThan(0);
-      expect(tree.indexOf('tool-message')).toBeLessThan(
-        tree.indexOf('message-bubble'),
+      expect(tree.indexOf('message-bubble')).toBeLessThan(
+        tree.indexOf('tool-message'),
       );
     });
   });
