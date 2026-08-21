@@ -490,7 +490,7 @@ describe('mobile ambient sharing journey', () => {
       expect(
         remoteRecords.get(`${SHARED_FILE_ENTITY}:${liveGeneratedId}`),
       ).toMatchObject({
-        kind: 'generated_media',
+        kind: 'message_attachment',
         conversation_id: liveConversationId,
         message_id: liveMessageId,
       }),

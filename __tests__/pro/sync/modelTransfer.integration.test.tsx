@@ -287,7 +287,7 @@ describe('Pro mobile model transfer journey', () => {
     });
 
     fireEvent.press(ui.getByTestId('sync-open-activity'));
-    const arrival = await waitFor(() => ui!.getByText(fileName));
+    const arrival = await waitFor(() => ui!.getByText('Gemma Mobile'));
     // Scoped to the row. "Received" is also a direction filter on this screen, so an unscoped query
     // matches the filter chip as readily as the row and would pass even if the row said Sent.
     expect(within(activityRow(arrival)).getByText(/Received/)).toBeTruthy();
