@@ -34,7 +34,7 @@ type HomeScreenProps = {
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const focusTrigger = useFocusTrigger();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles(createStyles);
   const SyncHomeCard = useSlot(SLOTS.homeSyncCard);
   const HomeNotificationsButton = useSlot(SLOTS.homeNotificationsButton);
@@ -139,7 +139,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Image
-                source={require('../../assets/logo.png')}
+                source={
+                  isDark
+                    ? require('../../assets/home-logo-dark.png')
+                    : require('../../assets/home-logo-light.png')
+                }
                 style={styles.appLogo}
                 resizeMode="contain"
                 accessible={false}
