@@ -358,6 +358,7 @@ describe('Pro mobile model transfer journey', () => {
     expect(
       within(activityRow(refusal)).getByText(/Could not receive/),
     ).toBeTruthy();
+    expect(ui.queryByLabelText('Retry Invalid model')).toBeNull();
     await expect(modelManager.getDownloadedModels()).resolves.toHaveLength(1);
     await expect(
       modelTransferFsBoundary.exists(
