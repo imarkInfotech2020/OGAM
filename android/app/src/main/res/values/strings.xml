@@ -1,14 +1,4 @@
 <resources>
     <string name="app_name">Off Grid AI</string>
-    <!--
-      Shown to the user on the system Accessibility screen, at the moment they decide. Written as the
-      outcome first and the mechanism second, because that is the order the question arrives in: what
-      do I get, and what am I letting it see.
-
-      Honest about the limit as well as the reach. Android refuses the clipboard to any app that is not
-      on screen, so this is the only way a copy made in another app can travel - and saying so is what
-      makes the request reasonable rather than mysterious.
-    -->
-    <string name="sync_clipboard_accessibility_summary">Copy on your phone, paste on your other devices</string>
-    <string name="sync_clipboard_accessibility_description">Turn this on and anything you copy on this phone is ready to paste on your Mac or PC, without opening Off Grid first.\n\nAndroid hides the clipboard from apps that are not on screen, so Off Grid reads only the text you highlight, only while clipboard sync is switched on, and keeps it on your own devices. It never reads the rest of your screen.</string>
+    <string name="process_text_action_label">Copy to Off Grid AI</string>
 </resources>

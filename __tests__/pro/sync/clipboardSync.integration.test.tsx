@@ -21,6 +21,7 @@ import { buildSyncEngine } from '../../../src/services/sync/engine';
 import type {
   NativeClipboardBoundary,
   NativeClipboardChange,
+  PendingNativeClipboardText,
 } from '../../../src/services/sync/nativeClipboard';
 import {
   MobileClipboardSyncService,
@@ -82,17 +83,35 @@ jest.mock('react-native-zeroconf', () => {
 class ClipboardBoundary implements NativeClipboardBoundary {
   enabled = false;
   readonly writes: string[] = [];
-  /** The device's answer to "can I capture a copy made in another app". Android's is the user's. */
-  backgroundCapture = true;
-  backgroundCaptureRequests = 0;
+  readonly acknowledged: string[] = [];
+  ambientCapture = true;
+  pending: PendingNativeClipboardText[] = [];
   private listener: ((change: NativeClipboardChange) => void) | null = null;
+  private pendingListener: (() => void) | null = null;
 
-  async canCaptureInBackground(): Promise<boolean> {
-    return this.backgroundCapture;
+  ambientExternalCaptureAvailable(): boolean {
+    return this.ambientCapture;
   }
 
-  requestBackgroundCapture(): void {
-    this.backgroundCaptureRequests += 1;
+  async pendingLocalText(): Promise<PendingNativeClipboardText[]> {
+    return [...this.pending];
+  }
+
+  async acknowledgePendingLocalText(ids: string[]): Promise<void> {
+    this.acknowledged.push(...ids);
+    this.pending = this.pending.filter(item => !ids.includes(item.id));
+  }
+
+  onPendingLocalTextAvailable(listener: () => void): () => void {
+    this.pendingListener = listener;
+    return () => {
+      this.pendingListener = null;
+    };
+  }
+
+  processText(item: PendingNativeClipboardText): void {
+    this.pending.push(item);
+    this.pendingListener?.();
   }
 
   observe(listener: (change: NativeClipboardChange) => void): () => void {
@@ -135,6 +154,14 @@ describe('mobile clipboard Sync journey', () => {
 
   beforeEach(async () => {
     mesh.reset();
+    NativeModules.SyncClipboardModule = {
+      setEnabled: jest.fn(),
+      writeText: jest.fn(),
+      readPendingProcessText: jest.fn().mockResolvedValue([]),
+      acknowledgePendingProcessText: jest.fn().mockResolvedValue(undefined),
+      addListener: jest.fn(),
+      removeListeners: jest.fn(),
+    };
     await clipboardSyncService.stop();
     await AsyncStorage.clear();
     await clipboardSyncService.clearHistory();
@@ -285,7 +312,36 @@ describe('mobile clipboard Sync journey', () => {
       ]),
     );
 
-    clock += 1_000;
+    clock += 500;
+    nativeClipboard.processText({
+      id: 'android-process-text-1',
+      text: 'selected in another Android app',
+      ts: clock,
+    });
+    await waitFor(() =>
+      expect(nativeClipboard.acknowledged).toContain('android-process-text-1'),
+    );
+    expect(contentReceivedByDesktop()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: 'selected in another Android app',
+          provenance: {
+            originDeviceId: mobileDevice.id,
+            originDeviceName: mobileDevice.name,
+          },
+        }),
+      ]),
+    );
+    expect(service.historySnapshot()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: 'selected in another Android app',
+          isLocal: true,
+        }),
+      ]),
+    );
+
+    clock += 500;
     const inbound = { t: 'text', text: 'copied on Mac', ts: clock };
     expect(
       desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, inbound),
@@ -323,9 +379,9 @@ describe('mobile clipboard Sync journey', () => {
         ]),
       ),
     );
-    expect(service.historySnapshot()).toHaveLength(3);
+    expect(service.historySnapshot()).toHaveLength(4);
     await new Promise(resolve => setTimeout(resolve, 50));
-    expect(contentReceivedByDesktop()).toHaveLength(1);
+    expect(contentReceivedByDesktop()).toHaveLength(2);
 
     desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, inbound);
     desktop.engine.sendApp(mobileDevice.id, CLIPBOARD_CHANNEL, {
@@ -556,5 +612,41 @@ describe('mobile clipboard Sync journey', () => {
     await waitFor(() =>
       expect(ui!.getByTestId('clipboard-empty')).toBeTruthy(),
     );
+  });
+
+  it('shows the supported Android selection action without a permission remedy', async () => {
+    NativeModules.SyncClipboardModule = {
+      setEnabled: jest.fn(),
+      writeText: jest.fn(),
+      readPendingProcessText: jest.fn().mockResolvedValue([]),
+      acknowledgePendingProcessText: jest.fn().mockResolvedValue(undefined),
+      addListener: jest.fn(),
+      removeListeners: jest.fn(),
+    };
+    jest.spyOn(NativeEventEmitter.prototype, 'addListener').mockReturnValue({
+      remove: () => undefined,
+    } as unknown as EmitterSubscription);
+    jest
+      .spyOn(clipboardSyncService, 'ambientExternalCaptureAvailable')
+      .mockReturnValue(false);
+    clipboardSyncService.setEntitlementActive(true);
+
+    ui = render(
+      <NavigationContainer>
+        <SyncSharingSettingsScreen />
+      </NavigationContainer>,
+    );
+
+    expect(
+      ui.getByText(
+        'Automatic background capture is unavailable because Android blocks clipboard access for normal apps. Select text, then choose Copy to Off Grid AI.',
+      ),
+    ).toBeTruthy();
+    fireEvent(ui.getByTestId('sync-clipboard-toggle'), 'valueChange', true);
+    await waitFor(() =>
+      expect(ui!.getByTestId('sync-clipboard-toggle').props.value).toBe(true),
+    );
+    expect(ui.queryByText('Clipboard access')).toBeNull();
+    expect(ui.queryByText(/Accessibility/i)).toBeNull();
   });
 });

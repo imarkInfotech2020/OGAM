@@ -2,11 +2,14 @@ package ai.offgridmobile.clipboard
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
+import android.content.IntentFilter
+import android.os.Build
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -17,38 +20,21 @@ internal class SyncClipboardObserver(
     private val clipboardManager: ClipboardManager,
     private val onText: (String, Double) -> Unit,
     private val now: () -> Long = System::currentTimeMillis,
-    private val accessibilityCapture: ClipboardAccessibilityCapture =
-        SyncClipboardAccessibilityService.capture,
 ) {
     private var enabled = false
     private var lastPublishedText: String? = null
     private var lastPublishedAt = Long.MIN_VALUE
-    private val accessibilityListener: (String, Long) -> Unit = { text, at ->
-        publishOnce(text, at)
-    }
     private val listener = ClipboardManager.OnPrimaryClipChangedListener {
         if (!enabled) return@OnPrimaryClipChangedListener
         val at = now()
-        val clip = clipboardManager.primaryClip
-        if (clip == null) {
-            // Not an error, and the ordinary case: Android 10+ refuses `primaryClip` to an app that is
-            // not on screen, so a copy made in ANOTHER app arrives here as a notification with no
-            // content. Accessibility reports what was selected, which is the same text - and is the
-            // whole reason that service exists. Absent it, the copy is genuinely unknowable and this
-            // returns without publishing a guess.
-            val selected = SyncClipboardAccessibilityService.selectionMemory.takeFor(at)
-                ?: return@OnPrimaryClipChangedListener
-            publishOnce(selected, at)
-            return@OnPrimaryClipChangedListener
-        }
+        // Android 10+ returns null when another app owns focus. External selections enter through
+        // ProcessTextActivity instead; never guess at text Android did not provide.
+        val clip = clipboardManager.primaryClip ?: return@OnPrimaryClipChangedListener
         if (clip.description.label?.toString() == SYNC_CLIP_LABEL) {
             return@OnPrimaryClipChangedListener
         }
         val item = clip.getItemAt(0)
         val text = item.coerceToText(context)?.toString() ?: return@OnPrimaryClipChangedListener
-        // A copy this app COULD read is the truth; the remembered selection would only compete with it,
-        // and a selection left behind would be claimed by the next copy that arrives contentless.
-        SyncClipboardAccessibilityService.selectionMemory.forget()
         publishOnce(text, at)
     }
 
@@ -65,14 +51,9 @@ internal class SyncClipboardObserver(
         if (enabled == next) return
         enabled = next
         if (next) {
-            // A selection made before the user enabled Sync is not permission to publish it later.
-            SyncClipboardAccessibilityService.selectionMemory.forget()
-            accessibilityCapture.addListener(accessibilityListener)
             clipboardManager.addPrimaryClipChangedListener(listener)
         } else {
             clipboardManager.removePrimaryClipChangedListener(listener)
-            accessibilityCapture.removeListener(accessibilityListener)
-            SyncClipboardAccessibilityService.selectionMemory.forget()
             lastPublishedText = null
             lastPublishedAt = Long.MIN_VALUE
         }
@@ -91,16 +72,35 @@ internal class SyncClipboardObserver(
 class SyncClipboardModule(
     private val reactContext: ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext) {
+    private val handoffStore = ProcessTextHandoffStore(reactContext)
     private val observer = SyncClipboardObserver(
         reactContext,
         reactContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager,
         ::emitText,
     )
+    private val pendingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ProcessTextActivity.ACTION_HANDOFF_AVAILABLE) {
+                emitPendingProcessText()
+            }
+        }
+    }
+
+    init {
+        val filter = IntentFilter(ProcessTextActivity.ACTION_HANDOFF_AVAILABLE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            reactContext.registerReceiver(pendingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            reactContext.registerReceiver(pendingReceiver, filter)
+        }
+    }
 
     override fun getName(): String = "SyncClipboardModule"
 
     override fun invalidate() {
         observer.setEnabled(false)
+        runCatching { reactContext.unregisterReceiver(pendingReceiver) }
         super.invalidate()
     }
 
@@ -114,30 +114,30 @@ class SyncClipboardModule(
         observer.writeText(text)
     }
 
-    /**
-     * Is the accessibility service switched on right now?
-     *
-     * A FACT, read from system settings on every call. The user can revoke it in Settings without this
-     * app being told, so a remembered answer would promise a capture that cannot happen.
-     */
     @ReactMethod
-    fun isAccessibilityEnabled(promise: Promise) {
-        promise.resolve(SyncClipboardAccessibilityService.isEnabled(reactContext))
+    fun readPendingProcessText(promise: Promise) {
+        val result = Arguments.createArray()
+        handoffStore.pending().forEach { item ->
+            result.pushMap(
+                Arguments.createMap().apply {
+                    putString("id", item.id)
+                    putString("text", item.text)
+                    putDouble("ts", item.timestamp.toDouble())
+                },
+            )
+        }
+        promise.resolve(result)
     }
 
-    /**
-     * Open the system Accessibility screen so the user can turn it on.
-     *
-     * There is no runtime prompt for accessibility - the grant lives in Settings and nowhere else - so
-     * taking them there is the only thing an app can do. Called from the clipboard toggle, never at
-     * launch: a permission asked for before the feature is wanted reads as an app overreaching.
-     */
     @ReactMethod
-    fun openAccessibilitySettings() {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    fun acknowledgePendingProcessText(ids: ReadableArray, promise: Promise) {
+        val acknowledged = buildSet {
+            for (index in 0 until ids.size()) {
+                ids.getString(index)?.let(::add)
+            }
         }
-        reactContext.startActivity(intent)
+        handoffStore.acknowledge(acknowledged)
+        promise.resolve(null)
     }
 
     @ReactMethod
@@ -158,5 +158,11 @@ class SyncClipboardModule(
         reactContext
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit("SyncClipboardChanged", payload)
+    }
+
+    private fun emitPendingProcessText() {
+        reactContext
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("SyncProcessTextAvailable", null)
     }
 }

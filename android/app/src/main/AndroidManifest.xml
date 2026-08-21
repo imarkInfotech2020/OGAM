@@ -91,6 +91,23 @@
         </intent-filter>
       </activity>
 
+      <!-- Android does not let normal background apps read the system clipboard. This explicit
+           selection-menu action receives only the text the user chose and stores it until the
+           existing clipboard sync owner can import it. -->
+      <activity
+          android:name="ai.offgridmobile.clipboard.ProcessTextActivity"
+          android:label="@string/process_text_action_label"
+          android:exported="true"
+          android:excludeFromRecents="true"
+          android:noHistory="true"
+          android:theme="@android:style/Theme.Translucent.NoTitleBar">
+        <intent-filter>
+          <action android:name="android.intent.action.PROCESS_TEXT" />
+          <category android:name="android.intent.category.DEFAULT" />
+          <data android:mimeType="text/plain" />
+        </intent-filter>
+      </activity>
+
 <!-- Receiver for background download completion events -->
       <receiver
           android:name=".download.DownloadCompleteBroadcastReceiver"
@@ -117,23 +134,5 @@
           android:exported="false"
           android:foregroundServiceType="dataSync" />
 
-      <!-- Supplies the text behind a copy made in ANOTHER app. Android 10+ refuses primaryClip to an
-           app without focus, so the clipboard listener learns that a copy happened and never what it
-           was; this reports the selection instead. Exported and permission-guarded because only the
-           system may bind an accessibility service. Off unless the user turns it on in Settings, and
-           this app asks for it only when they enable clipboard sync. -->
-      <service
-          android:name="ai.offgridmobile.clipboard.SyncClipboardAccessibilityService"
-          android:enabled="true"
-          android:exported="true"
-          android:label="@string/sync_clipboard_accessibility_summary"
-          android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-        <intent-filter>
-          <action android:name="android.accessibilityservice.AccessibilityService" />
-        </intent-filter>
-        <meta-data
-            android:name="android.accessibilityservice"
-            android:resource="@xml/sync_clipboard_accessibility_service" />
-      </service>
     </application>
 </manifest>
