@@ -24,8 +24,8 @@ const createLayoutStyles = (colors: ThemeColors) => ({
     gap: SPACING.sm,
   },
   appLogo: {
-    width: SPACING.xl,
-    height: SPACING.xl,
+    width: SPACING.xxl,
+    height: SPACING.xxl,
   },
   headerActions: {
     flexDirection: 'row' as const,
