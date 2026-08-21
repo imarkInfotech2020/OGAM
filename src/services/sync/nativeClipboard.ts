@@ -82,6 +82,7 @@ export const nativeClipboardBoundary: NativeClipboardBoundary = {
   },
 
   async pendingLocalText(): Promise<PendingNativeClipboardText[]> {
+    if (Platform.OS !== 'android') return [];
     const nativeModule = module();
     if (!nativeModule.readPendingProcessText) return [];
     const value = await nativeModule.readPendingProcessText();
@@ -104,11 +105,14 @@ export const nativeClipboardBoundary: NativeClipboardBoundary = {
   },
 
   async acknowledgePendingLocalText(ids): Promise<void> {
-    if (ids.length === 0) return;
+    if (Platform.OS !== 'android' || ids.length === 0) return;
     await module().acknowledgePendingProcessText?.(ids);
   },
 
   onPendingLocalTextAvailable(listener): () => void {
+    // PROCESS_TEXT is an Android activity handoff. Asking iOS to subscribe to its event makes
+    // RCTEventEmitter report an unsupported event during every clipboard-sync startup.
+    if (Platform.OS !== 'android') return () => undefined;
     const nativeModule = module();
     const emitter = new NativeEventEmitter(nativeModule);
     const subscription = emitter.addListener(
