@@ -6,7 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
+import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReadableArray
@@ -88,12 +88,12 @@ class SyncClipboardModule(
 
     init {
         val filter = IntentFilter(ProcessTextActivity.ACTION_HANDOFF_AVAILABLE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            reactContext.registerReceiver(pendingReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            reactContext.registerReceiver(pendingReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            reactContext,
+            pendingReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     override fun getName(): String = "SyncClipboardModule"
