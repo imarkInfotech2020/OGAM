@@ -1,6 +1,19 @@
 import Foundation
 import Network
 
+/// Network.framework read sizes for the two HTTP phases.
+///
+/// The body is authenticated one complete frame at a time. Returning smaller pieces only adds
+/// callbacks and copies because no piece can be opened or written before the rest of its frame.
+enum BlobReceiveWindow {
+  static let header = (minimum: 1, maximum: 1 << 16)
+
+  static func body(sealedBytesRemaining: Int) -> (minimum: Int, maximum: Int) {
+    let exact = max(1, sealedBytesRemaining)
+    return (minimum: exact, maximum: exact)
+  }
+}
+
 /// Where this iPhone accepts the bytes of one transfer.
 ///
 /// The receiving device hosts, so the sender only has to make an outbound connection - the shape that
@@ -135,11 +148,6 @@ final class BlobChannelServer {
 
   /// One connection: read the head, then decipher the body straight to disk.
   fileprivate final class Session {
-    /// Headers are small. After authorization, reads align to the one authenticated frame we need.
-    private static let headReceiveBytes = 1 << 16
-    /// Four reads per production frame avoid 64 callback/append cycles without asking Network.framework
-    /// to buffer a complete 4 MiB frame before it returns data.
-    private static let bodyReceiveBytes = 1 << 20
     private let connection: NWConnection
     private weak var server: BlobChannelServer?
     private var buffer = Data()
@@ -157,8 +165,11 @@ final class BlobChannelServer {
     }
 
     func read() {
-      let receiveBytes = nextReceiveBytes()
-      connection.receive(minimumIncompleteLength: 1, maximumLength: receiveBytes) {
+      let window = nextReceiveWindow()
+      connection.receive(
+        minimumIncompleteLength: window.minimum,
+        maximumLength: window.maximum
+      ) {
         [weak self] data, _, complete, error in
         guard let self else { return }
         trace("received \(data?.count ?? 0) bytes complete=\(complete) error=\(String(describing: error))")
@@ -169,9 +180,10 @@ final class BlobChannelServer {
       }
     }
 
-    private func nextReceiveBytes() -> Int {
-      guard let cipher, frame < cipher.frameCount else { return Self.headReceiveBytes }
-      return max(1, min(Self.bodyReceiveBytes, cipher.sealedLength(frame) - held.count))
+    private func nextReceiveWindow() -> (minimum: Int, maximum: Int) {
+      guard let cipher, frame < cipher.frameCount else { return BlobReceiveWindow.header }
+      return BlobReceiveWindow.body(
+        sealedBytesRemaining: cipher.sealedLength(frame) - held.count)
     }
 
     private func consume(_ data: Data) {

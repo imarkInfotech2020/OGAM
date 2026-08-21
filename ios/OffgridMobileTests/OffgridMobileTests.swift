@@ -21,6 +21,29 @@ private func makeTempDirectory() -> URL {
   return url
 }
 
+final class BlobReceiveWindowTests: XCTestCase {
+  func testBodyWaitsForOneCompleteAuthenticatedFrame() {
+    let productionFrame = 4 * 1_048_576 + BlobFrameCipher.tagBytes
+    let window = BlobReceiveWindow.body(sealedBytesRemaining: productionFrame)
+
+    XCTAssertEqual(window.minimum, productionFrame)
+    XCTAssertEqual(window.maximum, productionFrame)
+  }
+
+  func testBodyRequestsOnlyTheRemainderAfterHeadersCarryPayloadBytes() {
+    let remainder = 3 * 1_048_576 + BlobFrameCipher.tagBytes
+    let window = BlobReceiveWindow.body(sealedBytesRemaining: remainder)
+
+    XCTAssertEqual(window.minimum, remainder)
+    XCTAssertEqual(window.maximum, remainder)
+  }
+
+  func testHeaderCanReturnAsSoonAsOneByteArrives() {
+    XCTAssertEqual(BlobReceiveWindow.header.minimum, 1)
+    XCTAssertEqual(BlobReceiveWindow.header.maximum, 1 << 16)
+  }
+}
+
 final class StreamingFileHasherTests: XCTestCase {
   func testProducesTheStandardSHA512DigestAcrossManyChunks() throws {
     let url = FileManager.default.temporaryDirectory
