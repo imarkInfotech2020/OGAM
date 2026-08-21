@@ -16,7 +16,7 @@
     "test:e2e:ios-sync-adapter": "node --test scripts/physical-sync/__tests__/iosKnowledgeSyncDeviceAdapter.test.mjs",
     "sync:ios-adapter": "node --experimental-strip-types --no-warnings scripts/physical-sync/iosKnowledgeSyncAdapter.mjs",
     "test:android": "cd android && ./gradlew :app:testDebugUnitTest",
-    "test:ios": "cd ios && xcodebuild test -workspace OffgridMobile.xcworkspace -scheme OffgridMobile -destination 'platform=iOS Simulator,name=iPhone 16e' -only-testing:OffgridMobileTests | (xcpretty 2>/dev/null || cat)",
+    "test:ios": "bash scripts/test-ios.sh",
     "postinstall": "patch-package",
     "depcruise": "depcruise src --config .dependency-cruiser.js",
     "knip": "knip",
