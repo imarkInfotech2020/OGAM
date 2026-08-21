@@ -1,7 +1,7 @@
 import type { DevicePlatform, TransferredModelManifest } from '@offgrid/sync';
 import type { ONNXImageModel } from '../../types';
 
-export const IMAGE_TRANSFER_ARCHIVE_SUFFIX = '.offgrid-image.zip';
+const IMAGE_TRANSFER_ARCHIVE_SUFFIX = '.offgrid-image.zip';
 
 type MobileImagePlatform = Extract<DevicePlatform, 'ios' | 'android'>;
 type TransferableImageBackend = Extract<

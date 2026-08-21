@@ -8,7 +8,7 @@ import {
 } from '@offgrid/sync';
 import type { Message } from '../../types';
 
-export const RETRIEVAL_TOOL_ARTIFACT_ID = 'offgrid:retrieval-sources';
+const RETRIEVAL_TOOL_ARTIFACT_ID = 'offgrid:retrieval-sources';
 
 /** Feed durable retrieval evidence into the existing tool-result accordion. */
 export function retrievalToolArtifact(
