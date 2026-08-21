@@ -260,6 +260,45 @@ describe('ModelManager', () => {
       expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/mmproj.gguf');
     });
 
+    it('deletes an iOS model stored with the private var container spelling', async () => {
+      const storedModels = [
+        {
+          id: 'model-ios-private',
+          name: 'iOS Model',
+          filePath:
+            '/private/var/mobile/Containers/Data/Application/OLD/Documents/models/qwen.gguf',
+          fileSize: 100,
+        },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+
+      await modelManager.deleteModel('model-ios-private');
+
+      expect(RNFS.unlink).toHaveBeenCalledWith('/mock/documents/models/qwen.gguf');
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(MODELS_STORAGE_KEY, '[]');
+    });
+
+    it('keeps the registry when the model bytes cannot be deleted', async () => {
+      const storedModels = [
+        {
+          id: 'model-delete-fails',
+          name: 'Model That Stays',
+          filePath: '/mock/documents/models/stays.gguf',
+          fileSize: 100,
+        },
+      ];
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify(storedModels));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.unlink.mockRejectedValue(new Error('disk refused deletion'));
+
+      await expect(modelManager.deleteModel('model-delete-fails')).rejects.toThrow(
+        'disk refused deletion',
+      );
+
+      expect(AsyncStorage.setItem).not.toHaveBeenCalledWith(MODELS_STORAGE_KEY, '[]');
+    });
+
     it('throws when model not found', async () => {
       mockedAsyncStorage.getItem.mockResolvedValue('[]');
 

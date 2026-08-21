@@ -45,6 +45,7 @@ import {
 import { resolveStoredPath, determineCredibility } from './storage';
 import * as visionRepair from './visionRepairService';
 import type { RepairOpts, VisionRepairContext } from './visionRepairService';
+import { resolveOwnedDocumentPath } from '../../utils/resolveDocumentPath';
 
 class ModelManager {
   private readonly modelsDir: string;
@@ -101,22 +102,26 @@ class ModelManager {
     const model = models.find(m => m.id === modelId);
 
     if (!model) throw new Error('Model not found');
-    if (!model.filePath.startsWith(this.modelsDir)) {
+    const modelPath = resolveOwnedDocumentPath(model.filePath, this.modelsDir);
+    if (!modelPath) {
       throw new Error('Invalid model path: outside app directory');
     }
     const llamaModel = model.engine === 'llama' ? model : null;
-    if (llamaModel?.mmProjPath && !llamaModel.mmProjPath.startsWith(this.modelsDir)) {
+    const mmProjPath = llamaModel?.mmProjPath
+      ? resolveOwnedDocumentPath(llamaModel.mmProjPath, this.modelsDir)
+      : null;
+    if (llamaModel?.mmProjPath && !mmProjPath) {
       throw new Error('Invalid mmproj path: outside app directory');
     }
-    await RNFS.unlink(model.filePath);
+    await RNFS.unlink(modelPath);
 
     // Only delete mmproj if no other models reference it
-    if (llamaModel?.mmProjPath) {
+    if (llamaModel?.mmProjPath && mmProjPath) {
       const otherModelsUsingMmproj = models.some(
         m => m.engine === 'llama' && m.id !== modelId && m.mmProjPath === llamaModel.mmProjPath,
       );
       if (!otherModelsUsingMmproj) {
-        await RNFS.unlink(llamaModel.mmProjPath).catch(() => {});
+        await RNFS.unlink(mmProjPath).catch(() => {});
       }
     }
 
