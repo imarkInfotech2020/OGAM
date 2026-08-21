@@ -205,6 +205,12 @@ jest.mock('react-native/jest/mockNativeComponent', () => {
   };
 });
 
+// TouchableOpacity forwards refs to View. Give that public host boundary the same faithful
+// measurement callback as mockNativeComponent so shared anchored controls work in rendered tests.
+(require('react-native').View.prototype as {
+  measureInWindow?: (callback: (...values: number[]) => void) => void;
+}).measureInWindow = callback => callback(0, 0, 100, 40);
+
 // react-native-audio-api mock
 jest.mock('react-native-audio-api', () => ({
   AudioContext: jest.fn().mockImplementation(() => ({
