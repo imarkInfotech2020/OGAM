@@ -50,7 +50,6 @@ jest.mock('../../../src/components/AnimatedListItem', () => ({
 const mockSetOnboardingComplete = jest.fn();
 const mockSetThemeMode = jest.fn();
 const mockCompleteChecklistStep = jest.fn();
-const mockResetChecklist = jest.fn();
 // Mutated per-test to drive Pro banner visibility. `mock`-prefixed so jest.mock's
 // hoisted factory is allowed to reference it.
 const mockProState = { hasRegisteredPro: false, proBannerDismissed: false };
@@ -61,7 +60,6 @@ jest.mock('../../../src/stores', () => ({
       themeMode: 'system',
       setThemeMode: mockSetThemeMode,
       completeChecklistStep: mockCompleteChecklistStep,
-      resetChecklist: mockResetChecklist,
       setProBannerDismissed: jest.fn(),
       hasRegisteredPro: mockProState.hasRegisteredPro,
       proBannerDismissed: mockProState.proBannerDismissed,
@@ -220,9 +218,10 @@ describe('SettingsScreen', () => {
     expect(queryByText('Pro Tools')).toBeNull();
   });
 
-  it('renders Reset Onboarding button in __DEV__ mode', () => {
-    const { getByText } = render(<SettingsScreen />);
+  it('keeps Reset Onboarding in development mode without the removed checklist reset', () => {
+    const { getByText, queryByText } = render(<SettingsScreen />);
     expect(getByText('Reset Onboarding')).toBeTruthy();
+    expect(queryByText('Reset Onboarding Checklist')).toBeNull();
   });
 
   it('calls setOnboardingComplete and dispatches reset on Reset Onboarding press', () => {
