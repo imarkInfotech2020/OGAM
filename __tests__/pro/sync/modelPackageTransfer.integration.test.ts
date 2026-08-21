@@ -18,6 +18,7 @@ import { buildSyncEngine } from '../../../src/services/sync/engine';
 import { whisperService } from '../../../src/services/whisperService';
 import { useWhisperStore } from '../../../src/stores/whisperStore';
 import { modelTransferService } from '../../../pro/sync/modelTransferService';
+import { modelTransferJobs } from '../../../pro/sync/modelTransferJobs';
 import { syncService } from '../../../pro/sync/syncService';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import {
@@ -280,6 +281,16 @@ describe('Pro mobile model package receiver', () => {
         packageMetadata('vision-package', visionManifest, 0),
       ),
     );
+    const primaryJob = modelTransferJobs.activeFor(
+      'desktop-package-source',
+      visionManifest.id,
+    );
+    expect(primaryJob).toEqual(
+      expect.objectContaining({
+        bytesTransferred: primary.length,
+        bytesTotal: primary.length + projector.length,
+      }),
+    );
 
     const modelsDirectory = modelManager.getModelsDirectory();
     await expect(
@@ -295,6 +306,16 @@ describe('Pro mobile model package receiver', () => {
         projector,
         packageMetadata('vision-package', visionManifest, 1),
       ),
+    );
+    const completedVisionJob = modelTransferJobs
+      .list()
+      .find(job => job.packageId === 'vision-package');
+    expect(completedVisionJob).toEqual(
+      expect.objectContaining({
+        phase: 'completed',
+        bytesTransferred: primary.length + projector.length,
+        bytesTotal: primary.length + projector.length,
+      }),
     );
     // The projector lands under the name THIS device gives a projector - the model's own stem, the same
     // rule a download uses - not the name the sender happened to have for it. That is what keeps the
