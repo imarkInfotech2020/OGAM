@@ -12,6 +12,8 @@ import { backgroundDownloadService } from '../../../src/services/backgroundDownl
 import { huggingFaceService } from '../../../src/services/huggingface';
 import { buildDownloadedModel } from '../../../src/services/modelManager/storage';
 import { createModelFile, createModelFileWithMmProj } from '../../utils/factories';
+import { textProvider } from '../../../src/services/modelDownloadService/providers/textProvider';
+import { useAppStore } from '../../../src/stores';
 
 const mockedRNFS = RNFS as jest.Mocked<typeof RNFS>;
 const mockedAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
@@ -297,6 +299,35 @@ describe('ModelManager', () => {
       );
 
       expect(AsyncStorage.setItem).not.toHaveBeenCalledWith(MODELS_STORAGE_KEY, '[]');
+    });
+
+    it('keeps the visible model when provider deletion fails', async () => {
+      const storedModel = {
+        id: 'model-provider-delete-fails',
+        name: 'Visible Model',
+        filePath: '/mock/documents/models/visible.gguf',
+        fileName: 'visible.gguf',
+        fileSize: 100,
+        author: 'test',
+        quantization: 'Q4_K_M',
+        downloadedAt: '2026-08-21T00:00:00.000Z',
+        credibility: {
+          source: 'community' as const,
+          isOfficial: false,
+          isVerifiedQuantizer: false,
+        },
+        engine: 'llama' as const,
+      };
+      mockedAsyncStorage.getItem.mockResolvedValue(JSON.stringify([storedModel]));
+      mockedRNFS.exists.mockResolvedValue(true);
+      mockedRNFS.unlink.mockRejectedValue(new Error('disk refused deletion'));
+      useAppStore.setState({ downloadedModels: [storedModel] });
+
+      await expect(
+        textProvider.remove('text:model-provider-delete-fails'),
+      ).rejects.toThrow('disk refused deletion');
+
+      expect(useAppStore.getState().downloadedModels).toEqual([storedModel]);
     });
 
     it('throws when model not found', async () => {
