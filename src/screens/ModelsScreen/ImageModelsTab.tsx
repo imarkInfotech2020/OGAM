@@ -9,6 +9,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBrowser';
 import { ImageModelRecommendation } from '../../types';
 import { isModelDownloadInProgress, modelsFailureMessage } from '@offgrid/application';
+import { createImageDownloadPlan } from '@offgrid/models';
 import { useModelDownloadEntry } from '../../hooks/useModelDownloadsProjection';
 import { isDownloadingStatus, isFailedStatus, isPausedStatus, isQueuedStatus } from '../../utils/downloadStatus';
 import { imageBackendLabel } from '../../utils/imageBackend';
@@ -72,7 +73,8 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
 }) => {
   const recommended = isRecommendedModel(model);
   const { isCompatible, incompatibleReason } = getImageModelCompatibility(model, imageRec);
-  const entry = useModelDownloadEntry('image', `image:${model.id}`);
+  const descriptor = hfModelToDescriptor(model);
+  const entry = useModelDownloadEntry('image', createImageDownloadPlan(descriptor).modelId);
   const transfer = imageTransferState(entry, model.size);
   const authorLabel = model._coreml ? 'Core ML' : imageBackendLabel(model.backend);
   const variantLabel = model.variant ? getVariantLabel(model.variant) : undefined;
@@ -86,7 +88,6 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
       ));
     }
   };
-  const descriptor = hfModelToDescriptor(model);
   const retryDownload = async () => {
     if (!entry) return;
     const selection = mobileImageDownloadSelection(descriptor);
@@ -130,7 +131,7 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
         testID={`image-model-card-${index}`}
         recommended={recommended ? {} : undefined}
         onDownload={transfer.isActive || transfer.hasFailed ? undefined : () => handleDownloadImageModel(descriptor)}
-        onCancel={transfer.isActive ? () => handleCancelImageDownload(model.id) : undefined}
+        onCancel={transfer.isActive ? () => handleCancelImageDownload(descriptor) : undefined}
         onPause={entry && transfer.isDownloading ? () => { controlDownload('pause-download').catch(() => undefined); } : undefined}
         onResume={entry && transfer.isPaused ? () => { controlDownload('resume-download').catch(() => undefined); } : undefined}
         failedState={transfer.hasFailed && entry ? {

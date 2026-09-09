@@ -35,6 +35,7 @@ import {
   isRecommendedImageCatalogModel,
   recommendedImageBackendFilter,
 } from '@offgrid/application';
+import { createImageDownloadPlan } from '@offgrid/models';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>(
@@ -195,7 +196,7 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
           }
           const outcome = await applicationFacade().models.control({
             type: 'queue-download',
-            modelId: `image:${modelInfo.id}`,
+            modelId: createImageDownloadPlan(modelInfo).modelId,
             selection,
           });
           if (!outcome.ok) {
@@ -240,10 +241,11 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   );
 
   const handleCancelImageDownload = useCallback(
-    async (modelId: string) => {
+    async (modelInfo: ImageModelDescriptor) => {
       try {
+        const publicModelId = createImageDownloadPlan(modelInfo).modelId;
         const row = applicationFacade().models.snapshot().control.downloads.find(
-          download => download.modelType === 'image' && download.modelId === modelId,
+          download => download.modelType === 'image' && download.modelId === publicModelId,
         );
         if (!row) return;
         const outcome = await applicationFacade().models.control({

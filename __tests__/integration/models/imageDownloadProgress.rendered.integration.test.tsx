@@ -1,20 +1,17 @@
-import type { PersistedModelDownload } from '@offgrid/models';
 import type { MobileApplicationFixture } from '../../harness/mobileApplicationFixture';
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 
 const MODEL = {
-  id: 'anythingv5_npu_min',
+  id: 'anythingv5_cpu',
   name: 'AnythingV5',
-  displayName: 'Anything V5 (NPU non-flagship)',
-  backend: 'qnn' as const,
-  variant: 'min',
-  downloadUrl: 'https://models.test/AnythingV5_qnn2.28_min.zip',
-  fileName: 'AnythingV5_qnn2.28_min.zip',
+  displayName: 'Anything V5 (GPU)',
+  backend: 'mnn' as const,
+  downloadUrl: 'https://huggingface.co/xororz/sd-mnn/resolve/main/AnythingV5.zip',
+  fileName: 'AnythingV5.zip',
   size: 1_000,
-  repo: 'offgrid/image-test',
+  repo: 'xororz/sd-mnn',
 };
 const MODEL_ID = `image:${MODEL.id}`;
-const DOWNLOAD_ID = `${MODEL_ID}/${MODEL.fileName}`;
 let fixture: MobileApplicationFixture | null = null;
 
 afterEach(async () => {
@@ -22,81 +19,56 @@ afterEach(async () => {
   fixture = null;
 });
 
-const persistedDownload: PersistedModelDownload = {
-  manifest: {
-    id: DOWNLOAD_ID,
-    modelId: MODEL_ID,
-    kind: 'image',
-    revision: 'main',
-    artifacts: [{
-      id: 'primary',
-      name: MODEL.fileName,
-      role: 'primary',
-      required: true,
-      localName: MODEL.fileName,
-      url: MODEL.downloadUrl,
-      sizeBytes: MODEL.size,
-    }],
-  },
-  phase: 'downloading',
-  artifacts: [{
-    artifactId: 'primary',
-    phase: 'downloading',
-    transferId: 'image-transfer',
-    bytesDownloaded: 400,
-    totalBytes: MODEL.size,
-  }],
-  createdAt: 1,
-  updatedAt: 2,
-  attempt: 1,
-};
-
 describe('Image Models download projection', () => {
-  it('shows canonical image download progress on the matching model card', async () => {
+  it('shows progress inline after the user starts an image download', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
-    boundary.download!.seedActive({
-      downloadId: 'image-transfer',
-      modelId: MODEL_ID,
-      fileName: MODEL.fileName,
-      modelType: 'image',
-      status: 'running',
-      bytesDownloaded: 400,
-      totalBytes: MODEL.size,
+    jest.spyOn(global, 'fetch').mockImplementation(async input => {
+      const url = String(input);
+      if (url.endsWith('/xororz/sd-mnn/tree/main')) {
+        return {
+          ok: true,
+          json: async () => [{
+            type: 'file',
+            path: MODEL.fileName,
+            size: MODEL.size,
+            lfs: { oid: 'sha256:image-model', size: MODEL.size, pointerSize: 128 },
+          }],
+        } as Response;
+      }
+      if (url.endsWith('/xororz/sd-qnn/tree/main')) {
+        return { ok: true, json: async () => [] } as unknown as Response;
+      }
+      throw new Error(`Unexpected request: ${url}`);
     });
-    const { seedMobileDownloadJournal, startMobileApplicationFixture } =
+
+    const { startMobileApplicationFixture } =
       require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
-    await seedMobileDownloadJournal([persistedDownload]);
     fixture = await startMobileApplicationFixture();
-    await fixture.refreshModels();
 
     const React = require('react');
-    const { render, waitFor } = requireRTL();
-    const { ImageModelsTab } = require('../../../src/screens/ModelsScreen/ImageModelsTab');
-    const { initialAlertState } = require('../../../src/components/CustomAlert');
-    const noOp = () => undefined;
-    const ui = render(React.createElement(ImageModelsTab, {
-      imageSearchQuery: '', setImageSearchQuery: noOp,
-      hfModelsLoading: false, hfModelsError: null,
-      filteredHFModels: [MODEL], availableHFModels: [MODEL],
-      backendFilter: 'all', setBackendFilter: noOp,
-      styleFilter: 'all', setStyleFilter: noOp,
-      sdVersionFilter: 'all', setSdVersionFilter: noOp,
-      imageFilterExpanded: null, setImageFilterExpanded: noOp,
-      imageFiltersVisible: false, setImageFiltersVisible: noOp,
-      hasActiveImageFilters: false,
-      showRecommendedOnly: false, setShowRecommendedOnly: noOp,
-      showRecHint: false, setShowRecHint: noOp,
-      imageRec: null, ramGB: 8, imageRecommendation: 'Image models available',
-      handleDownloadImageModel: noOp, handleCancelImageDownload: noOp,
-      loadHFModels: noOp, clearImageFilters: noOp,
-      setUserChangedBackendFilter: noOp,
-      isRecommendedModel: () => false,
-      setAlertState: noOp,
-      alertState: initialAlertState,
-    }));
+    const { render, fireEvent, waitFor, act } = requireRTL();
+    const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
+    const ui = render(React.createElement(ModelsScreen));
+
+    fireEvent.press(ui.getByText('Image'));
+    await waitFor(() => expect(ui.getByText(MODEL.displayName)).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(ui.getByTestId('image-model-card-0-download'));
+    });
+    await waitFor(() => expect(boundary.download!.active()).toHaveLength(1));
+
+    const nativeRow = boundary.download!.active()[0]!;
+    expect(fixture.application.models.snapshot().control.downloads).toEqual(
+      expect.arrayContaining([expect.objectContaining({ modelId: MODEL_ID })]),
+    );
+    act(() => boundary.download!.progress(nativeRow.downloadId, 400, MODEL.size));
 
     await waitFor(() => expect(ui.getByText('40%')).toBeTruthy());
     expect(ui.getByText('400 B / 1000 B')).toBeTruthy();
     expect(ui.getByTestId('image-model-card-0-pause')).toBeTruthy();
-  });
+
+    fireEvent.press(ui.getByTestId('image-model-card-0-cancel'));
+    await waitFor(() => expect(boundary.download!.active()).toHaveLength(0));
+    await waitFor(() => expect(ui.getByTestId('image-model-card-0-download')).toBeTruthy());
+  }, 30000);
 });
