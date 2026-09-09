@@ -58,10 +58,16 @@ async function installModel(repositoryId: string) {
 }
 
 async function deleteThroughHook(modelId: string) {
-  const setAlertState = jest.fn();
+  let confirmation: Parameters<typeof useTextModels>[0] extends (state: infer State) => void ? State : never;
+  const setAlertState = (state: typeof confirmation) => { confirmation = state; };
   const hook = RTL.renderHook(() => useTextModels(setAlertState));
-  await RTL.act(async () => { await hook.result.current.handleDeleteModel(modelId); });
-  expect(setAlertState).not.toHaveBeenCalled();
+  RTL.act(() => { hook.result.current.handleDeleteModel(modelId); });
+  expect(confirmation!.title).toBe('Delete Model');
+  expect(confirmation!.message).toContain('This will free up');
+  expect(fixture!.application.models.snapshot().inventory.some(row => row.id === modelId)).toBe(true);
+  const deleteAction = confirmation!.buttons?.find(button => button.text === 'Delete');
+  expect(deleteAction?.style).toBe('destructive');
+  await RTL.act(async () => { await deleteAction?.onPress?.(); });
 }
 
 async function startDownload(repositoryId: string) {
