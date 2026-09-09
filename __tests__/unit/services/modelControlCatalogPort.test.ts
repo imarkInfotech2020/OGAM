@@ -1,4 +1,5 @@
-import { createMobileModelControlPort } from '../../../src/services/adapters/models/modelControlCatalogPort';
+import { createMobileModelControlPort, mobileImageDownloadSelection } from '../../../src/services/adapters/models/modelControlCatalogPort';
+import { mobileImageDownloadMetadata } from '../../../src/services/modelServices/modelDownloadRequests';
 import { publicImageDownloadRequest } from '../../../src/services/adapters/models/downloads/publicImageDownloadRequest';
 
 const fetchMock = jest.fn();
@@ -102,5 +103,27 @@ describe('Mobile model-control catalog port', () => {
         catalogEntry: false,
       }),
     );
+  });
+
+  it('keeps canonical image metadata in the selection used by iOS, Android, and retry', () => {
+    const descriptor = {
+      id: 'image-portable',
+      name: 'Portable image',
+      description: 'Portable image',
+      size: 200,
+      downloadUrl: 'https://huggingface.co/org/image-portable/resolve/main/image-portable.zip',
+      style: 'general',
+      backend: 'coreml' as const,
+      repo: 'org/image-portable',
+    };
+
+    const selection = mobileImageDownloadSelection(descriptor);
+
+    expect(selection).toEqual(expect.objectContaining({
+      repositoryId: 'org/image-portable',
+      fileName: 'image-portable.zip',
+    }));
+    expect(mobileImageDownloadMetadata(selection?.metadataJson)?.imageModelName)
+      .toBe('Portable image');
   });
 });

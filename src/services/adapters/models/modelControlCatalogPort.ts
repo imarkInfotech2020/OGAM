@@ -105,8 +105,6 @@ async function resolveRepositorySelection(
 }
 
 function imageSourceFileName(model: ImageDownloadDescriptor): string | null {
-  const plan = createImageDownloadPlan(model);
-  if (plan.artifacts.length > 0) return plan.artifacts[0]?.relativePath ?? null;
   try {
     const marker = '/resolve/main/';
     const pathname = new URL(model.downloadUrl).pathname;
@@ -122,9 +120,12 @@ function imageSourceFileName(model: ImageDownloadDescriptor): string | null {
 export function mobileImageDownloadSelection(
   model: ImageDownloadDescriptor,
 ): ModelControlDownloadSelection | null {
+  const plan = createImageDownloadPlan(model);
   const repositoryId = model.repo ?? model.huggingFaceRepo;
-  const fileName = imageSourceFileName(model);
-  return repositoryId && fileName ? { repositoryId, fileName } : null;
+  const fileName = plan.artifacts[0]?.relativePath ?? imageSourceFileName(model);
+  return repositoryId && fileName
+    ? { repositoryId, fileName, metadataJson: plan.metadataJson }
+    : null;
 }
 
 async function resolveImageSelection(
