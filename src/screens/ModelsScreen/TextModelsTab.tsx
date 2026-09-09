@@ -208,13 +208,13 @@ const ModelDetailView: React.FC<DetailProps> = ({
           <Text style={styles.deviceBannerText}>{liteRTGpuNotice}</Text>
         </Card>
       )}
-      <Text style={styles.sectionTitle}>Available Files</Text>
-      {selectedModel.id !== LITERT_PARENT_ID && (
-        <Text style={styles.sectionSubtitle}>
-          Choose a quantization level. Q4_K_M is recommended for mobile.
-          {modelFiles.some(f => f.mmProjFile) && ' Vision files include mmproj.'}
-        </Text>
-      )}
+      <View style={styles.fileListHeader}><Text style={styles.sectionTitle}>Available Files</Text>
+        {selectedModel.id !== LITERT_PARENT_ID && (
+          <Text style={styles.sectionSubtitle}>
+            Choose a quantization level. Q4_K_M is recommended for mobile.
+            {modelFiles.some(f => f.mmProjFile) && ' Vision files include mmproj.'}
+          </Text>
+        )}</View>
       {isLoadingFiles ? (
         <View style={styles.loadingContainer}><LoadingDots color={colors.primary} size={8} /></View>
       ) : (

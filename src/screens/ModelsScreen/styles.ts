@@ -186,7 +186,7 @@ const createFilterStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   },
 });
 
-const createTextModelsStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+const createTextModelsStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   modelInfoCard: {
     marginHorizontal: SPACING.md,
     marginTop: SPACING.md,
@@ -218,12 +218,17 @@ const createTextModelsStyles = (colors: ThemeColors, _shadows: ThemeShadows) => 
   modelDescription: { ...TYPOGRAPHY.bodySmall, color: colors.text, marginBottom: SPACING.xs },
   modelStats: { flexDirection: 'row' as const, gap: 16 },
   statText: { ...TYPOGRAPHY.meta, color: colors.textMuted },
+  fileListHeader: {
+    backgroundColor: colors.background,
+    paddingBottom: SPACING.md,
+    zIndex: 1,
+    ...shadows.bottom,
+  },
   sectionTitle: { ...TYPOGRAPHY.h3, color: colors.text, paddingHorizontal: SPACING.md, marginBottom: 4 },
   sectionSubtitle: {
     ...TYPOGRAPHY.body,
     color: colors.textSecondary,
     paddingHorizontal: SPACING.md,
-    marginBottom: 16,
   },
   recommendedTitle: { ...TYPOGRAPHY.meta, color: colors.textMuted, marginBottom: SPACING.md },
 });
