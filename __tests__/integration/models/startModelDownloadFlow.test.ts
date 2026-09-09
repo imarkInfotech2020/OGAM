@@ -7,6 +7,7 @@ import {
   installNativeBoundary,
   type DownloadFake,
 } from '../../harness/nativeBoundary';
+import { buildCuratedLiteRTFiles, getCuratedLiteRTEntry, LITERT_PARENT_ID } from '@offgrid/application';
 
 const FILE = {
   name: 'model.Q4_K_M.gguf',
@@ -163,5 +164,30 @@ describe('startModelDownload flow (real application)', () => {
         expect.objectContaining({ status: 'failed', reason: 'net' }),
       ]);
     });
+  });
+
+  it('resolves a curated LiteRT file through its real repository identity', async () => {
+    const file = buildCuratedLiteRTFiles()[0];
+    const entry = getCuratedLiteRTEntry(file.name)!;
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        siblings: [{ rfilename: file.name, lfs: { size: file.size } }],
+      }),
+    } as Response);
+
+    await startModelDownload(LITERT_PARENT_ID, file);
+
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      expect.stringContaining(`/api/models/${entry.hfRepoId}`),
+      expect.anything(),
+    );
+    expect(downloads()).toEqual([
+      expect.objectContaining({
+        modelId: entry.hfRepoId,
+        repositoryId: entry.hfRepoId,
+        fileName: file.name,
+      }),
+    ]);
   });
 });
