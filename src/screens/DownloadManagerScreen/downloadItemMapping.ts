@@ -7,6 +7,7 @@ import { imageBackendLabel } from '../../utils/imageBackend';
 import { downloadFileRoleLabel } from '../../utils/downloadStatus';
 import type { ModelsSnapshot } from '@offgrid/application';
 import { mobileImageDownloadMetadata } from '../../services/modelServices/modelDownloadRequests';
+import { describeModelCredibility } from '@offgrid/models';
 
 /**
  * How a download store row, a queued start, or a finished model becomes one Download Manager row.
@@ -32,6 +33,9 @@ export function facadeDownloadToActiveItem(
     ? mobileImageDownloadMetadata(entry.metadataJson)
     : undefined;
   const total = entry.totalBytes;
+  const author = image
+    ? getImageAuthor(image.imageModelBackend)
+    : entry.modelId.split('/')[0] ?? 'Unknown';
   return {
     type: 'active',
     modelType,
@@ -41,16 +45,36 @@ export function facadeDownloadToActiveItem(
     // A multi-file model names the part it is fetching by its published ROLE, so a projector
     // reads as "Vision support" rather than an opaque filename. Image models keep their own name.
     fileName: image?.imageModelName ?? downloadFileRoleLabel(entry.currentFileRole, entry.fileName),
-    author: image
-      ? getImageAuthor(image.imageModelBackend)
-      : entry.modelId.split('/')[0] ?? 'Unknown',
+    author,
+    credibility: modelType === 'text' ? describeModelCredibility(author) : undefined,
+    metadataJson: entry.metadataJson,
     quantization: image?.imageModelBackend === 'coreml' ? 'Core ML' : '',
     fileSize: total,
     bytesDownloaded: entry.bytesDownloaded,
+    bytesPerSecond: entry.bytesPerSecond,
     progress: total > 0 ? entry.bytesDownloaded / total : 0,
     status: entry.status,
     reason: entry.reason,
     reasonCode: entry.reasonCode as DownloadItem['reasonCode'],
+  };
+}
+
+/** Present a Shared-owned projector repair with the same transfer facts as every download card. */
+export function projectorRepairToActiveItem(
+  operation: ModelsSnapshot['operations']['active'][number],
+  installed: DownloadItem,
+): DownloadItem {
+  const progress = operation.progress;
+  return {
+    ...installed,
+    type: 'active',
+    downloadId: operation.operationId,
+    fileName: 'Vision support',
+    fileSize: progress?.totalBytes ?? 0,
+    bytesDownloaded: progress?.bytesDownloaded ?? 0,
+    bytesPerSecond: progress?.bytesPerSecond,
+    progress: progress ? progress.percent / 100 : 0,
+    status: 'downloading',
   };
 }
 

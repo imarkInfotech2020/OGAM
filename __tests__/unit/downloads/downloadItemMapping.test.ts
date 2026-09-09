@@ -8,7 +8,7 @@
  * threw without the facade). No facade fake: the projection does not need one.
  */
 import type { ModelsSnapshot } from '@offgrid/application';
-import { facadeDownloadToActiveItem } from '../../../src/screens/DownloadManagerScreen/downloadItemMapping';
+import { facadeDownloadToActiveItem, projectorRepairToActiveItem } from '../../../src/screens/DownloadManagerScreen/downloadItemMapping';
 
 type FacadeRow = ModelsSnapshot['control']['downloads'][number];
 
@@ -54,5 +54,36 @@ describe('a facade download row becomes one Download Manager row', () => {
     // The bytes already on disk still count: paused is not "nothing happened".
     expect(item.bytesDownloaded).toBe(40);
     expect(item.progress).toBeCloseTo(0.4);
+  });
+
+  it('passes the measured transfer rate through to the Download Manager row', () => {
+    const item = facadeDownloadToActiveItem(row({ bytesPerSecond: 2_500_000 }));
+
+    expect(item.bytesPerSecond).toBe(2_500_000);
+  });
+
+  it('maps the Shared projector operation onto the installed model row', () => {
+    const installed = facadeDownloadToActiveItem(row({ status: 'completed' }));
+    const item = projectorRepairToActiveItem({
+      operationId: 'repair-1',
+      kind: 'projector_repair',
+      state: 'active',
+      modality: 'vision',
+      modelId: installed.modelId,
+      progress: {
+        bytesDownloaded: 50,
+        totalBytes: 100,
+        percent: 50,
+        bytesPerSecond: 25,
+      },
+    }, installed);
+
+    expect(item).toEqual(expect.objectContaining({
+      fileName: 'Vision support',
+      progress: 0.5,
+      bytesDownloaded: 50,
+      fileSize: 100,
+      bytesPerSecond: 25,
+    }));
   });
 });

@@ -36,6 +36,9 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   section: {
     marginBottom: SPACING.sm,
   },
+  activeCardContainer: {
+    marginHorizontal: SPACING.md,
+  },
   sectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
