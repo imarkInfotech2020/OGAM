@@ -32,7 +32,7 @@ export type NativeImageDeletePathProjection =
   | { readonly ok: false; readonly outcome: NativeImageDeleteOutcome };
 
 /** Admit only an exact file directly inside Mobile's canonical generated-image directory. */
-export function projectNativeImageDeletePath(
+function projectNativeImageDeletePath(
   rawPath: unknown,
   generatedImageDirectory: string,
 ): NativeImageDeletePathProjection {
