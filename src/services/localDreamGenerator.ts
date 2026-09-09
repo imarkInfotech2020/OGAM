@@ -15,7 +15,7 @@ import logger from '../utils/logger';
 import { shouldLogProgressStep } from './image/progressDiagnostics';
 import {
   nativeImageDeleteFailure,
-  projectNativeImageDeletePath,
+  projectStoredNativeImageDeletePath,
   projectNativeImageDeleteOutcome,
   type NativeImageDeleteOutcome,
 } from './image/nativeImageDeleteOutcome';
@@ -219,7 +219,7 @@ class LocalDreamGeneratorService {
     imagePath: string,
     commitFence?: () => boolean,
   ): Promise<NativeImageDeleteOutcome> {
-    const admitted = projectNativeImageDeletePath(
+    const admitted = projectStoredNativeImageDeletePath(
       imagePath,
       `${RNFS.DocumentDirectoryPath}/generated_images`,
     );

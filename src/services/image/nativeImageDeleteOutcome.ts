@@ -1,3 +1,5 @@
+import {resolveDocumentPath} from '../../utils/resolveDocumentPath';
+
 /**
  * The one contract for deleting a generated image's bytes on the device.
  *
@@ -65,6 +67,17 @@ export function projectNativeImageDeletePath(
     };
   }
   return {ok: true, path: rawPath};
+}
+
+/** Rebase a persisted iOS container path, then apply the same strict owned-directory admission. */
+export function projectStoredNativeImageDeletePath(
+  rawPath: unknown,
+  generatedImageDirectory: string,
+): NativeImageDeletePathProjection {
+  return projectNativeImageDeletePath(
+    typeof rawPath === 'string' ? resolveDocumentPath(rawPath) : rawPath,
+    generatedImageDirectory,
+  );
 }
 
 /**
