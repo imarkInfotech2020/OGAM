@@ -1,5 +1,5 @@
-import React, { useCallback, useSyncExternalStore } from 'react';
-import { Text, View } from 'react-native';
+import React, {useCallback, useMemo, useSyncExternalStore} from 'react';
+import {Alert, Platform, Share, Text, View} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { SystemBars } from 'react-native-edge-to-edge';
@@ -13,6 +13,9 @@ import {
   type ContentMigrationStatus,
 } from '../../services/migrations/contentMigrationCoordinator';
 import type { ContentMigrationState } from '../../services/migrations/contentMigrationStateMachine';
+import {contentMigrationSupportReport} from '../../services/migrations/contentMigrationSupportReport';
+import {appBuildLabel} from '../../utils/appVersion';
+import {openSupportEmail} from '../../utils/supportEmail';
 
 interface MigrationPresentation {
   label: string;
@@ -100,9 +103,37 @@ export function ContentMigrationSurface({ status }: ContentMigrationSurfaceProps
   const percent = Math.round(presentation.progress * 100);
   const failed = migration.state === 'failed';
   const retryAllowed = failed && migration.retryEligible;
+  const supportReport = useMemo(
+    () =>
+      contentMigrationSupportReport(migration, {
+        appBuild: appBuildLabel(),
+        platform: `${Platform.OS} ${Platform.Version}`,
+      }),
+    [migration],
+  );
   const handleRetry = useCallback(() => {
     retryContentPersistenceMigration();
   }, []);
+  const handleEmailSupport = useCallback(() => {
+    openSupportEmail({
+      subject: `[Workspace update] Off Grid AI Mobile ${appBuildLabel()}`,
+      body: `Tell us what happened above this line.\n\n${supportReport}`,
+    });
+  }, [supportReport]);
+  const handleShareDiagnostics = useCallback(async () => {
+    try {
+      await Share.share({
+        title: 'Off Grid AI Mobile diagnostics',
+        message: supportReport,
+      });
+    } catch {
+      Alert.alert(
+        'Could Not Share Diagnostics',
+        'Email support@getoffgridai.co instead.',
+        [{text: 'OK'}],
+      );
+    }
+  }, [supportReport]);
 
   return (
     <GestureHandlerRootView
@@ -143,14 +174,37 @@ export function ContentMigrationSurface({ status }: ContentMigrationSurfaceProps
               Keep Off Grid AI open. Your workspace stays unavailable until the copy is checked.
             </Text>
 
-            {retryAllowed ? (
-              <Button
-                title="Retry update"
-                onPress={handleRetry}
-                variant="primary"
-                testID="content-migration-retry"
-                accessibilityLabel="Retry workspace update"
-              />
+            {failed ? (
+              <View style={styles.failureActions}>
+                <Text style={styles.supportPrompt}>
+                  Need help? Email us or share the diagnostic report.
+                </Text>
+                <Text style={styles.privacyNotice}>
+                  The report contains update state and record counts only. It does not include your
+                  messages, project details, conversation titles, prompts, or files.
+                </Text>
+                {retryAllowed ? (
+                  <Button
+                    title="Retry update"
+                    onPress={handleRetry}
+                    variant="primary"
+                    testID="content-migration-retry"
+                    accessibilityLabel="Retry workspace update"
+                  />
+                ) : null}
+                <Button
+                  title="Email support"
+                  onPress={handleEmailSupport}
+                  variant="secondary"
+                  testID="content-migration-email-support"
+                />
+                <Button
+                  title="Share diagnostics"
+                  onPress={handleShareDiagnostics}
+                  variant="outline"
+                  testID="content-migration-share-diagnostics"
+                />
+              </View>
             ) : null}
           </View>
         </SafeAreaView>
@@ -209,6 +263,17 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     color: colors.textSecondary,
   },
   notice: {
+    ...TYPOGRAPHY.meta,
+    color: colors.textMuted,
+  },
+  failureActions: {
+    gap: SPACING.md,
+  },
+  supportPrompt: {
+    ...TYPOGRAPHY.bodySmall,
+    color: colors.text,
+  },
+  privacyNotice: {
     ...TYPOGRAPHY.meta,
     color: colors.textMuted,
   },
