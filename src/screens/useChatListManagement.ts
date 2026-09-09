@@ -16,6 +16,9 @@ export function useChatListManagement({
   const [selectedConversationIds, setSelectedConversationIds] = useState(
     () => new Set<string>(),
   );
+  const [deletingConversationId, setDeletingConversationId] = useState<
+    string | null
+  >(null);
   const deleteInFlight = useRef(false);
 
   const leaveSelectionMode = () => {
@@ -48,6 +51,7 @@ export function useChatListManagement({
 
     try {
       for (const conversationId of conversationIds) {
+        setDeletingConversationId(conversationId);
         try {
           const outcome =
             await applicationFacade().workflows.deleteConversation(
@@ -67,6 +71,7 @@ export function useChatListManagement({
         }
       }
     } finally {
+      setDeletingConversationId(null);
       deleteInFlight.current = false;
     }
 
@@ -89,6 +94,8 @@ export function useChatListManagement({
   };
 
   const handleBulkDeleteAction = () => {
+    if (deleteInFlight.current) return;
+
     if (!isSelecting) {
       setIsSelecting(true);
       return;
@@ -123,6 +130,8 @@ export function useChatListManagement({
   return {
     searchQuery,
     isSelecting,
+    deletingConversationId,
+    isDeleting: deletingConversationId !== null,
     selectedConversationIds,
     changeSearchQuery,
     toggleConversation,

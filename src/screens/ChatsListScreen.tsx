@@ -4,13 +4,7 @@ import {
   workflowFailureMessage,
   type ConversationRecord,
 } from '@offgrid/application';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  Platform,
-} from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   useNavigation,
@@ -79,12 +73,13 @@ export const ChatsListScreen: React.FC = () => {
   const {
     searchQuery,
     isSelecting,
+    deletingConversationId,
+    isDeleting: isDeletingChats,
     selectedConversationIds,
     changeSearchQuery,
     toggleConversation,
     handleBulkDeleteAction,
   } = useChatListManagement({ setAlertState });
-
   const hasImageModel = !!useActiveMobileModel('image').model;
   const hasModels = !!activeTextModelId || hasImageModel;
   const {
@@ -96,6 +91,7 @@ export const ChatsListScreen: React.FC = () => {
     [conversations, projects, messages],
   );
   const handleChatPress = (conversation: ConversationRecord) => {
+    if (isDeletingChats) return;
     if (isSelecting) {
       toggleConversation(conversation.id);
       return;
@@ -197,7 +193,6 @@ export const ChatsListScreen: React.FC = () => {
       <Icon name="trash-2" size={16} color={colors.error} />
     </TouchableOpacity>
   );
-
   const renderChat = ({
     item,
     index,
@@ -212,6 +207,7 @@ export const ChatsListScreen: React.FC = () => {
       portableMessageText(lastMessage?.portable.content),
     );
     const isSelected = selectedConversationIds.has(item.id);
+    const isDeleting = deletingConversationId === item.id;
 
     return (
       <Swipeable
@@ -229,17 +225,26 @@ export const ChatsListScreen: React.FC = () => {
           testID={`conversation-item-${index}`}
           accessibilityRole={isSelecting ? 'checkbox' : 'button'}
           accessibilityLabel={
-            isSelecting
+            isDeleting
+              ? `Deleting ${item.title}`
+              : isSelecting
               ? `${item.title}, ${
                   isSelected ? 'selected' : 'not selected'
                 } for deletion`
               : item.title
           }
-          accessibilityState={isSelecting ? { checked: isSelected } : undefined}
+          accessibilityState={
+            isSelecting
+              ? { checked: isSelected, disabled: isDeletingChats, busy: isDeleting }
+              : undefined
+          }
         >
           {isSelecting ? (
             <View testID={`conversation-select-${item.id}`}>
-              <ChatSelectionCheckbox selected={isSelected} />
+              <ChatSelectionCheckbox
+                selected={isSelected}
+                isDeleting={isDeleting}
+              />
             </View>
           ) : null}
           <View style={styles.chatContent}>
@@ -332,6 +337,7 @@ export const ChatsListScreen: React.FC = () => {
             searchQuery={searchQuery}
             isSelecting={isSelecting}
             selectedCount={selectedConversationIds.size}
+            isDeleting={isDeletingChats}
             onSearchChange={changeSearchQuery}
             onBulkDeleteAction={handleBulkDeleteAction}
           />

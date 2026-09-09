@@ -11,8 +11,10 @@ import {
 jest.unmock('@react-navigation/native');
 
 describe('Mobile chat list management', () => {
+  let boundary: ReturnType<typeof installNativeBoundary>;
+
   beforeEach(async () => {
-    const boundary = installNativeBoundary({ fs: true });
+    boundary = installNativeBoundary({ fs: true });
     const { doMockRealSqlite } =
       require('../../harness/sqliteFake') as typeof import('../../harness/sqliteFake');
     doMockRealSqlite();
@@ -65,6 +67,26 @@ describe('Mobile chat list management', () => {
 
     const planningId = await createConversation('Planning notes');
     const researchId = await createConversation('Research review');
+    const gallery = getMobileApplication().generatedImages;
+    if (!gallery || !boundary.fs) {
+      throw new Error('The generated-image boundary was not composed.');
+    }
+    const planningImagePath = `${boundary.fs.DocumentDirectoryPath}/generated_images/planning.png`;
+    boundary.fs.seedFile(planningImagePath, 1024);
+    const image = await gallery.create({
+      id: 'planning-image',
+      contentId: 'planning-image',
+      conversationId: planningId,
+      prompt: 'Planning diagram',
+      width: 512,
+      height: 512,
+      steps: 8,
+      seed: 42,
+      modelId: 'image-model',
+      createdAt: '2026-09-09T00:00:00.000Z',
+      local: { path: planningImagePath, fileName: 'planning.png' },
+    });
+    if (!image.ok) throw new Error(image.failure.message);
 
     rtl.fireEvent.press(view.getByTestId('chats-tab'));
     await rtl.waitFor(() =>
@@ -93,7 +115,22 @@ describe('Mobile chat list management', () => {
         'Delete 2 selected chats? This will also delete all images generated in the selected chats.',
       ),
     ).toBeTruthy();
+    boundary.diffusion.holdNextDelete();
     rtl.fireEvent.press(view.getByText('Delete'));
+
+    await rtl.waitFor(() => expect(boundary.diffusion.deleteHeld()).toBe(true));
+    expect(
+      rtl
+        .within(chats.getByTestId(`conversation-select-${planningId}`))
+        .getByTestId('chat-delete-loading'),
+    ).toBeTruthy();
+    expect(
+      rtl
+        .within(chats.getByTestId(`conversation-select-${researchId}`))
+        .queryByTestId('chat-delete-loading'),
+    ).toBeNull();
+    expect(chats.getByTestId('chat-bulk-delete-action')).toBeDisabled();
+    boundary.diffusion.releaseDelete();
 
     await rtl.waitFor(() => {
       expect(workspaceContent.snapshot().conversations).toHaveLength(0);

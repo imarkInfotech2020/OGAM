@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import { LoadingDots } from '../components/LoadingDots';
 import { SPACING, TYPOGRAPHY } from '../constants';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
@@ -9,6 +10,7 @@ interface ChatListToolbarProps {
   searchQuery: string;
   isSelecting: boolean;
   selectedCount: number;
+  isDeleting: boolean;
   onSearchChange: (value: string) => void;
   onBulkDeleteAction: () => void;
 }
@@ -17,6 +19,7 @@ export const ChatListToolbar: React.FC<ChatListToolbarProps> = ({
   searchQuery,
   isSelecting,
   selectedCount,
+  isDeleting,
   onSearchChange,
   onBulkDeleteAction,
 }) => {
@@ -44,6 +47,7 @@ export const ChatListToolbar: React.FC<ChatListToolbarProps> = ({
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
+          editable={!isDeleting}
           accessibilityLabel="Search chats"
           testID="chat-search"
         />
@@ -51,8 +55,10 @@ export const ChatListToolbar: React.FC<ChatListToolbarProps> = ({
           <TouchableOpacity
             style={styles.searchClear}
             onPress={() => onSearchChange('')}
+            disabled={isDeleting}
             accessibilityRole="button"
             accessibilityLabel="Clear chat search"
+            accessibilityState={{ disabled: isDeleting }}
             testID="chat-search-clear"
           >
             <Icon name="x" size={16} color={colors.textMuted} />
@@ -64,6 +70,8 @@ export const ChatListToolbar: React.FC<ChatListToolbarProps> = ({
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         accessibilityRole="button"
         accessibilityLabel={actionLabel}
+        accessibilityState={{ disabled: isDeleting, busy: isDeleting }}
+        disabled={isDeleting}
         onPress={onBulkDeleteAction}
         testID="chat-bulk-delete-action"
       >
@@ -77,14 +85,21 @@ export const ChatListToolbar: React.FC<ChatListToolbarProps> = ({
   );
 };
 
-export const ChatSelectionCheckbox: React.FC<{ selected: boolean }> = ({
-  selected,
-}) => {
+export const ChatSelectionCheckbox: React.FC<{
+  selected: boolean;
+  isDeleting?: boolean;
+}> = ({ selected, isDeleting = false }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   return (
     <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
-      {selected ? (
+      {isDeleting ? (
+        <LoadingDots
+          color={colors.background}
+          size={3}
+          testID="chat-delete-loading"
+        />
+      ) : selected ? (
         <Icon name="check" size={14} color={colors.background} />
       ) : null}
     </View>
