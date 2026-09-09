@@ -260,7 +260,11 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: SPACING.md,
-    paddingVertical: 2, // tight — the mic already gives the row its height
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: 32,
+    backgroundColor: colors.surface,
+    ...shadows.small,
   },
   // Voice cycle button — shows icon + voice name
   audioVoiceButton: {
@@ -270,10 +274,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingHorizontal: SPACING.sm,
     height: 32,
     borderRadius: 16,
-  },
-  audioControlButton: {
-    backgroundColor: colors.surface,
-    ...shadows.small,
   },
   audioVoiceLabel: {
     ...TYPOGRAPHY.meta,
