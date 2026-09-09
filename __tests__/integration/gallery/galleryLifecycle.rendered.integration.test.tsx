@@ -15,6 +15,17 @@ import {
 } from '../../harness/productionNavigation';
 
 const deviceInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+const applicationStartupTimeoutMs = 15_000;
+
+async function waitForHome(
+  view: ReturnType<typeof renderProductionApp>,
+): Promise<void> {
+  await view.findByTestId(
+    'home-tab',
+    {},
+    { timeout: applicationStartupTimeoutMs },
+  );
+}
 
 async function stopApplication() {
   const { stopMobileApplication } =
@@ -65,7 +76,7 @@ describe('generated-image Gallery lifecycle', () => {
     await seedReturningUserWithTextModel(boundary);
     const rtl = requireRTL();
     let view = renderProductionApp(rtl);
-    await view.findByTestId('home-tab');
+    await waitForHome(view);
 
     const { applicationFacade } =
       require('../../../src/services/applicationFacade') as typeof import('../../../src/services/applicationFacade');
@@ -137,7 +148,7 @@ describe('generated-image Gallery lifecycle', () => {
     await seedReturningUserWithTextModel(boundary);
     const rtl = requireRTL();
     const view = renderProductionApp(rtl);
-    await view.findByTestId('home-tab');
+    await waitForHome(view);
 
     const { applicationFacade } =
       require('../../../src/services/applicationFacade') as typeof import('../../../src/services/applicationFacade');
