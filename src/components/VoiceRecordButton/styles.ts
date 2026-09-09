@@ -24,6 +24,7 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surfaceLight,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    ...shadows.small,
   },
   buttonAsSend: {
     width: 44,
@@ -32,7 +33,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadows.small,
   },
   // Audio (voice) mode: a larger, clearly-circular bordered mic so it reads as
   // the primary "press to speak" action.
@@ -52,7 +52,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderWidth: 1,
     borderColor: colors.border,
     opacity: 0.5,
-    ...shadows.small,
   },
   buttonAsSendLoading: {
     width: 44,
@@ -61,7 +60,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.primary,
-    ...shadows.small,
   },
   // Background STT download (send-slot footprint): a STATIC determinate ring —
   // per-quadrant border colors are set from ringQuadrants at render. Matches the
@@ -72,7 +70,6 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     borderRadius: 22,
     backgroundColor: colors.surface,
     borderWidth: 2,
-    ...shadows.small,
   },
   // Background STT download at the default 36px mic footprint (non-send variants).
   buttonDownloadRing: {
