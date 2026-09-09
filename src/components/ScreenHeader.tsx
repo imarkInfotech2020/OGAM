@@ -4,7 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { SPACING, TYPOGRAPHY } from '../constants';
 
 /** A small Button (10px padding + one text line) plus the header's own padding. */
-const TAB_HEADER_MIN_HEIGHT = 56;
+const TAB_HEADER_MIN_HEIGHT = 52;
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 
@@ -82,7 +82,7 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   // as two different sizes across tabs.
   tabHeader: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.xs,
     minHeight: TAB_HEADER_MIN_HEIGHT,
   },
   backButton: { padding: SPACING.xs },
