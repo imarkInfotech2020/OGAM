@@ -271,6 +271,10 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     height: 32,
     borderRadius: 16,
   },
+  audioControlButton: {
+    backgroundColor: colors.surface,
+    ...shadows.small,
+  },
   audioVoiceLabel: {
     ...TYPOGRAPHY.meta,
     color: colors.textSecondary,
