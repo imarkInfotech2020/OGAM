@@ -16,6 +16,16 @@ export function optionalText(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+export function resolveLegacyProjectId(
+  value: unknown,
+  availableProjectIds: ReadonlySet<string>,
+): string | null {
+  const projectId = optionalText(value);
+  return projectId !== null && availableProjectIds.has(projectId)
+    ? projectId
+    : null;
+}
+
 function portableToolArtifacts(
   message: StoredRecord,
   label: string,
@@ -143,12 +153,12 @@ export function stableMessageId(message: StoredRecord): string {
 }
 
 export function legacyTurns(input: {
-  conversation: StoredRecord;
   conversationId: string;
+  projectId: string | null;
   messages: readonly StoredRecord[];
   now: string;
 }): {turns: ChatTurnRecord[]; turnIds: Map<string, string>} {
-  const {conversation, conversationId, messages, now} = input;
+  const {conversationId, projectId, messages, now} = input;
   const turns: ChatTurnRecord[] = [];
   const turnIds = new Map<string, string>();
   for (let index = 0; index < messages.length; index += 1) {
@@ -196,9 +206,7 @@ export function legacyTurns(input: {
     turns.push({
       id: turnId,
       conversationId,
-      ...(typeof conversation.projectId === 'string'
-        ? {projectId: conversation.projectId}
-        : {}),
+      ...(projectId === null ? {} : {projectId}),
       userMessageId: turnId,
       responseMessageIds,
       status: interrupted

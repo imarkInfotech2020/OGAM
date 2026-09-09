@@ -24,6 +24,7 @@ import {
   localMessageState,
   optionalText,
   portableContext,
+  resolveLegacyProjectId,
   stableMessageId,
   text,
 } from './legacyMessageProjection';
@@ -185,6 +186,7 @@ class MobileContentMigrationTarget implements ContentMigrationTargetPort {
       );
     let copied = 0;
     const now = new Date().toISOString();
+    const availableProjectIds = new Set<string>();
 
     try {
       await this.db.transaction(async tx => {
@@ -195,12 +197,13 @@ class MobileContentMigrationTarget implements ContentMigrationTargetPort {
         await tx.execute('DELETE FROM workspace_content_projects');
 
         for (const project of snapshot.projects) {
+          const projectId = text(project.id, 'project.id');
           await tx.execute(
             `INSERT INTO workspace_content_projects
              (id, name, description, system_prompt, icon, include_memory, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-              text(project.id, 'project.id'),
+              projectId,
               text(project.name, 'project.name'),
               typeof project.description === 'string'
                 ? project.description
@@ -214,11 +217,16 @@ class MobileContentMigrationTarget implements ContentMigrationTargetPort {
               isoTime(project.updatedAt, now),
             ],
           );
+          availableProjectIds.add(projectId);
           lifecycle.onProgress(++copied, total);
         }
 
         for (const conversation of snapshot.conversations) {
           const conversationId = text(conversation.id, 'conversation.id');
+          const projectId = resolveLegacyProjectId(
+            conversation.projectId,
+            availableProjectIds,
+          );
           await tx.execute(
             `INSERT INTO workspace_content_conversations
              (id, title, model_id, project_id, compaction_summary,
@@ -228,7 +236,7 @@ class MobileContentMigrationTarget implements ContentMigrationTargetPort {
               conversationId,
               typeof conversation.title === 'string' ? conversation.title : '',
               optionalText(conversation.modelId),
-              optionalText(conversation.projectId),
+              projectId,
               optionalText(conversation.compactionSummary),
               isoTime(conversation.createdAt, now),
               isoTime(conversation.updatedAt, now),
@@ -242,8 +250,8 @@ class MobileContentMigrationTarget implements ContentMigrationTargetPort {
               )
             : [];
           const { turns, turnIds } = legacyTurns({
-            conversation,
             conversationId,
+            projectId,
             messages,
             now,
           });
