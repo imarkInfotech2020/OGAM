@@ -214,6 +214,8 @@ final class StreamingFileHasherTests: XCTestCase {
   }
 }
 
+// MARK: - Sync Screenshot Tests
+
 final class SyncScreenshotFileWriterTests: XCTestCase {
 
   func testPersistsAnAppOwnedCopyAndReturnsTheTransferDescriptor() throws {
