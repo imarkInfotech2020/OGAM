@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 final class SyncScreenshotModule: RCTEventEmitter, PHPhotoLibraryChangeObserver {
   private var enabled = false
   private var hasListeners = false
-  private var lastAssetIdentifier: String?
+  private var assetCursor = SyncScreenshotAssetCursor()
   private var observingPhotoLibrary = false
 
   @objc
@@ -49,7 +49,11 @@ final class SyncScreenshotModule: RCTEventEmitter, PHPhotoLibraryChangeObserver 
   private func startPhotoLibraryObservation() {
     guard !observingPhotoLibrary else { return }
     // Existing screenshots are the baseline. Only assets added after sharing is enabled are sent.
-    lastAssetIdentifier = latestScreenshotAsset()?.localIdentifier
+    let baseline = latestScreenshotAsset()
+    assetCursor = SyncScreenshotAssetCursor(
+      identifier: baseline?.localIdentifier,
+      creationDate: baseline?.creationDate
+    )
     PHPhotoLibrary.shared().register(self)
     observingPhotoLibrary = true
   }
@@ -84,9 +88,11 @@ final class SyncScreenshotModule: RCTEventEmitter, PHPhotoLibraryChangeObserver 
   private func captureLatestScreenshot() {
     guard
       let asset = latestScreenshotAsset(),
-      asset.localIdentifier != lastAssetIdentifier
+      assetCursor.advanceIfNewer(
+        identifier: asset.localIdentifier,
+        creationDate: asset.creationDate
+      )
     else { return }
-    lastAssetIdentifier = asset.localIdentifier
 
     let requestOptions = PHImageRequestOptions()
     requestOptions.isNetworkAccessAllowed = false
@@ -140,6 +146,22 @@ final class SyncScreenshotModule: RCTEventEmitter, PHPhotoLibraryChangeObserver 
     if observingPhotoLibrary {
       PHPhotoLibrary.shared().unregisterChangeObserver(self)
     }
+  }
+}
+
+struct SyncScreenshotAssetCursor {
+  private(set) var identifier: String?
+  private(set) var creationDate: Date?
+
+  mutating func advanceIfNewer(identifier: String, creationDate: Date?) -> Bool {
+    guard
+      identifier != self.identifier,
+      let creationDate,
+      creationDate > (self.creationDate ?? .distantPast)
+    else { return false }
+    self.identifier = identifier
+    self.creationDate = creationDate
+    return true
   }
 }
 
