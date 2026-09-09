@@ -23,7 +23,6 @@ export const LITERT_RECOMMENDED_MODEL: ModelInfo = {
 };
 
 export const LITERT_PARENT_RECOMMENDED = {
-  pillLabel: 'Recommended',
   chips: ['Vision', 'GPU'],
   // No highlightText — the model description already carries it (rendered commonly).
 };

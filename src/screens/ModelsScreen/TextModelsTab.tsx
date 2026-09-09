@@ -1,6 +1,6 @@
-import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, isModelDownloadInProgress, LITERT_PARENT_ID, liteRTGpuUnsupportedNotice, modelsFailureMessage, stripModelFileExtension } from '@offgrid/application';
+import { buildCuratedLiteRTFiles, curatedLiteRTDownloadWarning, getCuratedLiteRTEntry, LITERT_PARENT_ID, liteRTGpuUnsupportedNotice, modelsFailureMessage, stripModelFileExtension } from '@offgrid/application';
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Platform, type ListRenderItemInfo } from 'react-native';
+import { View, Text, FlatList, RefreshControl, TouchableOpacity, Platform, type ListRenderItemInfo } from 'react-native';
 import { LoadingDots } from '../../components/LoadingDots';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
@@ -10,13 +10,11 @@ import { Card, ModelCard } from '../../components';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { CustomAlert, hideAlert, showAlert } from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
-import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { CREDIBILITY_LABELS } from '../../constants';
 import { ModelInfo, ModelFile } from '../../types';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
-import { isDownloadingStatus, isFailedStatus, isPausedStatus, isQueuedStatus } from '../../utils/downloadStatus';
-import { makeModelKey } from '../../utils/modelKey';
+import { isDownloadingStatus, isPausedStatus, isQueuedStatus } from '../../utils/downloadStatus';
 import { modelSupportsNpuGpu, isAccelerableQuant } from '../../utils/acceleration';
 import { TextFiltersSection } from './TextFiltersSection';
 import { FilterState, SortOption } from './types';
@@ -26,19 +24,21 @@ import { LITERT_FILE_META, LITERT_RECOMMENDED_MODEL, LITERT_PARENT_RECOMMENDED }
 import { repairDownloadedVisionMetadata } from '../../services/modelServices/modelMetadataRepairCommand';
 import { applicationFacade } from '../../services/applicationFacade';
 import { useModelDownloadsProjection } from '../../hooks/useModelDownloadsProjection';
+import { useModelsProjection } from '../../hooks/useApplicationProjection';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
 import { huggingFaceService } from '../../services/huggingface';
 import { aggregateTextModelDownloads, buildFileDownloadHandler, modelDownloadMatchesFile } from './modelDownloadProjection';
+import { projectModelFileCardState } from './modelFileCardState';
+import { modelDownloadRepositoryId } from '../../services/startModelDownload';
+import { TextModelImportProgress, TextModelsToolbar } from './TextModelImportControl';
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
 }
-
 function getEmptyText(hasSearched: boolean, hasActiveFilters: boolean): string {
   if (!hasSearched) return 'No recommended models available.';
   if (hasActiveFilters) return 'No models match your filters. Try adjusting or clearing them.';
   return 'No models found. Try a different search term.';
 }
-
 type Props = Pick<ModelsScreenViewModel,
   | 'searchQuery' | 'setSearchQuery' | 'isLoading' | 'isRefreshing' | 'hasSearched'
   | 'selectedModel' | 'setSelectedModel' | 'modelFiles' | 'setModelFiles' | 'isLoadingFiles'
@@ -50,8 +50,8 @@ type Props = Pick<ModelsScreenViewModel,
   | 'clearFilters' | 'toggleFilterDimension' | 'toggleOrg'
   | 'setTypeFilter' | 'setSourceFilter' | 'setSizeFilter' | 'setQuantFilter' | 'setSortOption'
   | 'isModelDownloaded' | 'getDownloadedModel' | 'isRepairingVisionModel'
+  | 'isImporting' | 'importProgress' | 'handleImportLocalModel'
 > & { onboarding?: boolean };
-
 type DetailProps = Pick<Props,
   | 'modelFiles' | 'isLoadingFiles' | 'filterState' | 'ramGB' | 'alertState' | 'setAlertState'
   | 'getDownloadedModel' | 'isModelDownloaded' | 'isRepairingVisionModel'
@@ -66,13 +66,8 @@ const ModelDetailView: React.FC<DetailProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
-  // Shared decides which devices lack a LiteRT GPU path; this screen only shows the sentence.
   const liteRTGpuNotice = liteRTGpuUnsupportedNotice({ platform: Platform.OS, deviceModel: DeviceInfo.getModel() });
 
-  // Heal the durable vision flag from the authoritative catalog: this screen KNOWS a model is vision
-  // (its repo ships an mmproj → modelFiles carry mmProjFile), so persist isVisionModel:true onto any
-  // downloaded record that lost it. The Download Manager has no catalog, so the RECORD is the single
-  // source both surfaces read — the wrench then shows consistently (device 2026-07-14).
   useEffect(() => {
     repairDownloadedVisionMetadata({
       modelId: selectedModel.id,
@@ -83,31 +78,23 @@ const ModelDetailView: React.FC<DetailProps> = ({
   }, [selectedModel.id, modelFiles]);
 
   const downloads = useModelDownloadsProjection();
+  const projectorRepairs = useModelsProjection().operations.active.filter(
+    operation => operation.kind === 'projector_repair' && operation.state === 'active',
+  );
 
   const getFileCardState = (item: ModelFile) => {
-    const modelKey = makeModelKey(selectedModel.id, item.name);
-    const entry = downloads.find(row => modelDownloadMatchesFile(row, selectedModel.id, item.name));
-    const downloaded = isModelDownloaded(selectedModel.id, item.name);
-    const downloadedModel = getDownloadedModel(selectedModel.id, item.name);
-    const needsVisionRepair = checkNeedsVisionRepair(downloadedModel, item);
-    const repairingVision = isRepairingVisionModel(`${selectedModel.id}/${item.name}`);
-    const inProgress = entry ? isModelDownloadInProgress(entry.status) : false;
-    const hasFailed = entry ? isFailedStatus(entry.status) : false;
-    let progress = entry && (inProgress || hasFailed || entry.status === 'completed') ? {
-      progress: entry.totalBytes > 0 ? entry.bytesDownloaded / entry.totalBytes : 0,
-      bytesDownloaded: entry.bytesDownloaded,
-      totalBytes: entry.totalBytes,
-      bytesPerSecond: undefined,
-      status: entry.status,
-    } : undefined;
-
-    // For completed downloads, discard if size doesn't match expected
-    if (progress && progress.status === 'completed' && progress.bytesDownloaded < item.size) {
-      progress = undefined;
-    }
-    const canCancel   = inProgress;
-    const errorMessage = hasFailed ? (entry?.reason ?? 'Download failed') : undefined;
-    return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, repairingVision, canCancel, hasFailed, errorMessage };
+    const repositoryId = modelDownloadRepositoryId(selectedModel.id, item.name);
+    const downloaded = isModelDownloaded(repositoryId, item.name);
+    const downloadedModel = getDownloadedModel(repositoryId, item.name);
+    return projectModelFileCardState({
+      modelId: repositoryId,
+      file: item,
+      downloads,
+      projectorRepairs,
+      downloaded,
+      downloadedModel,
+      locallyRepairing: isRepairingVisionModel(`${selectedModel.id}/${item.name}`),
+    });
   };
 
   const renderFileItem = ({ item, index }: { item: ModelFile; index: number }) => {
@@ -126,14 +113,33 @@ const ModelDetailView: React.FC<DetailProps> = ({
     });
     const liteRTMeta = LITERT_FILE_META[item.name];
     const displayName = liteRTMeta?.displayName ?? stripModelFileExtension(item.name);
-    const recommended = liteRTMeta ? { pillLabel: 'Recommended', highlightText: liteRTMeta.highlight } : undefined;
-    const download = downloads.find(row => modelDownloadMatchesFile(row, selectedModel.id, item.name));
+    const recommended = liteRTMeta ? { highlightText: liteRTMeta.highlight } : undefined;
+    const repositoryId = modelDownloadRepositoryId(selectedModel.id, item.name);
+    const download = downloads.find(row => modelDownloadMatchesFile(row, repositoryId, item.name));
     const retry = async () => {
       if (!download) return;
       const outcome = await applicationFacade().models.retryDownload({ downloadId: download.downloadId });
       if (!outcome.ok) {
         setAlertState(showAlert('Retry Failed', modelsFailureMessage(outcome.failure)));
       }
+    };
+    const controlDownload = async (type: 'pause-download' | 'resume-download') => {
+      if (!download) return;
+      const outcome = await applicationFacade().models.control({ type, modelId: download.downloadId });
+      if (!outcome.ok) setAlertState(showAlert(
+          type === 'pause-download' ? 'Pause Failed' : 'Resume Failed',
+          modelsFailureMessage(outcome.failure),
+        ));
+    };
+    const cancelTransfer = async () => {
+      if (!s.repairOperationId) return handleCancelDownload(s.downloadKey);
+      const outcome = await applicationFacade().models.cancelProjectorRepair({
+        operationId: s.repairOperationId,
+      });
+      if (!outcome.ok) setAlertState(showAlert(
+        'Cancel Failed',
+        modelsFailureMessage(outcome.failure),
+      ));
     };
     const failedState = s.hasFailed && s.errorMessage && download ? {
       errorMessage: s.errorMessage,
@@ -159,9 +165,13 @@ const ModelDetailView: React.FC<DetailProps> = ({
         isRepairingVision={s.repairingVision}
         isCompatible={!fileExceedsBudget(item.size, ramGB)} testID={`file-card-${index}`}
         onDownload={onDownload}
-        onDelete={s.downloaded ? () => handleDeleteModel(`${selectedModel.id}/${item.name}`) : undefined}
+        onDelete={s.downloaded ? () => handleDeleteModel(`${repositoryId}/${item.name}`) : undefined}
         onRepairVision={s.needsVisionRepair && !s.progress && !s.repairingVision ? () => handleRepairMmProj(selectedModel, item) : undefined}
-        onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
+        onCancel={s.canCancel ? () => { cancelTransfer().catch(error => {
+          setAlertState(showAlert('Cancel Failed', error instanceof Error ? error.message : String(error)));
+        }); } : undefined}
+        onPause={download && isDownloadingStatus(download.status) ? () => { controlDownload('pause-download').catch(() => undefined); } : undefined}
+        onResume={download && isPausedStatus(download.status) ? () => { controlDownload('resume-download').catch(() => undefined); } : undefined}
         compact
         recommended={recommended}
         supportsAcceleration={isAccelerableQuant(item.quantization) || !!liteRTMeta}
@@ -312,7 +322,8 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
-    isModelDownloaded, getDownloadedModel, isRepairingVisionModel, onboarding = false,
+    isModelDownloaded, getDownloadedModel, isRepairingVisionModel,
+    isImporting, importProgress, handleImportLocalModel, onboarding = false,
   } = props;
   const hasNonSortActiveFilters = hasNonSortFilters(filterState);
   const currentSort = SORT_OPTIONS.find(o => o.key === filterState.sort) ?? SORT_OPTIONS[0];
@@ -372,7 +383,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
             compact
             model={model}
             file={file}
-            recommended={{ pillLabel: 'Recommended' }}
+            recommended={{}}
             supportsAcceleration
             testID={`onboarding-litert-model-${index}`}
             onPress={guardedDownload}
@@ -421,36 +432,30 @@ export const TextModelsTab: React.FC<Props> = (props) => {
 
   return (
     <>
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search Hugging Face models..."
-          placeholderTextColor={colors.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onSubmitEditing={handleSearch}
-          returnKeyType="search"
-          testID="search-input"
+      <TextModelsToolbar
+        colors={colors}
+        styles={styles}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onSearch={handleSearch}
+        sortIcon={currentSort.icon}
+        sortActive={sortToggleActive}
+        sortChanged={isSortActive}
+        filterActive={filterToggleActive}
+        filterChanged={hasNonSortActiveFilters}
+        onToggleSort={() => toggleFilterDimension('sort')}
+        onToggleFilters={() => setTextFiltersVisible(v => !v)}
+        showImport={!onboarding}
+        isImporting={isImporting}
+        onImport={handleImportLocalModel}
+      />
+      {!onboarding && isImporting && (
+        <TextModelImportProgress
+          colors={colors}
+          styles={styles}
+          importProgress={importProgress}
         />
-        <TouchableOpacity
-          style={[styles.filterToggle, sortToggleActive && styles.filterToggleActive]}
-          onPress={() => toggleFilterDimension('sort')}
-          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-          testID="sort-pill"
-        >
-          <Icon name={currentSort.icon} size={14} color={sortToggleActive ? colors.primary : colors.textMuted} />
-          {isSortActive && <View style={styles.filterDot} />}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterToggle, filterToggleActive && styles.filterToggleActive]}
-          onPress={() => setTextFiltersVisible(v => !v)}
-          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-          testID="text-filter-toggle"
-        >
-          <Icon name="sliders" size={14} color={filterToggleActive ? colors.primary : colors.textMuted} />
-          {hasNonSortActiveFilters && <View style={styles.filterDot} />}
-        </TouchableOpacity>
-      </View>
+      )}
 
       {filterState.expandedDimension === 'sort' && <SortPanel filterState={filterState} setSortOption={setSortOption} styles={styles} colors={colors} />}
 

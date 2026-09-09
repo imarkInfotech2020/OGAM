@@ -112,6 +112,13 @@ describe('curated LiteRT E4B download — device-aware memory warning (rendered)
     await hardwareService.refreshMemoryInfo();
 
     const { getAllByText, getByText, queryByText, getByTestId } = render(React.createElement(ModelsScreen, {}));
+    expect(getByText('Text')).toBeTruthy();
+    expect(getByText('Image')).toBeTruthy();
+    expect(getByText('Transcription')).toBeTruthy();
+    expect(getByText('Speech')).toBeTruthy();
+    expect(queryByText('Text Models')).toBeNull();
+    expect(queryByText('Import Local File')).toBeNull();
+    expect(getByTestId('import-local-model')).toBeTruthy();
     await waitFor(() => expect(getByText('Gemma 4 LiteRT')).toBeTruthy(), { timeout: 6000 });
     await act(async () => { fireEvent.press(getByText('Gemma 4 LiteRT')); });
     await waitFor(() => expect(getByTestId('model-detail-screen')).toBeTruthy(), { timeout: 4000 });
