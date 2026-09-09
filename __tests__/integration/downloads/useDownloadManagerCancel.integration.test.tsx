@@ -51,7 +51,7 @@ const persistedDownload: PersistedModelDownload = {
 };
 
 describe('Download Manager cancellation through the real application', () => {
-  it('removes the visible in-flight row and stops its native transfer after confirmation', async () => {
+  it('cancels the visible in-flight row immediately without a delete confirmation', async () => {
     const boundary = installNativeBoundary({ download: true, fs: true });
     boundary.download!.seedActive({
       downloadId: TRANSFER_ID,
@@ -82,18 +82,14 @@ describe('Download Manager cancellation through the real application', () => {
         }),
       ]),
     );
-    act(() => view.result.current.handleRemoveDownload(view.result.current.activeItems[0]!));
-    const confirm = (view.result.current.alertState.buttons ?? []).find(
-      button => button.text === 'Yes',
+    await act(async () =>
+      view.result.current.handleRemoveDownload(
+        view.result.current.activeItems[0]!,
+      ),
     );
-    expect(confirm).toBeDefined();
-    await act(async () => confirm!.onPress?.());
 
     await waitFor(() => expect(view.result.current.activeItems).toEqual([]));
-    expect(boundary.download!.module.stopDownload).toHaveBeenCalledWith(
-      TRANSFER_ID,
-      false,
-    );
+    expect(view.result.current.alertState.visible).toBe(false);
     expect(boundary.download!.active()).toEqual([]);
     expect(fixture.application.models.snapshot().control.downloads).toEqual([
       expect.objectContaining({ downloadId: DOWNLOAD_ID, status: 'cancelled' }),

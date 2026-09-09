@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import {
   AlertState,
   showAlert,
@@ -20,10 +20,18 @@ import { DownloadItem, formatBytes } from './items';
 import {
   facadeDownloadToActiveItem,
   modelStoreCompletedItems,
+  projectorRepairToActiveItem,
 } from './downloadItemMapping';
 import logger from '../../utils/logger';
 import { useModelDownloadsProjection } from '../../hooks/useModelDownloadsProjection';
 import { applicationFacade } from '../../services/applicationFacade';
+import { useModelsProjection } from '../../hooks/useApplicationProjection';
+import { buildModelDeleteConfirmation } from '../../components/modelDeleteConfirmation';
+import { autoSetupImageCatalogProvider } from '../../services/autoSetupImageCatalogProvider';
+import { mobileImageDownloadSelection } from '../../services/adapters/models/modelControlCatalogPort';
+import { mobileImageDownloadMetadata } from '../../services/modelServices/modelDownloadRequests';
+import { imageDownloadDescriptorFromMetadata } from '@offgrid/models';
+import { isFailedStatus } from '../../utils/downloadStatus';
 
 export interface UseDownloadManagerResult {
   activeItems: DownloadItem[];
@@ -36,6 +44,7 @@ export interface UseDownloadManagerResult {
   handleResumeDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
+  handleCancelVisionRepair: (item: DownloadItem) => void;
   isRepairingVision: (modelId: string) => boolean;
   repairDownloadFor: (modelId: string) => DownloadItem | undefined;
   totalStorageUsed: number;
@@ -43,15 +52,6 @@ export interface UseDownloadManagerResult {
 
 export function useDownloadManager(): UseDownloadManagerResult {
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
-  const [repairingVisionIds, setRepairingVisionIds] = useState<Record<string, boolean>>({});
-  const setRepairingVision = useCallback((id: string, repairing: boolean) => {
-    setRepairingVisionIds(current => {
-      if (repairing) return { ...current, [id]: true };
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-  }, []);
   // Narrow selectors. A zero-argument `useAppStore()` re-rendered this whole screen for every
   // unrelated store write - image-generation progress, chat state, a settings change - while a
   // download was already re-rendering it on its own progress.
@@ -59,6 +59,9 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const downloadedImageModels = useAppStore(state => state.downloadedImageModels);
 
   const downloads = useModelDownloadsProjection();
+  const projectorRepairs = useModelsProjection().operations.active.filter(
+    operation => operation.kind === 'projector_repair' && operation.state === 'active',
+  );
 
   // Voice (TTS) + transcription (STT) downloaded models, loaded from disk.
   const { voiceItems, buildDeleteAlert: buildVoiceDeleteAlert } =
@@ -84,10 +87,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
     .filter(item => !completedIds.has(idOf(item)));
   const activeItems: DownloadItem[] = startedItems;
   const repairDownloadFor = (modelId: string): DownloadItem | undefined => {
-    const row = downloads.find(
-      download => download.modelKey === modelId || download.modelId === modelId,
-    );
-    return row ? facadeDownloadToActiveItem(row) : undefined;
+    const operation = projectorRepairs.find(repair => repair.modelId === modelId);
+    const installed = completedItems.find(item => item.modelId === modelId);
+    return operation && installed
+      ? projectorRepairToActiveItem(operation, installed)
+      : undefined;
   };
 
   const totalStorageUsed = completedItems.reduce(
@@ -99,7 +103,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     setAlertState(hideAlert());
     try {
       const outcome = await applicationFacade().models.control({
-        type: 'cancel-download',
+        type: 'clear-download',
         modelId: item.downloadId ?? item.modelId,
       });
       if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
@@ -109,11 +113,37 @@ export function useDownloadManager(): UseDownloadManagerResult {
     }
   };
 
+  const executeCancelDownload = async (item: DownloadItem) => {
+    try {
+      const outcome = await applicationFacade().models.control({
+        type: 'cancel-download',
+        modelId: item.downloadId ?? item.modelId,
+      });
+      if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+    } catch (error) {
+      logger.error('[DownloadManager] Failed to cancel download:', error);
+      setAlertState(showAlert('Cancel Failed', 'Failed to cancel download'));
+    }
+  };
+
   const handleRetryDownload = async (item: DownloadItem) => {
     try {
+      let selection;
+      if (item.modelType === 'image') {
+        const descriptorId = item.modelId.replace(/^image:/, '');
+        const persisted = mobileImageDownloadMetadata(item.metadataJson);
+        const descriptor = persisted
+          ? imageDownloadDescriptorFromMetadata(descriptorId, persisted)
+          : (await autoSetupImageCatalogProvider.load()).find(
+              candidate => candidate.id === descriptorId,
+            );
+        selection = descriptor ? mobileImageDownloadSelection(descriptor) : null;
+        if (!selection) throw new Error('The image model source is no longer available.');
+      }
       const outcome = await applicationFacade().models.control({
         type: 'retry-download',
         modelId: item.downloadId ?? item.modelId,
+        ...(selection ? { selection } : {}),
       });
       if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
     } catch (error: any) {
@@ -152,6 +182,10 @@ export function useDownloadManager(): UseDownloadManagerResult {
   };
 
   const handleRemoveDownload = (item: DownloadItem) => {
+    if (!isFailedStatus(item.status) && item.status !== 'interrupted') {
+      executeCancelDownload(item);
+      return;
+    }
     setAlertState(
       showAlert(
         'Remove Download',
@@ -222,24 +256,11 @@ export function useDownloadManager(): UseDownloadManagerResult {
       const model = downloadedModels.find(m => m.id === item.modelId);
       if (!model) return;
       const totalSize = hardwareService.getModelTotalSize(model);
-      setAlertState(
-        showAlert(
-          'Delete Model',
-          `Are you sure you want to delete "${
-            model.fileName
-          }"? This will free up ${formatBytes(totalSize)}.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Delete',
-              style: 'destructive',
-              onPress: () => {
-                executeDeleteModel(model);
-              },
-            },
-          ],
-        ),
-      );
+      setAlertState(buildModelDeleteConfirmation({
+        fileName: model.fileName,
+        totalBytes: totalSize,
+        onDelete: () => { executeDeleteModel(model); },
+      }));
     }
   };
 
@@ -259,7 +280,6 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const handleRepairVision = (item: DownloadItem): void => {
     const model = downloadedModels.find(m => m.id === item.modelId);
     if (!model) return;
-    setRepairingVision(item.modelId, true);
     logger.log('[DownloadDebug] Repair vision requested', {
       modelId: item.modelId,
       currentMmProjPath: item.mmProjPath,
@@ -288,12 +308,26 @@ export function useDownloadManager(): UseDownloadManagerResult {
         });
         setAlertState(showAlert('Repair Failed', e.message));
       })
-      .finally(() => {
-        setRepairingVision(item.modelId, false);
-      });
+      ;
   };
 
-  const isRepairingVision = (modelId: string) => !!repairingVisionIds[modelId];
+  const isRepairingVision = (modelId: string) =>
+    projectorRepairs.some(operation => operation.modelId === modelId);
+
+  const handleCancelVisionRepair = (item: DownloadItem): void => {
+    const operation = projectorRepairs.find(repair => repair.modelId === item.modelId);
+    if (!operation) return;
+    applicationFacade().models.cancelProjectorRepair({ operationId: operation.operationId })
+      .then(outcome => {
+        if (!outcome.ok) throw new Error(modelsFailureMessage(outcome.failure));
+      })
+      .catch(error => {
+        setAlertState(showAlert(
+          'Cancel Failed',
+          error instanceof Error ? error.message : String(error),
+        ));
+      });
+  };
 
   return {
     activeItems,
@@ -306,6 +340,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
     handleResumeDownload,
     handleDeleteItem,
     handleRepairVision,
+    handleCancelVisionRepair,
     isRepairingVision,
     repairDownloadFor,
     totalStorageUsed,

@@ -109,11 +109,11 @@ describe('rendered — iOS image staging purged: Retry recovers the failed card'
 
     // Precondition: the failed SDXL card is on screen WITH a Retry button (the screenshot state).
     const retry = await waitFor(() => {
-      const btn = view.queryByTestId('failed-retry-button');
+      const btn = view.queryByTestId('active-download-card-retry');
       expect(btn).not.toBeNull();
       return btn;
     });
-    expect(view.queryByText(FILE_NAME)).not.toBeNull();
+    expect(view.queryByText(METADATA.imageModelName)).not.toBeNull();
     expect(boundary.download!.active().length).toBe(0);
 
     // GESTURE: tap Retry, the way the user did on the device.
@@ -127,16 +127,15 @@ describe('rendered — iOS image staging purged: Retry recovers the failed card'
         expect(
           applicationFixture!.application.models
             .snapshot()
-            .control.downloads.find(row => row.downloadId === DOWNLOAD_ID)
-            ?.status,
-        ).not.toBe('failed');
+            .control.downloads.some(
+              row =>
+                row.modelType === 'image' &&
+                ['queued', 'downloading', 'preparing'].includes(row.status),
+            ),
+        ).toBe(true);
       },
       { timeout: 5000 },
     );
-    expect(view.queryByTestId('failed-retry-button')).toBeNull();
-    const rows = boundary.download!.active();
-    expect(
-      rows.some(r => r.modelId === MODEL_ID || r.fileName === FILE_NAME),
-    ).toBe(true);
+    expect(view.queryByTestId('active-download-card-retry')).toBeNull();
   });
 });

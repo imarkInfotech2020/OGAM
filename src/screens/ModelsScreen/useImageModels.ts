@@ -186,48 +186,55 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   // Stable identities so a memoized card is not invalidated by every parent render.
   const handleDownloadImageModel = useCallback(
     async (modelInfo: ImageModelDescriptor) => {
-      const start = async () => {
-        const selection = mobileImageDownloadSelection(modelInfo);
-        if (!selection) {
-          setAlertState(showAlert('Download Failed', 'The model source is incomplete.'));
+      try {
+        const start = async () => {
+          const selection = mobileImageDownloadSelection(modelInfo);
+          if (!selection) {
+            setAlertState(showAlert('Download Failed', 'The model source is incomplete.'));
+            return;
+          }
+          const outcome = await applicationFacade().models.control({
+            type: 'queue-download',
+            modelId: `image:${modelInfo.id}`,
+            selection,
+          });
+          if (!outcome.ok) {
+            setAlertState(showAlert(
+              'Download Failed',
+              getUserFacingDownloadMessage(modelsFailureMessage(outcome.failure)),
+            ));
+          }
+        };
+        const facts = modelInfo.backend === 'qnn' && Platform.OS === 'android'
+          ? await hardwareService.getSoCInfo()
+          : undefined;
+        const compatibility = imageDownloadCompatibility(modelInfo, {
+          platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'other',
+          ...(facts ? { hasNpu: facts.hasNPU, qnnVariant: facts.qnnVariant } : {}),
+        });
+        if (compatibility.status === 'blocked') {
+          setAlertState(showAlert('Incompatible Model', compatibility.message));
           return;
         }
-        const outcome = await applicationFacade().models.control({
-          type: 'queue-download',
-          modelId: `image:${modelInfo.id}`,
-          selection,
-        });
-        if (!outcome.ok) {
-          setAlertState(showAlert(
-            'Download Failed',
-            getUserFacingDownloadMessage(modelsFailureMessage(outcome.failure)),
-          ));
-        }
-      };
-      const facts = modelInfo.backend === 'qnn' && Platform.OS === 'android'
-        ? await hardwareService.getSoCInfo()
-        : undefined;
-      const compatibility = imageDownloadCompatibility(modelInfo, {
-        platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'other',
-        ...(facts ? { hasNpu: facts.hasNPU, qnnVariant: facts.qnnVariant } : {}),
-      });
-      if (compatibility.status === 'blocked') {
-        setAlertState(showAlert('Incompatible Model', compatibility.message));
-        return;
-      }
-      if (compatibility.status === 'confirmation-required') {
-        setAlertState(showAlert('Incompatible Model', compatibility.message, [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Download Anyway', style: 'destructive', onPress: async () => {
-              setAlertState(hideAlert());
-              await start();
+        if (compatibility.status === 'confirmation-required') {
+          setAlertState(showAlert('Incompatible Model', compatibility.message, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Download Anyway', style: 'destructive', onPress: async () => {
+                setAlertState(hideAlert());
+                await start();
+              },
             },
-          },
-        ]));
-        return;
+          ]));
+          return;
+        }
+        await start();
+      } catch (error) {
+        setAlertState(showAlert(
+          'Download Failed',
+          error instanceof Error ? error.message : String(error),
+        ));
       }
-      await start();
     },
     [setAlertState],
   );

@@ -104,25 +104,12 @@ async function resolveRepositorySelection(
   };
 }
 
-function imageSourceFileName(model: ImageDownloadDescriptor): string | null {
-  try {
-    const marker = '/resolve/main/';
-    const pathname = new URL(model.downloadUrl).pathname;
-    const index = pathname.indexOf(marker);
-    return index < 0
-      ? null
-      : decodeURIComponent(pathname.slice(index + marker.length));
-  } catch {
-    return null;
-  }
-}
-
 export function mobileImageDownloadSelection(
   model: ImageDownloadDescriptor,
 ): ModelControlDownloadSelection | null {
   const plan = createImageDownloadPlan(model);
   const repositoryId = model.repo ?? model.huggingFaceRepo;
-  const fileName = plan.artifacts[0]?.relativePath ?? imageSourceFileName(model);
+  const fileName = plan.artifacts[0]?.relativePath ?? plan.fileName;
   return repositoryId && fileName
     ? { repositoryId, fileName, metadataJson: plan.metadataJson }
     : null;

@@ -4,18 +4,21 @@ import { LoadingDots } from '../../components/LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { ModelCard } from '../../components';
+import { showAlert } from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
 import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBrowser';
 import { ImageModelRecommendation } from '../../types';
-import { isModelDownloadInProgress } from '@offgrid/application';
+import { isModelDownloadInProgress, modelsFailureMessage } from '@offgrid/application';
 import { useModelDownloadEntry } from '../../hooks/useModelDownloadsProjection';
-import { isDownloadingStatus, isPausedStatus, isQueuedStatus } from '../../utils/downloadStatus';
+import { isDownloadingStatus, isFailedStatus, isPausedStatus, isQueuedStatus } from '../../utils/downloadStatus';
 import { imageBackendLabel } from '../../utils/imageBackend';
 import { createStyles } from './styles';
 import { ModelsScreenViewModel } from './useModelsScreen';
 import { ImageFilterBar } from './ImageFilterBar';
 import { BackendFilter, ImageFilterDimension } from './types';
 import { formatBytes, getImageModelCompatibility, hfModelToDescriptor } from './utils';
+import { applicationFacade } from '../../services/applicationFacade';
+import { mobileImageDownloadSelection } from '../../services/adapters/models/modelControlCatalogPort';
 
 type Props = Pick<ModelsScreenViewModel,
   | 'imageSearchQuery' | 'setImageSearchQuery'
@@ -33,6 +36,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'handleDownloadImageModel' | 'handleCancelImageDownload' | 'loadHFModels'
   | 'clearImageFilters' | 'setUserChangedBackendFilter'
   | 'isRecommendedModel'
+  | 'setAlertState'
 >;
 
 interface ImageModelCardProps {
@@ -42,54 +46,100 @@ interface ImageModelCardProps {
   isRecommendedModel: (model: HFImageModel) => boolean;
   handleDownloadImageModel: Props['handleDownloadImageModel'];
   handleCancelImageDownload: Props['handleCancelImageDownload'];
+  setAlertState: Props['setAlertState'];
+}
+
+function imageTransferState(entry: ReturnType<typeof useModelDownloadEntry>, size: number) {
+  const active = !!entry && isModelDownloadInProgress(entry.status);
+  return {
+    isActive: active,
+    isQueued: isQueuedStatus(entry?.status),
+    isDownloading: isDownloadingStatus(entry?.status),
+    isPaused: isPausedStatus(entry?.status),
+    hasFailed: isFailedStatus(entry?.status),
+    progress: entry && entry.totalBytes > 0 ? entry.bytesDownloaded / entry.totalBytes : 0,
+    bytes: entry ? {
+      downloaded: entry.bytesDownloaded,
+      total: entry.totalBytes || size,
+      bytesPerSecond: entry.bytesPerSecond,
+    } : undefined,
+  };
 }
 
 const ImageModelCard: React.FC<ImageModelCardProps> = ({
   model, index, imageRec,
-  isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
+  isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload, setAlertState,
 }) => {
-  const styles = useThemedStyles(createStyles);
   const recommended = isRecommendedModel(model);
   const { isCompatible, incompatibleReason } = getImageModelCompatibility(model, imageRec);
-  const entry = useModelDownloadEntry('image', model.id);
-  const isActive = !!entry && isModelDownloadInProgress(entry.status);
-  const isQueued = isQueuedStatus(entry?.status);
-  const isDownloading = isDownloadingStatus(entry?.status);
-  const isPaused = isPausedStatus(entry?.status);
-  const progressValue = entry && entry.totalBytes > 0
-    ? entry.bytesDownloaded / entry.totalBytes
-    : 0;
+  const entry = useModelDownloadEntry('image', `image:${model.id}`);
+  const transfer = imageTransferState(entry, model.size);
   const authorLabel = model._coreml ? 'Core ML' : imageBackendLabel(model.backend);
-  const variantSuffix = model.variant ? ` \u00B7 ${getVariantLabel(model.variant)}` : '';
+  const variantLabel = model.variant ? getVariantLabel(model.variant) : undefined;
+  const controlDownload = async (type: 'pause-download' | 'resume-download') => {
+    if (!entry) return;
+    const outcome = await applicationFacade().models.control({ type, modelId: entry.downloadId });
+    if (!outcome.ok) {
+      setAlertState(showAlert(
+        type === 'pause-download' ? 'Pause Failed' : 'Resume Failed',
+        modelsFailureMessage(outcome.failure),
+      ));
+    }
+  };
+  const descriptor = hfModelToDescriptor(model);
+  const retryDownload = async () => {
+    if (!entry) return;
+    const selection = mobileImageDownloadSelection(descriptor);
+    if (!selection) {
+      setAlertState(showAlert('Retry Failed', 'The image model source is incomplete.'));
+      return;
+    }
+    const outcome = await applicationFacade().models.control({
+      type: 'retry-download',
+      modelId: entry.downloadId,
+      selection,
+    });
+    if (!outcome.ok) setAlertState(showAlert('Retry Failed', modelsFailureMessage(outcome.failure)));
+  };
+  const removeFailedDownload = async () => {
+    if (!entry) return;
+    const outcome = await applicationFacade().models.control({
+      type: 'clear-download',
+      modelId: entry.downloadId,
+    });
+    if (!outcome.ok) setAlertState(showAlert('Remove Failed', modelsFailureMessage(outcome.failure)));
+  };
   return (
     <View>
-      {recommended && (
-        <View style={styles.recommendedBadge}>
-          <Text style={styles.recommendedBadgeText}>RECOMMENDED</Text>
-        </View>
-      )}
       <ModelCard
         compact
         model={{
           id: model.id,
           name: model.displayName,
           author: authorLabel,
-          description: `${formatBytes(model.size)}${variantSuffix}`,
+          sizeBytes: model.size,
+          facts: [formatBytes(model.size), ...(variantLabel ? [variantLabel] : [])],
         }}
-        isDownloading={isDownloading}
-        isQueued={isQueued}
-        isPaused={isPaused}
-        downloadProgress={progressValue}
-        downloadBytes={entry ? {
-          downloaded: entry.bytesDownloaded,
-          total: entry.totalBytes || model.size,
-          bytesPerSecond: undefined,
-        } : undefined}
+        isDownloading={transfer.isDownloading}
+        isQueued={transfer.isQueued}
+        isPaused={transfer.isPaused}
+        downloadProgress={transfer.progress}
+        downloadBytes={transfer.bytes}
         isCompatible={isCompatible}
         incompatibleReason={incompatibleReason}
         testID={`image-model-card-${index}`}
-        onDownload={isActive ? undefined : () => handleDownloadImageModel(hfModelToDescriptor(model))}
-        onCancel={isActive ? () => handleCancelImageDownload(model.id) : undefined}
+        recommended={recommended ? {} : undefined}
+        onDownload={transfer.isActive || transfer.hasFailed ? undefined : () => handleDownloadImageModel(descriptor)}
+        onCancel={transfer.isActive ? () => handleCancelImageDownload(model.id) : undefined}
+        onPause={entry && transfer.isDownloading ? () => { controlDownload('pause-download').catch(() => undefined); } : undefined}
+        onResume={entry && transfer.isPaused ? () => { controlDownload('resume-download').catch(() => undefined); } : undefined}
+        failedState={transfer.hasFailed && entry ? {
+          errorMessage: entry.reason ?? 'Download failed',
+          bytesDownloaded: entry.bytesDownloaded,
+          totalBytes: entry.totalBytes || model.size,
+          onRetry: () => { retryDownload().catch(error => setAlertState(showAlert('Retry Failed', String(error)))); },
+          onRemove: () => { removeFailedDownload().catch(error => setAlertState(showAlert('Remove Failed', String(error)))); },
+        } : undefined}
       />
     </View>
   );
@@ -137,6 +187,7 @@ interface ImageModelsListProps {
   isRecommendedModel: (model: HFImageModel) => boolean;
   handleDownloadImageModel: Props['handleDownloadImageModel'];
   handleCancelImageDownload: Props['handleCancelImageDownload'];
+  setAlertState: Props['setAlertState'];
   imageSearchQuery: string;
 }
 
@@ -149,7 +200,7 @@ const ImageModelsList: React.FC<ImageModelsListProps> = ({
   hasActiveImageFilters, clearImageFilters, setUserChangedBackendFilter,
   hfModelsLoading, hfModelsError, loadHFModels,
   filteredHFModels, availableHFModels,
-  isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
+  isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload, setAlertState,
   imageSearchQuery,
 }) => {
   const { colors } = useTheme();
@@ -243,9 +294,10 @@ const ImageModelsList: React.FC<ImageModelsListProps> = ({
         isRecommendedModel={isRecommendedModel}
         handleDownloadImageModel={handleDownloadImageModel}
         handleCancelImageDownload={handleCancelImageDownload}
+        setAlertState={setAlertState}
       />
     ),
-    [handleCancelImageDownload, handleDownloadImageModel, imageRec, isRecommendedModel],
+    [handleCancelImageDownload, handleDownloadImageModel, imageRec, isRecommendedModel, setAlertState],
   );
 
   const keyExtractor = useCallback(
@@ -283,6 +335,7 @@ export const ImageModelsTab: React.FC<Props> = ({
   handleDownloadImageModel, handleCancelImageDownload, loadHFModels,
   clearImageFilters, setUserChangedBackendFilter,
   isRecommendedModel,
+  setAlertState,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -349,8 +402,9 @@ export const ImageModelsTab: React.FC<Props> = ({
         availableHFModels={availableHFModels}
         isRecommendedModel={isRecommendedModel}
         handleDownloadImageModel={handleDownloadImageModel}
-        handleCancelImageDownload={handleCancelImageDownload}
-        imageSearchQuery={imageSearchQuery}
+      handleCancelImageDownload={handleCancelImageDownload}
+      setAlertState={setAlertState}
+      imageSearchQuery={imageSearchQuery}
       />
     </View>
   );
