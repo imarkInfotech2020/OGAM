@@ -30,7 +30,6 @@ import { useSttDownloadState } from '../../hooks/useSttDownloadState';
 import { modelsFailureMessage, WHISPER_MODELS } from '@offgrid/application';
 import { createStyles as createModelsScreenStyles } from './styles';
 import logger from '../../utils/logger';
-import { RemoteModelOptionsSection } from '../../components/models/RemoteModelOptionsSection';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { ModelFailureCard } from '../../components/ModelFailureCard';
 import { reportModelFailure } from '../../services/modelFailureHandler';
@@ -141,12 +140,10 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
 
 interface TranscriptionModelsTabProps {
   showLanguageSelector?: boolean;
-  showRemoteModels?: boolean;
 }
 
 export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
   showLanguageSelector = true,
-  showRemoteModels = true,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -315,10 +312,6 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
 
       {showLanguageSelector && (
         <TranscriptionLanguageSelect testID="models-transcription-language" />
-      )}
-
-      {showRemoteModels && (
-        <RemoteModelOptionsSection category="transcription" />
       )}
 
       <Text style={styles.sectionLabel}>English only</Text>

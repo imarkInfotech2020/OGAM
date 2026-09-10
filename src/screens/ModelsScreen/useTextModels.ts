@@ -3,8 +3,7 @@ import {
   useCallback,
   useDeferredValue,
   useMemo,
-  useEffect,
-  useRef,
+  useEffect, useRef,
 } from 'react';
 import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -36,6 +35,7 @@ import {
 } from './constants';
 import logger from '../../utils/logger';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
+import { buildModelDeleteConfirmation } from '../../components/modelDeleteConfirmation';
 import { downloadedModelMatchesFile, modelDownloadMatchesFile } from './modelDownloadProjection';
 import {
   catalogModelFiles,
@@ -415,12 +415,23 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   }, [modelDownloads, setAlertState]);
 
   const handleDeleteModel = useCallback(
-    async (modelId: string) => {
-      if (!downloadedModels.some(model => model.id === modelId)) return;
-      const outcome = await applicationFacade().models.remove(modelId);
-      if (!outcome.ok) {
-        setAlertState(showAlert('Delete Failed', modelsFailureMessage(outcome.failure)));
-      }
+    (modelId: string) => {
+      const model = downloadedModels.find(candidate => candidate.id === modelId);
+      if (!model) return;
+      const totalSize = hardwareService.getModelTotalSize(model);
+      setAlertState(buildModelDeleteConfirmation({
+        fileName: model.fileName,
+        totalBytes: totalSize,
+        onDelete: () => {
+          applicationFacade().models.remove(modelId).then(outcome => {
+            if (!outcome.ok)
+              setAlertState(showAlert('Delete Failed', modelsFailureMessage(outcome.failure)));
+          }).catch(error => setAlertState(showAlert(
+            'Delete Failed',
+            error instanceof Error ? error.message : String(error),
+          )));
+        },
+      }));
     },
     [downloadedModels, setAlertState],
   );
@@ -463,7 +474,6 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const setSizeFilter = useCallback((size: SizeFilter) => patchFilter({ size }), [patchFilter]);
   const setQuantFilter = useCallback((quant: string) => patchFilter({ quant }), [patchFilter]);
   const setSortOption = useCallback((sort: SortOption) => patchFilter({ sort }), [patchFilter]);
-
   const {
     ramGB,
     deviceRecommendation,
@@ -480,14 +490,11 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   return {
     searchQuery, setSearchQuery, isLoading, isRefreshing, setIsRefreshing,
     hasSearched, selectedModel, setSelectedModel, modelFiles, setModelFiles,
-    isLoadingFiles, filterState, setFilterState, textFiltersVisible,
-    setTextFiltersVisible, downloadedModels, hasActiveFilters, ramGB,
-    deviceRecommendation, filteredResults, recommendedAsModelInfo,
-    trendingAsModelInfo, handleSearch, handleSelectModel, handleDownload,
-    handleRepairMmProj, handleCancelDownload, handleDeleteModel,
-    loadDownloadedModels, clearFilters, toggleFilterDimension, toggleOrg,
-    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
-    setSortOption, isModelDownloaded, getDownloadedModel,
-    isRepairingVisionModel,
+    isLoadingFiles, filterState, setFilterState, textFiltersVisible, setTextFiltersVisible,
+    downloadedModels, hasActiveFilters, ramGB, deviceRecommendation, filteredResults, recommendedAsModelInfo,
+    trendingAsModelInfo, handleSearch, handleSelectModel, handleDownload, handleRepairMmProj,
+    handleCancelDownload, handleDeleteModel, loadDownloadedModels, clearFilters, toggleFilterDimension, toggleOrg,
+    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption, isModelDownloaded,
+    getDownloadedModel, isRepairingVisionModel,
   };
 }

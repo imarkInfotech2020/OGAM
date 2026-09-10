@@ -103,7 +103,9 @@ describe('scanForUntrackedImageModels (getDirSize recursion)', () => {
 
   it('recovers a model and sums sizes recursively through a nested subdirectory', async () => {
     const opts = base();
-    mockedRNFS.exists.mockResolvedValueOnce(true);
+    mockedRNFS.exists
+      .mockResolvedValueOnce(true) // image models directory
+      .mockResolvedValueOnce(true); // recovered model readiness marker
     mockedRNFS.readDir
       .mockResolvedValueOnce([dir('Stable_Diffusion.zip', '/img/Stable_Diffusion.zip')]) // top scan
       // getDirSize on the model dir: one file + one nested directory (exercises recursion line 26-27)

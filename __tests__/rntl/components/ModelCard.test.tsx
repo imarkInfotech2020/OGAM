@@ -1000,18 +1000,20 @@ describe('ModelCard', () => {
   // Recommended config (curated entries like the LiteRT parent card)
   // ============================================================================
   describe('recommended config', () => {
-    it('renders the pill with the default "Recommended" label when no pillLabel given', () => {
-      const { getByText } = render(
+    it('renders only the recommended fire icon in compact mode', () => {
+      const { getByLabelText, queryByText } = render(
         <ModelCard model={baseModel} compact={true} recommended={{}} />,
       );
-      expect(getByText(/test-author · Recommended/)).toBeTruthy();
+      expect(getByLabelText('Recommended')).toBeTruthy();
+      expect(queryByText('Recommended')).toBeNull();
     });
 
-    it('renders the pill with a custom pillLabel', () => {
-      const { getByText } = render(
-        <ModelCard model={baseModel} compact={true} recommended={{ pillLabel: 'Featured' }} />,
+    it('keeps the source label separate from the recommended icon', () => {
+      const { getByText, getByLabelText } = render(
+        <ModelCard model={baseModel} compact={true} recommended={{}} />,
       );
-      expect(getByText(/test-author · Featured/)).toBeTruthy();
+      expect(getByText('test-author')).toBeTruthy();
+      expect(getByLabelText('Recommended')).toBeTruthy();
     });
 
     it('renders custom chips in place of the modelType chip row (compact)', () => {
@@ -1067,20 +1069,21 @@ describe('ModelCard', () => {
         <ModelCard
           model={{ ...baseModel, description: 'Visible description' }}
           compact={true}
-          recommended={{ pillLabel: 'Recommended' }}
+          recommended={{}}
         />,
       );
       expect(getByText('Visible description')).toBeTruthy();
     });
 
-    it('renders pill + combined description/highlight in standard (non-compact) mode', () => {
-      const { getByText } = render(
+    it('renders fire + combined description/highlight in standard mode', () => {
+      const { getByText, getByLabelText, queryByText } = render(
         <ModelCard
           model={{ ...baseModel, description: 'Detail description' }}
-          recommended={{ pillLabel: 'Recommended', highlightText: 'Up to 2x faster via GPU' }}
+          recommended={{ highlightText: 'Up to 2x faster via GPU' }}
         />,
       );
-      expect(getByText('Recommended')).toBeTruthy();
+      expect(getByLabelText('Recommended')).toBeTruthy();
+      expect(queryByText('Recommended')).toBeNull();
       // Description + highlight render as one common line (not a separate colour/slot).
       expect(getByText('Detail description Up to 2x faster via GPU')).toBeTruthy();
     });

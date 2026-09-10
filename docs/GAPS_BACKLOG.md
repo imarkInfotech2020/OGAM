@@ -2303,3 +2303,18 @@ column checks and `CREATE INDEX IF NOT EXISTS` make a second open a schema no-op
 Verified: open. The later verification phase must use real SQLite with a pre-M59 outbox table and
 existing rows, open it twice, and prove row equality, origin backfill, all four columns, one pending
 index, and no exception on either open.
+
+## Interrupted image extraction disappears after relaunch (open, 2026-09-09)
+
+The full Mobile JavaScript gate and the direct rerun of
+`imageExtractLostRelaunch.rendered.redflow.test.tsx` fail because the Download Manager does not show
+the durable image archive after the native completed row is pruned. The expected archive name,
+Interrupted state, Retry, and Remove actions are absent.
+
+This is separate from the Image-tab progress identity fix. That journey starts a new download and
+keeps `image:<catalog-id>` through preparation and measured progress. This recovery gap starts from a
+completed durable journal plus a partial extracted package after relaunch.
+
+Deletion condition: the real Mobile composition recovers that journal as an interrupted image
+download, and the Download Manager renders the archive name with Retry and Remove after the native
+row is gone.

@@ -1620,7 +1620,8 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)   // modelsDir
         .mockResolvedValueOnce(true)   // imageModelsDir
-        .mockResolvedValueOnce(true);  // imageModelsDir scan
+        .mockResolvedValueOnce(true)   // imageModelsDir scan
+        .mockResolvedValueOnce(true);  // recovered model readiness marker
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')  // getDownloadedImageModels
@@ -1665,7 +1666,8 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true); // recovered model readiness marker
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')
@@ -1687,7 +1689,8 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true); // recovered model readiness marker
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')
@@ -1744,7 +1747,8 @@ describe('ModelManager', () => {
       mockedRNFS.exists
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true); // recovered model readiness marker
 
       mockedAsyncStorage.getItem
         .mockResolvedValueOnce('[]')

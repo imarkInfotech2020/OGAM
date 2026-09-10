@@ -9,7 +9,7 @@
  */
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import {
   CompletedDownloadCard,
   DownloadItem,
@@ -44,6 +44,7 @@ function repairDownload(bytes: number, progress: number): DownloadItem {
     quantization: '',
     fileSize: MMPROJ_TOTAL,
     bytesDownloaded: bytes,
+    bytesPerSecond: 2_500_000,
     progress,
     status: 'running',
   };
@@ -63,6 +64,24 @@ describe('CompletedDownloadCard — repair-vision determinate progress', () => {
     // The shared progress row is present with mid-download byte text.
     expect(getByTestId('repair-vision-progress')).toBeTruthy();
     expect(queryByText(/429 MB \/ 858 MB/)).toBeTruthy();
+    expect(queryByText(/2\.4 MB\/s/)).toBeTruthy();
+  });
+
+  it('offers repair cancellation instead of deleting the installed model while repair is active', () => {
+    const cancel = jest.fn();
+    const { getByTestId, queryByTestId } = render(
+      <CompletedDownloadCard
+        item={completedItem}
+        onDelete={() => {}}
+        onCancelRepair={cancel}
+        isRepairingVision
+        repairDownload={repairDownload(MMPROJ_TOTAL / 2, 0.5)}
+      />,
+    );
+
+    expect(queryByTestId('delete-model-button')).toBeNull();
+    fireEvent.press(getByTestId('cancel-vision-repair-button'));
+    expect(cancel).toHaveBeenCalledWith(completedItem);
   });
 
   it('advances the rendered bytes as the projection advances (incremental, not terminal-only)', () => {

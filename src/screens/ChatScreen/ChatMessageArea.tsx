@@ -47,11 +47,10 @@ export type ChatMessageAreaProps = {
 // The container already pads its bottom by 8, so cap the extra footer at 4 → 12
 // total, symmetric with the top. Collapses to 0 while the keyboard is up.
 //
-// BUT that cap only applies to a thin overlay inset (iOS home indicator / gesture
-// nav), which draws *over* content. A 3-button navigation bar is opaque and owns
-// real space at the bottom — capping there renders the input controls UNDER the
-// nav buttons. We distinguish by the inset size (not Platform.OS): anything above
-// the overlay threshold is a real nav bar, so honor the full inset and clear it.
+// iOS reports its home-indicator overlay at about 34px on many devices. Android can
+// report a similarly tall inset for an opaque 3-button navigation bar. The size
+// alone cannot distinguish them: iOS is always an overlay here, while only Android
+// needs the tall-inset exception for real navigation controls.
 const FOOTER_SAFE_CAP = 4;
 // Home-indicator / gesture-nav overlays sit at ~24px or below on the devices we
 // target; a 3-button nav bar is taller. Above this, treat the inset as opaque.
@@ -59,8 +58,10 @@ const OVERLAY_INSET_MAX = 24;
 export const computeFooterPaddingBottom = (
   keyboardVisible: boolean,
   insetBottom: number,
+  platform: typeof Platform.OS = Platform.OS,
 ): number => {
   if (keyboardVisible) return 0;
+  if (platform === 'ios') return Math.min(insetBottom, FOOTER_SAFE_CAP);
   // Opaque nav bar (tall inset): pad the full inset so controls clear it.
   if (insetBottom > OVERLAY_INSET_MAX) return insetBottom;
   // Thin overlay inset: keep the symmetric-with-top cap.
@@ -214,6 +215,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   const footerPaddingBottom = computeFooterPaddingBottom(
     keyboardVisible,
     insets.bottom,
+    Platform.OS,
   );
   const isStreaming = chat.isStreaming || chat.isThinking;
   const prevIsStreamingRef = useRef(isStreaming);

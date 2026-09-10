@@ -44,8 +44,8 @@ describe('Mobile consumes the Shared model-download projection', () => {
       bytesPerSecond: undefined,
     }).view;
     expect(preparing.getByText('Preparing...')).toBeTruthy();
-    expect(preparing.queryByTestId('pause-download-button')).toBeNull();
-    expect(preparing.getByTestId('remove-download-button')).toBeTruthy();
+    expect(preparing.queryByTestId('active-download-card-pause')).toBeNull();
+    expect(preparing.getByTestId('active-download-card-cancel')).toBeTruthy();
     preparing.unmount();
 
     const queued = renderRow('queued', {
@@ -54,16 +54,18 @@ describe('Mobile consumes the Shared model-download projection', () => {
       bytesPerSecond: undefined,
     }).view;
     expect(queued.getByLabelText('Queued')).toBeTruthy();
-    expect(queued.queryByTestId('pause-download-button')).toBeNull();
-    expect(queued.getByTestId('remove-download-button')).toBeTruthy();
+    expect(queued.queryByTestId('active-download-card-pause')).toBeNull();
+    expect(queued.getByTestId('active-download-card-cancel')).toBeTruthy();
   });
 
   it('shows measured progress and sends pause and cancel gestures to its callbacks', () => {
     const { actions, view } = renderRow('downloading');
 
-    expect(view.getByTestId('download-progress-detail').props.children).toBe('40% · 40 B / 100 B · 10 B/s');
-    fireEvent.press(view.getByTestId('pause-download-button'));
-    fireEvent.press(view.getByTestId('remove-download-button'));
+    expect(view.getByText('40 B / 100 B · 10 B/s')).toBeTruthy();
+    expect(view.getByText('40%')).toBeTruthy();
+    expect(view.queryByText('Downloading...')).toBeNull();
+    fireEvent.press(view.getByTestId('active-download-card-pause'));
+    fireEvent.press(view.getByTestId('active-download-card-cancel'));
 
     expect(actions.onPause).toHaveBeenCalledWith(expect.objectContaining({ downloadId: 'download-1' }));
     expect(actions.onRemove).toHaveBeenCalledWith(expect.objectContaining({ downloadId: 'download-1' }));
@@ -72,13 +74,13 @@ describe('Mobile consumes the Shared model-download projection', () => {
   it('shows resume for a paused transfer and retry for a failed transfer', () => {
     const paused = renderRow('paused');
     expect(paused.view.getByText('Paused')).toBeTruthy();
-    fireEvent.press(paused.view.getByTestId('resume-download-button'));
+    fireEvent.press(paused.view.getByTestId('active-download-card-resume'));
     expect(paused.actions.onResume).toHaveBeenCalledWith(expect.objectContaining({ downloadId: 'download-1' }));
     paused.view.unmount();
 
     const failed = renderRow('failed');
     expect(failed.view.getByLabelText('Needs attention')).toBeTruthy();
-    fireEvent.press(failed.view.getByTestId('failed-retry-button'));
+    fireEvent.press(failed.view.getByTestId('active-download-card-retry'));
     expect(failed.actions.onRetry).toHaveBeenCalledWith(expect.objectContaining({ downloadId: 'download-1' }));
   });
 });
