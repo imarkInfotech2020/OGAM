@@ -21,8 +21,8 @@ import { ScreenHeader } from '../../components/ScreenHeader';
 const MODEL_TABS: ReadonlyArray<{ key: ModelTab; label: string; testID?: string }> = [
   { key: 'text', label: 'Text' },
   { key: 'image', label: 'Image' },
-  { key: 'transcription', label: 'Transcription', testID: 'transcription-models-tab' },
-  { key: 'voice', label: 'Speech', testID: 'voice-models-tab' },
+  { key: 'voice', label: 'Voice', testID: 'voice-models-tab' },
+  { key: 'transcription', label: 'Speech', testID: 'transcription-models-tab' },
 ];
 
 interface ModelsScreenProps {
