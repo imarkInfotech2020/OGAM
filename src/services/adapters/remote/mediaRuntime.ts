@@ -14,6 +14,7 @@ import {
 } from '@offgrid/models';
 import type { RemoteMediaModality } from '@offgrid/models';
 import { getApiKeyImpl } from './serverRuntime';
+import { useRemoteServerStore } from '../../../stores/remoteServerStore';
 import { logVoiceDiagnostic, voiceDiagnosticError } from '../../../utils/voiceDiagnostics';
 
 const negotiatedRemoteVoices = new Map<string, string>();
@@ -219,6 +220,9 @@ export const remoteMediaRuntime = {
         if (!supported.length) throw error;
         const voice = supported[0];
         negotiatedRemoteVoices.set(voiceKey, voice);
+        useRemoteServerStore
+          .getState()
+          .setRemoteModelVoices(server.id, model, supported);
         logVoiceDiagnostic('remote_voice_negotiated', {
           serverId: server.id,
           modelId: model,
