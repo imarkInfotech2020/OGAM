@@ -45,6 +45,7 @@ class MobileGenerationProjection {
   private tokenBuffer = '';
   private reasoningBuffer = '';
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastFlushAt = 0;
 
   getState(): GenerationState {
     return { ...this.state };
@@ -101,6 +102,7 @@ class MobileGenerationProjection {
     // buffered bytes and delayed flushes from the old turn must never enter the new turn's row.
     if (this.activeTurnId !== turn.id) this.discardBufferedTokens();
     this.activeTurnId = turn.id;
+    this.lastFlushAt = Date.now();
     this.totalReasoningLength = 0;
     // Shared Models resolved this committed setting into the immutable turn request before native
     // generation began. The UI store must not read a second writable settings projection.
@@ -125,11 +127,16 @@ class MobileGenerationProjection {
       this.tokenBuffer += contentDelta;
     }
     if (reasoningDelta) this.reasoningBuffer += reasoningDelta;
-    if ((contentDelta || reasoningDelta) && !this.flushTimer) {
-      this.flushTimer = setTimeout(
-        () => this.flushTokenBuffer(),
-        FLUSH_INTERVAL_MS,
-      );
+    if (contentDelta || reasoningDelta) {
+      const remaining = FLUSH_INTERVAL_MS - (Date.now() - this.lastFlushAt);
+      if (remaining <= 0) {
+        this.forceFlushTokens();
+      } else if (!this.flushTimer) {
+        this.flushTimer = setTimeout(
+          () => this.flushTokenBuffer(),
+          remaining,
+        );
+      }
     }
     this.totalReasoningLength = reasoning.length;
     this.update({ streamingContent: content, isThinking: !content.length });
@@ -266,6 +273,7 @@ class MobileGenerationProjection {
       this.reasoningBuffer = '';
     }
     this.flushTimer = null;
+    this.lastFlushAt = Date.now();
   }
 
   private forceFlushTokens(): void {
@@ -281,6 +289,7 @@ class MobileGenerationProjection {
     this.flushTimer = null;
     this.tokenBuffer = '';
     this.reasoningBuffer = '';
+    this.lastFlushAt = 0;
   }
 
   private isActive(turn: ChatTurn): boolean {
@@ -298,6 +307,7 @@ class MobileGenerationProjection {
     this.tokenBuffer = '';
     this.reasoningBuffer = '';
     this.totalReasoningLength = 0;
+    this.lastFlushAt = 0;
     this.thinkingEnabled = false;
     this.activeTurnId = null;
     this.update({
