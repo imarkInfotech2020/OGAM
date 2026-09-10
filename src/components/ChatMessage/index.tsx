@@ -178,6 +178,19 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           />
         )}
 
+        {!isUser && (
+          <MessageContent
+            isUser={isUser}
+            isThinking={message.isThinking}
+            content={message.content}
+            isStreaming={isStreaming}
+            parsedContent={parsedContent}
+            showThinking={showThinking}
+            onToggleThinking={onToggleThinking}
+            styles={styles}
+          />
+        )}
+
         {hasAttachments && (
           <MessageAttachments
             attachments={message.attachments!}
@@ -188,16 +201,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           />
         )}
 
-        <MessageContent
-          isUser={isUser}
-          isThinking={message.isThinking}
-          content={message.content}
-          isStreaming={isStreaming}
-          parsedContent={parsedContent}
-          showThinking={showThinking}
-          onToggleThinking={onToggleThinking}
-          styles={styles}
-        />
+        {isUser && (
+          <MessageContent
+            isUser={isUser}
+            isThinking={message.isThinking}
+            content={message.content}
+            isStreaming={isStreaming}
+            parsedContent={parsedContent}
+            showThinking={showThinking}
+            onToggleThinking={onToggleThinking}
+            styles={styles}
+          />
+        )}
       </View>
 
       <SyncedToolArtifacts message={message} styles={styles} colors={colors} />

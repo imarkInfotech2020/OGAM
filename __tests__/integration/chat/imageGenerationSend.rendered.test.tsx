@@ -3,7 +3,7 @@ import { Modal } from 'react-native';
 import { setupChatScreen } from '../../harness/chatHarness';
 
 describe('Mobile image generation send journey', () => {
-  it('sends "Draw a dog" and shows the generated image', async () => {
+  it('keeps the enhanced prompt before the image in one response bubble', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'ios' });
     const view = h.render();
 
@@ -31,6 +31,27 @@ describe('Mobile image generation send journey', () => {
       expect(view.queryByTestId('quick-image-mode')).toBeNull();
     });
 
+    h.rtl.fireEvent.press(view.getByTestId('chat-settings-icon'));
+    h.rtl.fireEvent.press(
+      await h.rtl.waitFor(() => view.getByTestId('modal-image-accordion')),
+    );
+    h.rtl.fireEvent.press(
+      await h.rtl.waitFor(() => view.getByTestId('image-enhance-on')),
+    );
+    const settingsModal = view
+      .UNSAFE_getAllByType(Modal)
+      .find(modal => h.rtl.within(modal).queryByText('Chat Settings'));
+    if (!settingsModal) {
+      throw new Error('The chat settings sheet could not be closed.');
+    }
+    h.rtl.fireEvent(settingsModal, 'requestClose');
+    await h.rtl.waitFor(() => {
+      expect(view.queryByText('Chat Settings')).toBeNull();
+    });
+
+    const enhancedPrompt =
+      'A golden retriever sitting in a sunlit garden, detailed fur, natural light.';
+    h.boundary.llama!.scriptCompletion({ text: enhancedPrompt });
     await h.tapSend('Draw a dog');
     await h.rtl.waitFor(() => {
       expect(view.getByText('Draw a dog')).toBeVisible();
@@ -43,6 +64,32 @@ describe('Mobile image generation send journey', () => {
       expect(view.getByTestId('chat-input')).toBeEnabled();
     });
 
+    const imageResponse = view
+      .getAllByTestId('assistant-message')
+      .find(message =>
+        h.rtl.within(message).queryByTestId('generated-image-content'),
+      );
+    if (!imageResponse) {
+      throw new Error('The generated image response bubble was not rendered.');
+    }
+    expect(
+      h.rtl.within(imageResponse).getByText('Enhanced prompt'),
+    ).toBeVisible();
+    expect(
+      h.rtl.within(imageResponse).getByText(/golden retriever sitting/i),
+    ).toBeVisible();
+    expect(view.getAllByText('Enhanced prompt')).toHaveLength(1);
+
+    const bubble = h.rtl.within(imageResponse).getByTestId('message-bubble');
+    const renderedNodes = bubble.findAll(() => true);
+    const promptIndex = renderedNodes.indexOf(
+      h.rtl.within(bubble).getByText('Enhanced prompt'),
+    );
+    const imageIndex = renderedNodes.indexOf(
+      h.rtl.within(bubble).getByTestId('generated-image-content'),
+    );
+    expect(promptIndex).toBeGreaterThanOrEqual(0);
+    expect(imageIndex).toBeGreaterThan(promptIndex);
     expect(view.queryByText('Generation Error')).toBeNull();
   });
 });
