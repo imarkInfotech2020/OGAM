@@ -1329,6 +1329,33 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
       });
     },
 
+    /** Open a message editor through the real message action menu. */
+    async openMessageEditor(role: 'user' | 'assistant') {
+      await this.openActionMenu(role, 'dots');
+      rtl.fireEvent.press(this.view!.getByTestId('action-edit'));
+      await rtl.waitFor(() =>
+        this.view!.getByPlaceholderText('Enter message...'),
+      );
+    },
+
+    /** Replace the text in the open message editor. */
+    replaceOpenEditorText(text: string) {
+      rtl.fireEvent.changeText(
+        this.view!.getByPlaceholderText('Enter message...'),
+        text,
+      );
+    },
+
+    /** Cancel the open message editor through its visible action. */
+    cancelOpenEditor() {
+      rtl.fireEvent.press(this.view!.getByText('CANCEL'));
+    },
+
+    /** Save an assistant edit without starting a new generation. */
+    saveAssistantResponseEdit() {
+      rtl.fireEvent.press(this.view!.getByText('SAVE'));
+    },
+
     /**
      * REAL regenerate gesture: open the action menu (via long-press OR 3-dots) and press "Retry".
      */

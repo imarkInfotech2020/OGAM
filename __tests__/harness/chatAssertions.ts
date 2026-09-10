@@ -5,7 +5,9 @@ type TestingLibrary = typeof import('@testing-library/react-native');
 type TextMatcher = string | RegExp;
 
 export interface ChatAssertions {
+  isUserMessageVisible(text: TextMatcher): boolean;
   isResponseVisible(text: TextMatcher): boolean;
+  isResponseHidden(text: TextMatcher): boolean;
   isGeneratedImageVisible(): boolean;
   isGeneratedImageLoaded(): boolean;
   isGeneratedImageCaptionVisible(prompt: TextMatcher): boolean;
@@ -21,6 +23,13 @@ export interface ChatAssertions {
   isToolResultVisible(detail: TextMatcher): boolean;
   isVoicePlaybackControlVisible(): boolean;
   isVoiceTranscriptClickable(text: TextMatcher): Promise<boolean>;
+  isSelectTextActionVisible(): boolean;
+  isUserMessageEditorVisible(): boolean;
+  isAssistantResponseEditorVisible(): boolean;
+  isMessageEditorClosed(): boolean;
+  isComposerEnabled(): boolean;
+  isActionMenuVisible(): boolean;
+  isChatErrorVisible(title: TextMatcher): boolean;
   isAttachedPhotoClickable(): Promise<boolean>;
   isAttachedDocumentClickable(): Promise<boolean>;
   isToolCallClickable(
@@ -64,8 +73,18 @@ export function createChatAssertions(
   rtl: TestingLibrary,
 ): ChatAssertions {
   return {
+    isUserMessageVisible(text) {
+      return view.queryAllByTestId('user-message').some(message =>
+        isVisible(rtl.within(message).queryByText(text)),
+      );
+    },
+
     isResponseVisible(text) {
       return isVisible(view.queryByText(text));
+    },
+
+    isResponseHidden(text) {
+      return view.queryByText(text) === null;
     },
 
     isGeneratedImageVisible() {
@@ -133,23 +152,73 @@ export function createChatAssertions(
     },
 
     isVoicePlaybackControlVisible() {
-      const responses = view.queryAllByTestId('assistant-message');
-      const response = responses[responses.length - 1];
-      if (!response) return false;
-      const scoped = rtl.within(response);
+      const bubbles = view.queryAllByTestId(/^audio-bubble-/);
+      const bubble = bubbles[bubbles.length - 1];
+      if (!bubble) return false;
+      const scoped = rtl.within(bubble);
       return ['Play', 'Pause', 'Stop'].some(
         label => scoped.queryByLabelText(label) !== null,
       );
     },
 
     async isVoiceTranscriptClickable(text) {
-      const responses = view.queryAllByTestId('assistant-message');
-      const response = responses[responses.length - 1];
-      if (!response) return false;
-      const scoped = rtl.within(response);
-      const toggle = scoped.queryByText('Show transcript');
-      if (!toggle) return false;
-      return pressAndObserve(rtl, toggle, () => scoped.queryByText(text));
+      const bubbles = view.queryAllByTestId(/^audio-bubble-/);
+      const bubble = bubbles[bubbles.length - 1];
+      if (!bubble) return false;
+      const scoped = rtl.within(bubble);
+      const hide = scoped.queryByText('Hide transcript');
+      if (hide) {
+        rtl.fireEvent.press(hide);
+        await rtl.waitFor(() => expect(scoped.queryByText(text)).toBeNull());
+      }
+      const show = scoped.queryByText('Show transcript');
+      if (!show) return false;
+      return pressAndObserve(rtl, show, () => scoped.queryByText(text));
+    },
+
+    isSelectTextActionVisible() {
+      return (
+        view.queryByText('Select text') !== null ||
+        view.queryByTestId('action-select-text') !== null
+      );
+    },
+
+    isUserMessageEditorVisible() {
+      return (
+        isVisible(view.queryByPlaceholderText('Enter message...')) &&
+        isVisible(view.queryByText('SAVE & RESEND'))
+      );
+    },
+
+    isAssistantResponseEditorVisible() {
+      return (
+        isVisible(view.queryByPlaceholderText('Enter message...')) &&
+        isVisible(view.queryByText('SAVE')) &&
+        view.queryByText('SAVE & RESEND') === null
+      );
+    },
+
+    isMessageEditorClosed() {
+      return view.queryByPlaceholderText('Enter message...') === null;
+    },
+
+    isComposerEnabled() {
+      const composer = view.queryByTestId('chat-input');
+      if (!composer) return false;
+      try {
+        expect(composer).toBeEnabled();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    isActionMenuVisible() {
+      return view.queryByTestId('action-menu') !== null;
+    },
+
+    isChatErrorVisible(title) {
+      return isVisible(view.queryByText(title));
     },
 
     async isAttachedPhotoClickable() {
