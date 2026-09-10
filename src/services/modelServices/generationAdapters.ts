@@ -104,6 +104,7 @@ async function* providerChunks(
   reasoningWire: ReasoningWireFragment,
 ): AsyncIterable<GenerationChunk> {
   const pending: PendingChunk[] = [];
+  let streamedContent = '';
   let wake: (() => void) | null = null;
   const push = (item: PendingChunk) => {
     pending.push(item);
@@ -128,9 +129,19 @@ async function* providerChunks(
       mobileMessages(request.messages ?? []),
       providerOptions(request, reasoningWire),
       {
-        onToken: content => push({ value: { content } }),
+        onToken: content => {
+          streamedContent += content;
+          push({ value: { content } });
+        },
         onReasoning: reasoning => push({ value: { reasoning } }),
         onComplete: result => {
+          // Completion is authoritative. Some native runtimes return a valid final answer without
+          // invoking their answer-token callback. Reconcile that result at the callback-to-stream
+          // boundary so every downstream consumer sees one coherent generation stream.
+          if (!streamedContent && result.content) {
+            streamedContent = result.content;
+            push({ value: { content: result.content } });
+          }
           const nativeCalls =
             result.toolCalls?.map(call => ({
               id: call.id,
