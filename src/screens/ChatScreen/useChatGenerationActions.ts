@@ -46,7 +46,6 @@ import { toWorkspaceMessage } from './types';
 import { requireWorkspaceConversationMessages } from '../../hooks/useApplicationProjection';
 import {
   appendWorkspaceAssistantMessage,
-  appendWorkspaceUserMessage,
   createWorkspaceConversation,
   updateWorkspaceConversationProject,
 } from './workspaceChatCommands';
@@ -339,12 +338,6 @@ export async function handleSendFn(
   }
   const messageId = generateId();
   const turnId = generateId();
-  await appendWorkspaceUserMessage({
-    conversationId,
-    messageId,
-    text: call.text,
-    attachments: call.attachments,
-  });
   const userMessage = mobileGenerationMessage({
     id: messageId,
     uuid: messageId,
