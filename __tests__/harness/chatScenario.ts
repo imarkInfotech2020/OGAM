@@ -172,6 +172,28 @@ export const CHAT_RUNTIME_MATRIX: readonly ChatRuntime[] =
     ),
   );
 
+function isSupportedRuntime(runtime: ChatRuntime): boolean {
+  return CHAT_RUNTIME_MATRIX.some(
+    candidate =>
+      candidate.platform === runtime.platform &&
+      candidate.capability === runtime.capability &&
+      candidate.source === runtime.source &&
+      candidate.engine === runtime.engine &&
+      candidate.remoteProvider === runtime.remoteProvider,
+  );
+}
+
+function requireSupportedRuntime<C extends ChatCapability>(
+  runtime: ChatRuntime<C>,
+): ChatRuntime<C> {
+  if (!isSupportedRuntime(runtime)) {
+    throw new Error(
+      `Unsupported chat runtime: ${runtime.platform}/${runtime.capability}/${runtime.engine}/${runtime.remoteProvider ?? runtime.source}`,
+    );
+  }
+  return runtime;
+}
+
 export function forEveryRuntime<C extends ChatCapability>(
   capability: C,
 ): readonly ChatRuntime<C>[] {
@@ -242,7 +264,7 @@ export class ChatScenario {
   readonly remoteSttProvider?: ChatRemoteMediaProvider;
   readonly remoteTtsProvider?: ChatRemoteMediaProvider;
 
-  constructor(state: ChatScenarioState) {
+  private constructor(state: ChatScenarioState) {
     this.engine = state.engine;
     this.platform = state.platform ?? 'android';
     this.ram = state.ram;
@@ -293,7 +315,30 @@ export class ChatScenario {
     if (this.thinkingEnabled !== undefined) {
       parts.push(`Thinking ${this.thinkingEnabled ? 'ON' : 'OFF'}`);
     }
+    if (this.tools?.length) parts.push(`${this.tools.join(' + ')} tools`);
+    if (this.photoSource) parts.push(`${this.photoSource} photo`);
+    if (this.documentAttached) parts.push('document attachment');
     this.label = parts.join(' + ');
+  }
+
+  static fromTextRuntime(
+    runtime: ChatRuntime<'text'>,
+    options: Omit<ChatScenarioOptions, 'platform'> = {},
+  ): ChatScenario {
+    const supported = requireSupportedRuntime(runtime);
+    return new ChatScenario({
+      ...options,
+      platform: supported.platform,
+      engine: supported.engine,
+      remoteTextProvider: supported.remoteProvider,
+    });
+  }
+
+  static withoutText(
+    platform: ChatPlatform,
+    options: Omit<ChatScenarioOptions, 'platform'> = {},
+  ): ChatScenario {
+    return new ChatScenario({ ...options, platform, engine: 'none' });
   }
 
   private copy(patch: Partial<ChatScenarioState>): ChatScenario {
@@ -304,12 +349,27 @@ export class ChatScenario {
     capability: 'image',
     backend: ChatImageBackend = getBackendForPlatform(this.platform, capability),
   ): ChatScenario {
+    requireSupportedRuntime({
+      platform: this.platform,
+      capability,
+      source: backend === 'remote' ? 'remote' : 'local',
+      engine: backend,
+      remoteProvider:
+        backend === 'remote' ? this.remoteImageProvider : undefined,
+    });
     return this.copy({ imageBackend: backend });
   }
 
   usingRemoteImage(
     remoteProvider: ChatRemoteMediaProvider = 'offgrid-desktop',
   ): ChatScenario {
+    requireSupportedRuntime({
+      platform: this.platform,
+      capability: 'image',
+      source: 'remote',
+      engine: 'remote',
+      remoteProvider,
+    });
     return this.copy({ imageBackend: 'remote', remoteImageProvider: remoteProvider });
   }
 
@@ -317,6 +377,13 @@ export class ChatScenario {
     engine: ChatSttEngine,
     remoteProvider?: ChatRemoteMediaProvider,
   ): ChatScenario {
+    requireSupportedRuntime({
+      platform: this.platform,
+      capability: 'stt',
+      source: engine === 'remote' ? 'remote' : 'local',
+      engine,
+      remoteProvider: engine === 'remote' ? remoteProvider : undefined,
+    });
     return this.copy({
       sttEngine: engine,
       whisper: engine === 'whisper',
@@ -328,6 +395,13 @@ export class ChatScenario {
     engine: ChatTtsEngine,
     remoteProvider?: ChatRemoteMediaProvider,
   ): ChatScenario {
+    requireSupportedRuntime({
+      platform: this.platform,
+      capability: 'tts',
+      source: engine === 'remote' ? 'remote' : 'local',
+      engine,
+      remoteProvider: engine === 'remote' ? remoteProvider : undefined,
+    });
     return this.copy({
       ttsEngine: engine,
       remoteTtsProvider: engine === 'remote' ? remoteProvider : undefined,
@@ -336,6 +410,9 @@ export class ChatScenario {
   }
 
   usingChatMode(chatMode: ChatMode): ChatScenario {
+    if (chatMode === 'voice' && (!this.sttEngine || !this.ttsEngine)) {
+      throw new Error('Voice chat requires both STT and TTS runtimes.');
+    }
     return this.copy({
       chatMode,
       pro: chatMode === 'voice' ? true : this.pro,
@@ -343,33 +420,60 @@ export class ChatScenario {
   }
 
   inChatThinkingEnabled(): ChatScenario {
+    if (this.engine === 'none') {
+      throw new Error('Thinking requires a text runtime.');
+    }
     return this.copy({ thinkingEnabled: true });
   }
 
   inChatThinkingDisabled(): ChatScenario {
+    if (this.engine === 'none') {
+      throw new Error('Thinking requires a text runtime.');
+    }
     return this.copy({ thinkingEnabled: false });
   }
 
   inChatImageEnhancementEnabled(): ChatScenario {
+    if (!this.imageBackend || this.engine === 'none') {
+      throw new Error('Image prompt enhancement requires image and text runtimes.');
+    }
     return this.copy({ imageEnhancementEnabled: true });
   }
 
   inChatImageEnhancementDisabled(): ChatScenario {
+    if (!this.imageBackend) {
+      throw new Error('Image prompt settings require an image runtime.');
+    }
     return this.copy({ imageEnhancementEnabled: false });
   }
 
   withTools(...tools: readonly ChatToolSource[]): ChatScenario {
+    if (this.engine === 'none') {
+      throw new Error('Tools require a text runtime.');
+    }
+    const expanded = tools.includes('all')
+      ? (['built-in', 'pro', 'remote', 'mcp'] as const)
+      : tools;
     return this.copy({
-      tools,
-      pro: tools.some(tool => tool !== 'built-in') || this.pro,
+      tools: [...new Set(expanded)],
+      pro: expanded.some(tool => tool !== 'built-in') || this.pro,
     });
   }
 
   withPhotoAttachment(source: ChatPhotoSource): ChatScenario {
+    if (
+      this.engine === 'none' ||
+      (this.engine === 'remote' && this.remoteTextProvider !== 'offgrid-desktop')
+    ) {
+      throw new Error(`${this.label} cannot accept a photo attachment.`);
+    }
     return this.copy({ photoSource: source, vision: true });
   }
 
   withDocumentAttachment(): ChatScenario {
+    if (this.engine === 'none') {
+      throw new Error('A document attachment requires a text runtime.');
+    }
     return this.copy({ documentAttached: true });
   }
 
@@ -386,7 +490,22 @@ export function usingEngine(
   engine: ChatEngine,
   options: ChatScenarioOptions = {},
 ): ChatScenario {
-  return new ChatScenario({ ...options, engine });
+  const platform = options.platform ?? 'android';
+  if (engine === 'none') {
+    return ChatScenario.withoutText(platform, options);
+  }
+  if (engine === 'remote') {
+    throw new Error('Use a named remote text provider constructor.');
+  }
+  return ChatScenario.fromTextRuntime(
+    requireSupportedRuntime({
+      platform,
+      capability: 'text',
+      source: 'local',
+      engine,
+    }),
+    options,
+  );
 }
 
 export const usingLlama = (options: ChatScenarioOptions = {}): ChatScenario =>
@@ -399,7 +518,16 @@ export const usingRemoteText = (
   options: ChatScenarioOptions = {},
   remoteProvider: ChatRemoteProvider = 'lmstudio',
 ): ChatScenario =>
-  new ChatScenario({ ...options, engine: 'remote', remoteTextProvider: remoteProvider });
+  ChatScenario.fromTextRuntime(
+    requireSupportedRuntime({
+      platform: options.platform ?? 'android',
+      capability: 'text',
+      source: 'remote',
+      engine: 'remote',
+      remoteProvider,
+    }),
+    options,
+  );
 
 export const usingLMStudio = (
   options: ChatScenarioOptions = {},
@@ -415,12 +543,11 @@ export const usingOGAD = (
 
 export const withoutTextModel = (
   options: ChatScenarioOptions = {},
-): ChatScenario => usingEngine('none', options);
+): ChatScenario =>
+  ChatScenario.withoutText(options.platform ?? 'android', options);
 
 function scenarioForTextRuntime(runtime: ChatRuntime<'text'>): ChatScenario {
-  return runtime.source === 'remote'
-    ? usingRemoteText({ platform: runtime.platform }, runtime.remoteProvider)
-    : usingEngine(runtime.engine, { platform: runtime.platform });
+  return ChatScenario.fromTextRuntime(runtime);
 }
 
 function remoteMediaProvider(
@@ -494,6 +621,18 @@ export const CHAT_THINKING_DISABLED_SCENARIOS = forEveryTextRuntime(scenario =>
   scenario.inChatThinkingDisabled(),
 );
 
+export const CHAT_BUILT_IN_TOOL_SCENARIOS = forEveryTextRuntime(scenario =>
+  scenario.withTools('built-in'),
+);
+
+export const CHAT_PRO_TOOL_SCENARIOS = forEveryTextRuntime(scenario =>
+  scenario.withTools('pro'),
+);
+
+export const CHAT_MCP_TOOL_SCENARIOS = forEveryTextRuntime(scenario =>
+  scenario.withTools('mcp'),
+);
+
 export const CHAT_LOCAL_IMAGE_SCENARIOS = forEveryRuntimeCombination([
   'text',
   'image',
@@ -513,10 +652,15 @@ export const CHAT_IMAGE_SCENARIOS = [
   ...CHAT_REMOTE_IMAGE_SCENARIOS,
 ] as const;
 
-export const CHAT_PHOTO_ATTACHMENT_SCENARIOS = forEveryTextRuntime(scenario => [
-  scenario.withPhotoAttachment('camera'),
-  scenario.withPhotoAttachment('gallery'),
-]);
+export const CHAT_PHOTO_ATTACHMENT_SCENARIOS = forEveryTextRuntime(scenario =>
+  scenario.engine !== 'remote' ||
+  scenario.remoteTextProvider === 'offgrid-desktop'
+    ? [
+        scenario.withPhotoAttachment('camera'),
+        scenario.withPhotoAttachment('gallery'),
+      ]
+    : [],
+);
 
 export const CHAT_DOCUMENT_ATTACHMENT_SCENARIOS = forEveryTextRuntime(scenario =>
   scenario.withDocumentAttachment(),
@@ -555,6 +699,9 @@ export const CHAT_SCENARIO_MATRIX = {
   textChat: CHAT_TEXT_SCENARIOS,
   voiceChat: CHAT_VOICE_SCENARIOS,
   thinkingDisabled: CHAT_THINKING_DISABLED_SCENARIOS,
+  builtInTools: CHAT_BUILT_IN_TOOL_SCENARIOS,
+  proTools: CHAT_PRO_TOOL_SCENARIOS,
+  mcpTools: CHAT_MCP_TOOL_SCENARIOS,
   localImage: CHAT_LOCAL_IMAGE_SCENARIOS,
   remoteImage: CHAT_REMOTE_IMAGE_SCENARIOS,
   imageGeneration: CHAT_IMAGE_GENERATION_SCENARIOS,

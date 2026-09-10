@@ -7,6 +7,10 @@ import {
   CHAT_SCENARIO_MATRIX,
   forEveryRuntime,
   forEveryRuntimeCombination,
+  usingLiteRT,
+  usingLMStudio,
+  usingLlama,
+  usingOGAD,
 } from './chatScenario';
 
 const runtimeIdentity = (runtime: (typeof CHAT_RUNTIME_MATRIX)[number]) =>
@@ -45,6 +49,25 @@ describe('chat scenario matrix contract', () => {
     });
   });
 
+  it('rejects unsupported combinations at construction', () => {
+    expect(() => usingLiteRT({ platform: 'ios' })).toThrow(
+      'Unsupported chat runtime',
+    );
+    expect(() => usingLMStudio().withPhotoAttachment('gallery')).toThrow(
+      'cannot accept a photo attachment',
+    );
+    expect(() => usingOGAD().withPhotoAttachment('gallery')).not.toThrow();
+    expect(() => usingLlama().usingChatMode('voice')).toThrow(
+      'Voice chat requires both STT and TTS runtimes',
+    );
+    expect(usingLlama().withTools('all').tools).toEqual([
+      'built-in',
+      'pro',
+      'remote',
+      'mcp',
+    ]);
+  });
+
   it('builds every compatible text and image combination on the same platform', () => {
     const combinations = forEveryRuntimeCombination(['text', 'image']);
     const expectedCount = CHAT_PLATFORMS.reduce(
@@ -73,6 +96,9 @@ describe('chat scenario matrix contract', () => {
       'textChat',
       'voiceChat',
       'thinkingDisabled',
+      'builtInTools',
+      'proTools',
+      'mcpTools',
       'localImage',
       'remoteImage',
       'imageGeneration',
