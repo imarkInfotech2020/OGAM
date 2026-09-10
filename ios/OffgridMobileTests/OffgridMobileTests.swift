@@ -502,6 +502,10 @@ final class CoreMLDiffusionModuleTests: XCTestCase {
     XCTAssertFalse(CoreMLDiffusionModule.requiresMainQueueSetup())
   }
 
+  func testOptionalSafetyCheckerIsDisabledForLocalImageGeneration() {
+    XCTAssertFalse(CoreMLDiffusionModule.optionalSafetyCheckerEnabled)
+  }
+
   // MARK: supportedEvents
 
   func testSupportedEvents() {

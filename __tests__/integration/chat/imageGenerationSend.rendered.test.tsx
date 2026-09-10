@@ -50,11 +50,11 @@ describe('Mobile image generation send journey', () => {
     });
 
     const enhancedPrompt =
-      'A golden retriever sitting in a sunlit garden, detailed fur, natural light.';
+      'A green Lamborghini driving on a mountain road, detailed bodywork, natural light.';
     h.boundary.llama!.scriptCompletion({ text: enhancedPrompt });
-    await h.tapSend('Draw a dog');
+    await h.tapSend('Draw a green lamborghini');
     await h.rtl.waitFor(() => {
-      expect(view.getByText('Draw a dog')).toBeVisible();
+      expect(view.getByText('Draw a green lamborghini')).toBeVisible();
       return view.getByTestId('generated-image-content');
     });
 
@@ -76,7 +76,7 @@ describe('Mobile image generation send journey', () => {
       h.rtl.within(imageResponse).getByText('Enhanced prompt'),
     ).toBeVisible();
     expect(
-      h.rtl.within(imageResponse).getByText(/golden retriever sitting/i),
+      h.rtl.within(imageResponse).getByText(/green Lamborghini driving/i),
     ).toBeVisible();
     expect(view.getAllByText('Enhanced prompt')).toHaveLength(1);
 

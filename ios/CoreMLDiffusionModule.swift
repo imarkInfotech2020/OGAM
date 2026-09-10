@@ -11,6 +11,11 @@ import StableDiffusion
 @objc(CoreMLDiffusionModule)
 class CoreMLDiffusionModule: RCTEventEmitter {
 
+  /// Android returns every decoded local image. Keep the optional Core ML safety checker disabled
+  /// so iOS has the same contract and does not turn a valid decoded image into an unexplained nil.
+  /// This also avoids loading an extra Core ML model during the highest-memory part of generation.
+  static let optionalSafetyCheckerEnabled = false
+
   // MARK: - State
 
   /// Both StableDiffusionPipeline and StableDiffusionXLPipeline conform to
@@ -146,6 +151,7 @@ class CoreMLDiffusionModule: RCTEventEmitter {
               resourcesAt: url,
               controlNet: [],
               configuration: config,
+              disableSafety: !Self.optionalSafetyCheckerEnabled,
               reduceMemory: true
             )
           }
@@ -273,6 +279,7 @@ class CoreMLDiffusionModule: RCTEventEmitter {
         pipelineConfig.stepCount = max(1, steps)
         pipelineConfig.guidanceScale = Float(guidanceScale)
         pipelineConfig.seed = seed
+        pipelineConfig.disableSafety = !Self.optionalSafetyCheckerEnabled
 
         let images: [CGImage?]
         do {
