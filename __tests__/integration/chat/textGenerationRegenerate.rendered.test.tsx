@@ -1,14 +1,14 @@
 import {
-  CHAT_PLATFORM_ENGINE_CASES,
-  setupChatScreen,
+  CHAT_TEXT_SCENARIOS,
+  startChatScreen,
 } from '../../harness/chatHarness';
 
-describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+describe.each(CHAT_TEXT_SCENARIOS)(
   'Mobile text generation regenerate journey on $label',
-  ({ platform, engine }) => {
+  scenario => {
     it('regenerates an assistant response and shows its replacement', async () => {
-      const h = await setupChatScreen({ engine, platform });
-      const view = h.render();
+      const h = await startChatScreen(scenario);
+      const view = h.view!;
 
       await h.send('Give me a short greeting.', {
         text: 'Hello from the first reply.',

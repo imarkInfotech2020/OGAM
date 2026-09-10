@@ -1,14 +1,14 @@
 import {
-  CHAT_PLATFORM_ENGINE_CASES,
-  setupChatScreen,
+  CHAT_TEXT_SCENARIOS,
+  startChatScreen,
 } from '../../harness/chatHarness';
 
-describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+describe.each(CHAT_TEXT_SCENARIOS)(
   'Mobile first-message conversation title journey on $label',
-  ({ platform, engine }) => {
+  scenario => {
     it('uses the first sent message as the visible conversation title', async () => {
-      const h = await setupChatScreen({ engine, platform });
-      const view = h.render();
+      const h = await startChatScreen(scenario);
+      const view = h.view!;
       const firstMessage = 'Plan a mountain trip';
 
       expect(view.getByText('New Chat')).toBeVisible();

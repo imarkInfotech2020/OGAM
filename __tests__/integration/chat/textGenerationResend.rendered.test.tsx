@@ -1,14 +1,14 @@
 import {
-  CHAT_PLATFORM_ENGINE_CASES,
-  setupChatScreen,
+  CHAT_TEXT_SCENARIOS,
+  startChatScreen,
 } from '../../harness/chatHarness';
 
-describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+describe.each(CHAT_TEXT_SCENARIOS)(
   'Mobile text generation resend journey on $label',
-  ({ platform, engine }) => {
+  scenario => {
     it('resends the original message and shows its replacement reply', async () => {
-      const h = await setupChatScreen({ engine, platform });
-      const view = h.render();
+      const h = await startChatScreen(scenario);
+      const view = h.view!;
 
       await h.send('Give me a short greeting.', {
         text: 'Hello from the first reply.',
@@ -38,8 +38,8 @@ describe.each(CHAT_PLATFORM_ENGINE_CASES)(
     });
 
     it('removes the failed attempt when resend succeeds', async () => {
-      const h = await setupChatScreen({ engine, platform });
-      const view = h.render();
+      const h = await startChatScreen(scenario);
+      const view = h.view!;
 
       await h.send('Try this again.', {
         throwMessage: 'The first attempt failed.',

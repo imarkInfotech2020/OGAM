@@ -19,7 +19,7 @@
  * Falsifier inside: a genuine tap-triggered whisper load (held open at the initWhisper boundary) DOES
  * render the voice-loading spinner, which clears into the live recording UI on release.
  */
-import { setupChatScreen } from '../../harness/chatHarness';
+import {setupChatScreen, usingLlama} from '../../harness/chatHarness';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: () => {}, goBack: () => {}, setOptions: () => {}, addListener: () => () => {} }),
@@ -41,7 +41,7 @@ const progressEvent = (downloadId: string, fraction: number) => ({
 
 describe('mic during a background STT download — a download affordance, never a loader (IMG_0143)', () => {
   it('keeps chat usable and shows download progress on the mic — NOT the busy spinner', async () => {
-    const h = await setupChatScreen({ engine: 'llama', whisper: true, download: true });
+    const h = await setupChatScreen(usingLlama({whisper: true, download: true}));
     h.render();
     const { ActivityIndicator } = require('react-native');
 
@@ -87,7 +87,7 @@ describe('mic during a background STT download — a download affordance, never 
   }, 30000);
 
   it('falsifier: a genuine tap-triggered whisper load DOES show the voice-loading spinner', async () => {
-    const h = await setupChatScreen({ engine: 'llama', whisper: true });
+    const h = await setupChatScreen(usingLlama({whisper: true}));
     await h.setupWhisperModel('tiny.en'); // downloaded + selected + resident, via the real select gesture
     const { applicationFacade } = require('../../../src/services/applicationFacade') as typeof import('../../../src/services/applicationFacade');
     const { whisperService } = require('../../../src/services/whisperService') as typeof import('../../../src/services/whisperService');

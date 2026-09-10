@@ -1,14 +1,14 @@
 import {
-  CHAT_PLATFORM_ENGINE_CASES,
-  setupChatScreen,
+  CHAT_TEXT_SCENARIOS,
+  startChatScreen,
 } from '../../harness/chatHarness';
 
-describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+describe.each(CHAT_TEXT_SCENARIOS)(
   'Mobile text streaming visibility on $label',
-  ({ platform, engine }) => {
+  scenario => {
     it('shows the assistant bubble while text is still streaming', async () => {
-      const h = await setupChatScreen({ engine, platform });
-      const view = h.render();
+      const h = await startChatScreen(scenario);
+      const view = h.view!;
       const partial = 'The first part is visible';
       const complete = `${partial}, and then the reply finishes.`;
 

@@ -1,14 +1,14 @@
 import {
-  CHAT_PLATFORM_ENGINE_CASES,
-  setupChatScreen,
+  CHAT_TEXT_SCENARIOS,
+  startChatScreen,
 } from '../../harness/chatHarness';
 
-describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+describe.each(CHAT_TEXT_SCENARIOS)(
   'Mobile chat send control transition on $label',
-  ({ platform, engine }) => {
+  scenario => {
     it('shows the existing loading indicator immediately, then shows Stop while the reply is running', async () => {
-      const h = await setupChatScreen({ engine, platform });
-      const view = h.render();
+      const h = await startChatScreen(scenario);
+      const view = h.view!;
 
       h.scriptTextTurn({
         text: 'This reply must stay in progress.',
