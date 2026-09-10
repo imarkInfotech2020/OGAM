@@ -156,14 +156,12 @@ export const useWhisperTranscription = ({
 
   const stopRecording = useCallback(async () => {
     const outcome = await speech.stopRealtime();
-    if (!outcome.ok) {
-      if (outcome.failure.kind !== 'cancelled') {
-        setCommandError(speechFailureMessage(outcome.failure));
-      }
-      return;
+    if (!outcome.ok && outcome.failure.kind !== 'cancelled') {
+      setCommandError(speechFailureMessage(outcome.failure));
     }
-    setFinalResult(outcome.value.text);
-    setFinalRecording(outcome.value.recording ?? null);
+    // Shared Speech publishes the one authoritative `transcription_final` event. Writing the
+    // returned value here as well delivered the same capture twice: the event effect delivered and
+    // cleared it first, then this command continuation restored it for a second send.
   }, [speech]);
 
   const clearResult = useCallback(() => {
