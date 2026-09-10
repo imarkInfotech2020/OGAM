@@ -1,5 +1,10 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  type GestureResponderEvent,
+} from 'react-native';
 import { LoadingDots } from './LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -362,7 +367,11 @@ function ActionButton({ icon, color, haptic, onPress, disabled, testID, accessib
   return (
     <TouchableOpacity
       style={styles.iconButton}
-      onPress={() => { triggerHaptic(haptic as any); onPress(); }}
+      onPress={(event: GestureResponderEvent) => {
+        event.stopPropagation();
+        triggerHaptic(haptic as any);
+        onPress();
+      }}
       disabled={disabled}
       hitSlop={HIT_SLOP}
       testID={testID}
