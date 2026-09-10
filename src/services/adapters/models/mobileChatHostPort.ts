@@ -1,4 +1,5 @@
 import {
+  CHAT_GENERATION_RECLAIM_POLICY,
   DEFAULT_IMAGE_MIME,
   generationMessageText,
   isMemoryToolAllowed,
@@ -263,6 +264,11 @@ async function generateForSession(
   request: GenerationRequest,
   events: GenerationEvents = {},
 ): Promise<GenerationResult> {
+  const reclaim = await applicationFacade().models.reclaim(
+    CHAT_GENERATION_RECLAIM_POLICY,
+  );
+  if (!reclaim.ok) throw reclaim.failure;
+
   if (request.operation?.type !== 'image') {
     await lifecycleProjectionPort.refreshInventory();
     return applicationFacade().models.mainQueue.generate(request, events);

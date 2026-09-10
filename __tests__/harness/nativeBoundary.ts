@@ -1364,6 +1364,13 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
     stop: () => {},
     reset: () => {},
   });
+  // A native loop has no renderable clock in React Test Renderer. Keep its lifecycle real enough for
+  // components to start and stop it, without recursively completing an infinite loop synchronously.
+  RN.Animated.loop = () => ({
+    start: () => {},
+    stop: () => {},
+    reset: () => {},
+  });
   // resetModules() creates a fresh React Native View class after jest.setup installed the
   // host-measurement boundary. Restore the native layout callback on this module graph so anchored
   // controls open through their real measureInWindow path.

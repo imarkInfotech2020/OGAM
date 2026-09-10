@@ -38,7 +38,6 @@ import logger from '../../utils/logger';
 import type { ModelReadyOutcome } from './modelReadiness';
 import {
   mobileChatSession,
-  prepareMobileChatGeneration,
   type MobileChatCommandOptions,
 } from './mobileChatSession';
 import { toWorkspaceMessage } from './types';
@@ -330,7 +329,6 @@ export async function handleSendFn(
   // attempt starts, that stale projection must not sit beside the live stream.
   clearModelFailure('text');
   callHook(HOOKS.audioStop);
-  await prepareMobileChatGeneration();
   // No text-model readiness here. The shared ChatOperationApplicationService decides whether this
   // turn is text or image and asks for the text route (ensureTextRoute) only when it needs one;
   // the shared residency then loads the model on acquire. Pre-loading here loaded the text model
@@ -375,7 +373,6 @@ export async function replayPersistedChatTurnFn(
   const conversationId = deps.activeConversationId;
   if (!conversationId || !deps.hasActiveModel) return;
   if (blockedImageForNonVisionModel(deps, userMessage.attachments)) return;
-  await prepareMobileChatGeneration();
   const workspaceContent = applicationFacade().workspaceContent.snapshot();
   const persistedMessage = workspaceContent.messages.find(
     message =>
@@ -427,7 +424,6 @@ export async function editPersistedChatTurnFn(
 ): Promise<void> {
   const conversationId = deps.activeConversationId;
   if (!conversationId || !deps.hasActiveModel) return;
-  await prepareMobileChatGeneration();
   let turnId: string | undefined;
   try {
     const persistedMessage = applicationFacade()

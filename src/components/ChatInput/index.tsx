@@ -38,7 +38,7 @@ interface ChatInputProps {
     message: string,
     attachments?: MediaAttachment[],
     imageMode?: ImageModeState,
-  ) => void;
+  ) => void | Promise<void>;
   onStop?: () => void;
   disabled?: boolean;
   isGenerating?: boolean;
@@ -188,6 +188,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [voiceInteractionMode, setVoiceInteractionMode] =
     useState<VoiceRecordInteractionMode>('idle');
@@ -290,7 +291,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
   const canSend =
-    (message.trim().length > 0 || attachments.length > 0) && !disabled;
+    (message.trim().length > 0 || attachments.length > 0) &&
+    !disabled &&
+    !isSubmitting;
+
+  useEffect(() => {
+    if (isGenerating) setIsSubmitting(false);
+  }, [isGenerating]);
 
   const handleSend = () => {
     logger.log(
@@ -299,11 +306,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       } attachments=${attachments.length} imageMode=${imageMode}`,
     );
     if (!canSend) return;
+    setIsSubmitting(true);
     triggerHaptic('impactMedium');
-    onSend(
-      message.trim(),
-      attachments.length > 0 ? attachments : undefined,
-      imageMode,
+    let submission: void | Promise<void>;
+    try {
+      submission = onSend(
+        message.trim(),
+        attachments.length > 0 ? attachments : undefined,
+        imageMode,
+      );
+    } catch (error) {
+      setIsSubmitting(false);
+      throw error;
+    }
+    void Promise.resolve(submission).then(
+      () => setIsSubmitting(false),
+      () => setIsSubmitting(false),
     );
     setMessage('');
     clearAttachments();
@@ -466,6 +484,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       showSettingsDot={showSettingsDot}
       canSend={canSend}
       handleSend={handleSend}
+      isSubmitting={isSubmitting}
       isGenerating={isGenerating}
       onStop={onStop}
       handleStop={handleStop}
