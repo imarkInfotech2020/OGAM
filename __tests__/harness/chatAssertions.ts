@@ -9,6 +9,10 @@ export interface ChatAssertions {
   isGeneratedImageVisible(): boolean;
   isGeneratedImageLoaded(): boolean;
   isGeneratedImageCaptionVisible(prompt: TextMatcher): boolean;
+  isPromptEnhancementPartOfGeneratedImage(
+    enhancedPrompt: TextMatcher,
+    caption: TextMatcher,
+  ): boolean;
   isThinkingVisible(): boolean;
   isPromptEnhancementVisible(): boolean;
   isAttachedPhotoVisible(): boolean;
@@ -67,11 +71,33 @@ export function createChatAssertions(
     },
 
     isGeneratedImageLoaded() {
-      return isVisible(view.queryByLabelText('Generated image loaded'));
+      return view.queryByLabelText('Generated image loaded') !== null;
     },
 
     isGeneratedImageCaptionVisible(prompt) {
       return isVisible(view.queryByText(prompt));
+    },
+
+    isPromptEnhancementPartOfGeneratedImage(enhancedPrompt, caption) {
+      const response = view
+        .queryAllByTestId('assistant-message')
+        .find(message =>
+          rtl.within(message).queryByTestId('generated-image-content'),
+        );
+      if (!response) return false;
+      const bubble = rtl.within(response).queryByTestId('message-bubble');
+      if (!bubble) return false;
+      const prompt = rtl.within(bubble).queryByText(enhancedPrompt);
+      const captionNode = rtl.within(bubble).queryByText(caption);
+      const generatedImage = rtl
+        .within(bubble)
+        .queryByTestId('generated-image-content');
+      if (!prompt || !captionNode || !generatedImage) return false;
+      const renderedNodes = bubble.findAll(() => true);
+      return (
+        renderedNodes.indexOf(prompt) < renderedNodes.indexOf(captionNode) &&
+        renderedNodes.indexOf(captionNode) < renderedNodes.indexOf(generatedImage)
+      );
     },
 
     isThinkingVisible() {

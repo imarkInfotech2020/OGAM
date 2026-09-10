@@ -27,8 +27,7 @@ describe.each(CHAT_IMAGE_GENERATION_SCENARIOS)(
 
       h.rtl.fireEvent(view.getByTestId('generated-image-content'), 'load');
       await h.rtl.waitFor(() => {
-        expect(view.getByLabelText('Generated image loaded')).toBeTruthy();
-        expect(view.getByTestId('chat-input')).toBeEnabled();
+        expect(h.assertions.isGeneratedImageLoaded()).toBe(true);
       });
 
       const imageResponse = view
@@ -44,27 +43,11 @@ describe.each(CHAT_IMAGE_GENERATION_SCENARIOS)(
       if (scenario.expectsEnhancedImagePrompt()) {
         expect(h.assertions.isPromptEnhancementVisible()).toBe(true);
         expect(
-          h.rtl.within(imageResponse).getByText(/green Lamborghini driving/i),
-        ).toBeVisible();
-
-        const bubble = h.rtl
-          .within(imageResponse)
-          .getByTestId('message-bubble');
-        const renderedNodes = bubble.findAll(() => true);
-        const promptIndex = renderedNodes.indexOf(
-          h.rtl.within(bubble).getByText('Enhanced prompt'),
-        );
-        const captionIndex = renderedNodes.indexOf(
-          h.rtl
-            .within(bubble)
-            .getByText(/Generated image for:.*Draw a green lamborghini/),
-        );
-        const imageIndex = renderedNodes.indexOf(
-          h.rtl.within(bubble).getByTestId('generated-image-content'),
-        );
-        expect(promptIndex).toBeGreaterThanOrEqual(0);
-        expect(captionIndex).toBeGreaterThan(promptIndex);
-        expect(imageIndex).toBeGreaterThan(captionIndex);
+          h.assertions.isPromptEnhancementPartOfGeneratedImage(
+            /green Lamborghini driving/i,
+            /Generated image for:.*Draw a green lamborghini/,
+          ),
+        ).toBe(true);
       } else {
         expect(h.assertions.isPromptEnhancementVisible()).toBe(false);
         expect(view.queryByText(/green Lamborghini driving/i)).toBeNull();
@@ -73,10 +56,10 @@ describe.each(CHAT_IMAGE_GENERATION_SCENARIOS)(
         view.queryByText('Reasoning must never become an image prompt.'),
       ).toBeNull();
       expect(
-        h.rtl
-          .within(imageResponse)
-          .getByText(/Generated image for:.*Draw a green lamborghini/),
-      ).toBeVisible();
+        h.assertions.isGeneratedImageCaptionVisible(
+          /Generated image for:.*Draw a green lamborghini/,
+        ),
+      ).toBe(true);
       expect(view.queryByText('Generation Error')).toBeNull();
     });
   },
