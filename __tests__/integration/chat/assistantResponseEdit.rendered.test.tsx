@@ -12,7 +12,18 @@ describe('Mobile assistant response edit journey', () => {
       expect(view.getByText('Hello from the original response.')).toBeVisible();
     });
 
+    await h.openActionMenu('user', 'dots');
+    expect(view.queryByText('Select text')).toBeNull();
+    expect(view.queryByTestId('action-select-text')).toBeNull();
+    h.rtl.fireEvent.press(view.getByTestId('action-edit'));
+    await h.rtl.waitFor(() => {
+      expect(view.getByText('SAVE & RESEND')).toBeVisible();
+    });
+    h.rtl.fireEvent.press(view.getByText('CANCEL'));
+
     await h.openActionMenu('assistant', 'dots');
+    expect(view.queryByText('Select text')).toBeNull();
+    expect(view.queryByTestId('action-select-text')).toBeNull();
     h.rtl.fireEvent.press(view.getByTestId('action-edit'));
     const editInput = await h.rtl.waitFor(() =>
       view.getByPlaceholderText('Enter message...'),
