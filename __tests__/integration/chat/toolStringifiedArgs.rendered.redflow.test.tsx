@@ -33,9 +33,7 @@ describe('Q3 (behavioral) — stringified tool args surface an error bubble', ()
     // Wait for the user-visible tool outcome directly. The pre-tool text can
     // appear in both the tool-call message and the final assistant message.
     await h.rtl.waitFor(() => {
-      expect(
-        h.view!.queryByTestId('tool-result-label-calculator'),
-      ).not.toBeNull();
+      expect(h.assertions.isToolCallVisible('calculator')).toBe(true);
     });
     // ...which must show the computed answer, NOT an internal failure. Today the stringified args break the
     // calculator so the bubble shows a failure → RED.

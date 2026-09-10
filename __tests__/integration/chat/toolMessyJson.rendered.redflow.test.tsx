@@ -33,9 +33,7 @@ describe('Q2 (behavioral) — unquoted-key tool call renders no result bubble', 
     // The calculator ran, so the user sees its result bubble. Wait for this final
     // outcome directly; the pre-tool text can appear in more than one message.
     await h.rtl.waitFor(() => {
-      expect(
-        h.view!.queryByTestId('tool-result-label-calculator'),
-      ).not.toBeNull();
+      expect(h.assertions.isToolCallVisible('calculator')).toBe(true);
     });
   });
 });

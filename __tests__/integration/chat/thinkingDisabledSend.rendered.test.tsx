@@ -24,6 +24,7 @@ describe.each(CHAT_THINKING_DISABLED_SCENARIOS)(
         expect(view.getByTestId('chat-input')).toBeEnabled();
       });
 
+      expect(h.assertions.isThinkingVisible()).toBe(false);
       expect(view.queryByText('Reasoning that must stay hidden.')).toBeNull();
       expect(view.queryByText('Generation Error')).toBeNull();
     });

@@ -42,9 +42,7 @@ describe.each(CHAT_IMAGE_GENERATION_SCENARIOS)(
         );
       }
       if (scenario.expectsEnhancedImagePrompt()) {
-        expect(
-          h.rtl.within(imageResponse).getByText('Enhanced prompt'),
-        ).toBeVisible();
+        expect(h.assertions.isPromptEnhancementVisible()).toBe(true);
         expect(
           h.rtl.within(imageResponse).getByText(/green Lamborghini driving/i),
         ).toBeVisible();
@@ -68,9 +66,7 @@ describe.each(CHAT_IMAGE_GENERATION_SCENARIOS)(
         expect(captionIndex).toBeGreaterThan(promptIndex);
         expect(imageIndex).toBeGreaterThan(captionIndex);
       } else {
-        expect(
-          h.rtl.within(imageResponse).queryByText('Enhanced prompt'),
-        ).toBeNull();
+        expect(h.assertions.isPromptEnhancementVisible()).toBe(false);
         expect(view.queryByText(/green Lamborghini driving/i)).toBeNull();
       }
       expect(
