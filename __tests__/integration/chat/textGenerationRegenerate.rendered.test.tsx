@@ -1,29 +1,38 @@
 import { setupChatScreen } from '../../harness/chatHarness';
 
-describe('Mobile text generation regenerate journey', () => {
-  it('regenerates an assistant response and shows its replacement', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'ios' });
-    const view = h.render();
+describe.each(['ios', 'android'] as const)(
+  'Mobile text generation regenerate journey on %s',
+  platform => {
+    it('regenerates an assistant response and shows its replacement', async () => {
+      const h = await setupChatScreen({ engine: 'llama', platform });
+      const view = h.render();
 
-    await h.send('Give me a short greeting.', {
-      text: 'Hello from the first reply.',
-    });
-    await h.rtl.waitFor(() => {
-      expect(view.getByText('Hello from the first reply.')).toBeVisible();
-    });
+      await h.send('Give me a short greeting.', {
+        text: 'Hello from the first reply.',
+      });
+      await h.rtl.waitFor(() => {
+        expect(view.getByText('Hello from the first reply.')).toBeVisible();
+      });
 
-    await h.regenerateLast(
-      { text: 'Hello from the regenerated reply.' },
-      'dots',
-    );
+      await h.regenerateLast(
+        { text: 'Hello from the regenerated reply.' },
+        'dots',
+      );
 
-    await h.rtl.waitFor(() => {
-      expect(view.getByText('Give me a short greeting.')).toBeVisible();
-      expect(view.getByText('Hello from the regenerated reply.')).toBeVisible();
-      expect(view.queryByText('Hello from the first reply.')).toBeNull();
-      expect(view.getByTestId('chat-input')).toBeEnabled();
-      expect(view.queryByTestId('action-menu')).toBeNull();
+      await h.rtl.waitFor(() => {
+        expect(
+          h.rtl
+            .within(view.getAllByTestId('user-message')[0])
+            .getByText('Give me a short greeting.'),
+        ).toBeVisible();
+        expect(
+          view.getByText('Hello from the regenerated reply.'),
+        ).toBeVisible();
+        expect(view.queryByText('Hello from the first reply.')).toBeNull();
+        expect(view.getByTestId('chat-input')).toBeEnabled();
+        expect(view.queryByTestId('action-menu')).toBeNull();
+      });
+      expect(view.queryByText('Generation Error')).toBeNull();
     });
-    expect(view.queryByText('Generation Error')).toBeNull();
-  });
-});
+  },
+);
