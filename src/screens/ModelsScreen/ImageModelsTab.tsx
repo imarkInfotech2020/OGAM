@@ -22,7 +22,7 @@ import { ImageFilterBar } from './ImageFilterBar';
 import { BackendFilter, ImageFilterDimension } from './types';
 import { formatBytes, getImageModelCompatibility, hfModelToDescriptor } from './utils';
 import { applicationFacade } from '../../services/applicationFacade';
-import { mobileImageDownloadSelection } from '../../services/adapters/models/modelControlCatalogPort';
+import { usePendingDownloadCommand } from '../../hooks/usePendingModelCommand';
 
 type Props = Pick<ModelsScreenViewModel,
   | 'imageSearchQuery' | 'setImageSearchQuery'
@@ -41,6 +41,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'clearImageFilters' | 'setUserChangedBackendFilter'
   | 'isRecommendedModel'
   | 'setAlertState'
+  | 'downloadedImageModels'
 >;
 
 interface ImageModelCardProps {
@@ -51,6 +52,7 @@ interface ImageModelCardProps {
   handleDownloadImageModel: Props['handleDownloadImageModel'];
   handleCancelImageDownload: Props['handleCancelImageDownload'];
   setAlertState: Props['setAlertState'];
+  isDownloaded: boolean;
 }
 
 function imageTransferState(entry: ReturnType<typeof useModelDownloadEntry>, size: number) {
@@ -73,11 +75,14 @@ function imageTransferState(entry: ReturnType<typeof useModelDownloadEntry>, siz
 const ImageModelCard: React.FC<ImageModelCardProps> = ({
   model, index, imageRec,
   isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload, setAlertState,
+  isDownloaded,
 }) => {
   const recommended = isRecommendedModel(model);
   const { isCompatible, incompatibleReason } = getImageModelCompatibility(model, imageRec);
   const descriptor = hfModelToDescriptor(model);
-  const entry = useModelDownloadEntry('image', createImageDownloadPlan(descriptor).modelId);
+  const plan = createImageDownloadPlan(descriptor);
+  const entry = useModelDownloadEntry('image', plan.modelId);
+  const downloadPending = usePendingDownloadCommand(plan.modelId, entry?.downloadId);
   const transfer = imageTransferState(entry, model.size);
   const authorLabel = model._coreml ? 'Core ML' : imageBackendLabel(model.backend);
   const variantLabel = model.variant ? getVariantLabel(model.variant) : undefined;
@@ -93,15 +98,9 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
   };
   const retryDownload = async () => {
     if (!entry) return;
-    const selection = mobileImageDownloadSelection(descriptor);
-    if (!selection) {
-      setAlertState(showAlert('Retry Failed', 'The image model source is incomplete.'));
-      return;
-    }
     const outcome = await applicationFacade().models.control({
       type: 'retry-download',
       modelId: entry.downloadId,
-      selection,
     });
     if (!outcome.ok) setAlertState(showAlert('Retry Failed', modelsFailureMessage(outcome.failure)));
   };
@@ -127,13 +126,15 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
         isDownloading={transfer.isDownloading}
         isQueued={transfer.isQueued}
         isPaused={transfer.isPaused}
+        isDownloadPending={downloadPending || entry?.status === 'preparing'}
+        isDownloaded={isDownloaded}
         downloadProgress={transfer.progress}
         downloadBytes={transfer.bytes}
         isCompatible={isCompatible}
         incompatibleReason={incompatibleReason}
         testID={`image-model-card-${index}`}
         recommended={recommended ? {} : undefined}
-        onDownload={transfer.isActive || transfer.hasFailed ? undefined : () => handleDownloadImageModel(descriptor)}
+        onDownload={isDownloaded || transfer.isActive || transfer.hasFailed ? undefined : () => handleDownloadImageModel(descriptor)}
         onCancel={transfer.isActive ? () => handleCancelImageDownload(descriptor) : undefined}
         onPause={entry && transfer.isDownloading ? () => { controlDownload('pause-download').catch(() => undefined); } : undefined}
         onResume={entry && transfer.isPaused ? () => { controlDownload('resume-download').catch(() => undefined); } : undefined}
@@ -193,6 +194,7 @@ interface ImageModelsListProps {
   handleCancelImageDownload: Props['handleCancelImageDownload'];
   setAlertState: Props['setAlertState'];
   imageSearchQuery: string;
+  downloadedImageModelIds: ReadonlySet<string>;
 }
 
 const ImageModelsList: React.FC<ImageModelsListProps> = ({
@@ -206,6 +208,7 @@ const ImageModelsList: React.FC<ImageModelsListProps> = ({
   filteredHFModels, availableHFModels,
   isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload, setAlertState,
   imageSearchQuery,
+  downloadedImageModelIds,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -299,9 +302,10 @@ const ImageModelsList: React.FC<ImageModelsListProps> = ({
         handleDownloadImageModel={handleDownloadImageModel}
         handleCancelImageDownload={handleCancelImageDownload}
         setAlertState={setAlertState}
+        isDownloaded={downloadedImageModelIds.has(item.id)}
       />
     ),
-    [handleCancelImageDownload, handleDownloadImageModel, imageRec, isRecommendedModel, setAlertState],
+    [downloadedImageModelIds, handleCancelImageDownload, handleDownloadImageModel, imageRec, isRecommendedModel, setAlertState],
   );
 
   const keyExtractor = useCallback(
@@ -340,9 +344,14 @@ export const ImageModelsTab: React.FC<Props> = ({
   clearImageFilters, setUserChangedBackendFilter,
   isRecommendedModel,
   setAlertState,
+  downloadedImageModels,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const downloadedImageModelIds = useMemo(
+    () => new Set(downloadedImageModels.map(model => model.id)),
+    [downloadedImageModels],
+  );
 
   return (
     <View style={styles.imageTabContent}>
@@ -406,9 +415,10 @@ export const ImageModelsTab: React.FC<Props> = ({
         availableHFModels={availableHFModels}
         isRecommendedModel={isRecommendedModel}
         handleDownloadImageModel={handleDownloadImageModel}
-      handleCancelImageDownload={handleCancelImageDownload}
-      setAlertState={setAlertState}
-      imageSearchQuery={imageSearchQuery}
+        handleCancelImageDownload={handleCancelImageDownload}
+        setAlertState={setAlertState}
+        imageSearchQuery={imageSearchQuery}
+        downloadedImageModelIds={downloadedImageModelIds}
       />
     </View>
   );

@@ -221,6 +221,7 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) 
           setUserChangedBackendFilter={vm.setUserChangedBackendFilter}
           isRecommendedModel={vm.isRecommendedModel}
           setAlertState={vm.setAlertState}
+          downloadedImageModels={vm.downloadedImageModels}
         />
       )}
 

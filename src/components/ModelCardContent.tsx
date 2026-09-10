@@ -338,6 +338,7 @@ interface ModelCardActionsProps {
   isDownloading: boolean | undefined;
   isQueued: boolean | undefined;
   isPaused: boolean | undefined;
+  isDownloadPending: boolean | undefined;
   isActive: boolean | undefined;
   isCompatible: boolean;
   incompatibleReason: string | undefined;
@@ -394,13 +395,21 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
 }
 
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
-  isDownloaded, isDownloading, isQueued, isPaused, isActive, isCompatible,
+  isDownloaded, isDownloading, isQueued, isPaused, isDownloadPending, isActive, isCompatible,
   testID, onDownload, onSelect, onDelete, onRepairVision, isRepairingVision, onCancel,
   onPause, onResume,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const tid = (suffix: string) => testID ? `${testID}-${suffix}` : undefined;
+
+  if (isDownloadPending) {
+    return (
+      <View style={styles.iconButton} testID={tid('loading')}>
+        <LoadingDots color={colors.primary} />
+      </View>
+    );
+  }
 
   if ((isDownloading || isQueued || isPaused) && onCancel) {
     return (
