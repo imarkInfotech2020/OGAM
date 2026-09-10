@@ -13,7 +13,9 @@ import { ConversationActionsSection } from './ConversationActionsSection';
 import { ImageGenerationSection } from './ImageGenerationSection';
 import { TextGenerationSection } from './TextGenerationSection';
 import { WhisperPickerSheet } from '../models/WhisperPickerSheet';
+import { VoiceModelsSheet } from '../models/VoiceModelsSheet';
 import { TranscriptionLanguageSelect } from '../TranscriptionLanguageSelect';
+import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import {
   NO_TRANSCRIPTION_MODEL_LABEL,
   useTranscriptionModelSetting,
@@ -50,6 +52,7 @@ export const GenerationSettingsModal: React.FC<
   const [resetPending, setResetPending] = useState(false);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const { modelName: sttModelName } = useTranscriptionModelSetting();
+  const voiceModelName = useActiveMobileModel('voice').model?.name ?? 'None selected';
 
   const [performanceStats, setPerformanceStats] = useState(
     llmService.getPerformanceStats(),
@@ -58,6 +61,7 @@ export const GenerationSettingsModal: React.FC<
   const [textSettingsOpen, setTextSettingsOpen] = useState(false);
   const [sttSettingsOpen, setSttSettingsOpen] = useState(false);
   const [whisperPickerOpen, setWhisperPickerOpen] = useState(false);
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const [ttsSettingsOpen, setTtsSettingsOpen] = useState(false);
   // TTS settings come from the pro audio feature via a slot. Free builds have
   // no TTS section.
@@ -224,7 +228,23 @@ export const GenerationSettingsModal: React.FC<
               />
             </TouchableOpacity>
             {ttsSettingsOpen && (
-              <TtsSection onNavigateToTTSSettings={onOpenTTSSettings} />
+              <>
+                <TouchableOpacity
+                  style={styles.modelPickerButton}
+                  onPress={() => setVoicePickerOpen(true)}
+                  activeOpacity={0.7}
+                  testID="modal-voice-open-picker"
+                >
+                  <View style={styles.modelPickerContent}>
+                    <Text style={styles.modelPickerLabel}>Voice model</Text>
+                    <Text style={styles.modelPickerValue}>
+                      {voiceModelName}
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+                <TtsSection onNavigateToTTSSettings={onOpenTTSSettings} />
+              </>
             )}
           </>
         )}
@@ -248,6 +268,12 @@ export const GenerationSettingsModal: React.FC<
         <WhisperPickerSheet
           visible
           onClose={() => setWhisperPickerOpen(false)}
+        />
+      ) : null}
+      {voicePickerOpen ? (
+        <VoiceModelsSheet
+          visible
+          onClose={() => setVoicePickerOpen(false)}
         />
       ) : null}
     </AppSheet>
