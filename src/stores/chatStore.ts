@@ -27,8 +27,6 @@ export interface ChatState {
    * that the record which arrived moments later was the same answer. It drew both.
    */
   streamingMessageUuid: string | null;
-  isStreaming: boolean;
-  isThinking: boolean;
   setActiveConversation: (conversationId: string | null) => void;
   getActiveConversation: () => Conversation | null;
   startStreaming: (conversationId: string) => void;
@@ -37,8 +35,6 @@ export interface ChatState {
   appendToStreamingReasoningContent: (token: string) => void;
   /** Start the next reasoning/answer segment without ending the reply or changing its identity. */
   resetStreamingSegment: () => void;
-  setIsStreaming: (streaming: boolean) => void;
-  setIsThinking: (thinking: boolean) => void;
   lastReplyEnd: ReplyEnd | null;
   noteReplyEndHandled: () => void;
   clearStreamingMessage: () => void;
@@ -53,8 +49,6 @@ type StreamingFields = Pick<
   | 'streamingReasoningContent'
   | 'streamingForConversationId'
   | 'streamingMessageUuid'
-  | 'isStreaming'
-  | 'isThinking'
 >;
 
 /**
@@ -72,8 +66,6 @@ const NO_REPLY_FORMING: StreamingFields = {
   streamingReasoningContent: '',
   streamingForConversationId: null,
   streamingMessageUuid: null,
-  isStreaming: false,
-  isThinking: false,
 };
 
 export const useChatStore = create<ChatState>()(
@@ -104,7 +96,6 @@ export const useChatStore = create<ChatState>()(
           // the id a paired device sees on every live frame, so when the record arrives it recognises
           // the answer it is already showing instead of drawing it a second time.
           streamingMessageUuid: generateId(),
-          isThinking: true,
         });
       },
 
@@ -117,29 +108,17 @@ export const useChatStore = create<ChatState>()(
           streamingMessage: stripStreamingControlTokens(
             state.streamingMessage + token,
           ),
-          isStreaming: true,
-          isThinking: false,
         }));
       },
 
       appendToStreamingReasoningContent: token => {
         set(state => ({
           streamingReasoningContent: state.streamingReasoningContent + token,
-          isStreaming: true,
-          isThinking: false,
         }));
       },
 
       resetStreamingSegment: () => {
         set({ streamingMessage: '', streamingReasoningContent: '' });
-      },
-
-      setIsStreaming: streaming => {
-        set({ isStreaming: streaming, isThinking: false });
-      },
-
-      setIsThinking: thinking => {
-        set({ isThinking: thinking });
       },
 
       clearStreamingMessage: () => {
@@ -157,13 +136,17 @@ export const useChatStore = create<ChatState>()(
 
       getStreamingState: () => {
         const state = get();
+        const hasStream = state.streamingForConversationId !== null;
         return {
           conversationId: state.streamingForConversationId,
           messageId: state.streamingMessageUuid,
           content: state.streamingMessage,
           reasoningContent: state.streamingReasoningContent,
-          isStreaming: state.isStreaming,
-          isThinking: state.isThinking,
+          isStreaming: hasStream,
+          isThinking:
+            hasStream &&
+            !state.streamingMessage &&
+            !state.streamingReasoningContent,
         };
       },
 

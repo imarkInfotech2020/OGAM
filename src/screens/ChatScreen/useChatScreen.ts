@@ -163,7 +163,6 @@ export const useChatScreen = () => {
   const streamingForConversationId = useChatStore(
     s => s.streamingForConversationId,
   );
-  const isThinking = useChatStore(s => s.isThinking);
   const streamingMessage = useChatStore(s => s.streamingMessage);
   const streamingReasoningContent = useChatStore(
     s => s.streamingReasoningContent,
@@ -304,7 +303,6 @@ export const useChatScreen = () => {
   const displayMessages = useMemo(
     () =>
       getDisplayMessages(activeConversation?.messages || [], {
-        isThinking,
         streamingMessage,
         streamingReasoningContent,
         isStreamingForThisConversation,
@@ -316,7 +314,6 @@ export const useChatScreen = () => {
       }),
     [
       activeConversation?.messages,
-      isThinking,
       streamingMessage,
       streamingReasoningContent,
       isStreamingForThisConversation,
@@ -401,7 +398,6 @@ export const useChatScreen = () => {
     imageGenerationStatus: imageGenState.status,
     imagePreviewPath: imageGenState.previewPath,
     isStreaming,
-    isThinking,
     isCompacting,
     isGeneratingForThisConversation,
     textModelEvicted,

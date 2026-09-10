@@ -217,7 +217,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
     insets.bottom,
     Platform.OS,
   );
-  const isStreaming = chat.isStreaming || chat.isThinking;
+  const isStreaming = chat.isStreaming;
   const prevIsStreamingRef = useRef(isStreaming);
   useEffect(() => {
     prevIsStreamingRef.current = isStreaming;

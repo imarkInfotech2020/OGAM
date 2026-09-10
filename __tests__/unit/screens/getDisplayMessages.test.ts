@@ -2,7 +2,6 @@ import { getDisplayMessages } from '../../../src/screens/ChatScreen/types';
 import { Message } from '../../../src/types';
 
 const base = (): StreamingArg => ({
-  isThinking: false,
   streamingMessage: '',
   streamingReasoningContent: '',
   isStreamingForThisConversation: false,
@@ -49,7 +48,6 @@ describe('getDisplayMessages', () => {
   it('shows a bare thinking bubble (no loading text) once generating', () => {
     const out = getDisplayMessages(msgs, {
       ...base(),
-      isThinking: true,
       isStreamingForThisConversation: true,
     });
     const last = out[out.length - 1] as any;

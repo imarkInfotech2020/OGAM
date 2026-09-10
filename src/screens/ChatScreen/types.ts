@@ -141,7 +141,6 @@ export type RemoteStreamItem = ChatStreamPreviewRow;
 export const STREAMING_MESSAGE_ID = 'streaming';
 
 export type StreamingState = {
-  isThinking: boolean;
   streamingMessage: string;
   streamingReasoningContent: string;
   isStreamingForThisConversation: boolean;
@@ -262,7 +261,6 @@ function localDisplayMessages(
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {
   const {
-    isThinking,
     streamingMessage,
     streamingReasoningContent,
     isStreamingForThisConversation,
@@ -287,7 +285,11 @@ function localDisplayMessages(
       },
     ];
   }
-  if (isThinking && isStreamingForThisConversation) {
+  if (
+    !streamingMessage &&
+    !streamingReasoningContent &&
+    isStreamingForThisConversation
+  ) {
     if (_lastDisplayBranch !== 'thinking') {
       _lastDisplayBranch = 'thinking';
     }

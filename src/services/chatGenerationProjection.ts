@@ -19,26 +19,12 @@ const COMPACTION_TOOL_NAME = 'context_compaction';
 /** A fallback changes who answers; the row below names the model that failed and the one that took over. */
 const MODEL_FALLBACK_TOOL_NAME = 'model_fallback';
 
-interface GenerationState {
-  isGenerating: boolean;
-  isThinking: boolean;
-  conversationId: string | null;
-  streamingContent: string;
-}
-
-type GenerationListener = (state: GenerationState) => void;
-
 /** Projects Shared chat events into Mobile UI state. It owns no generation policy. */
 class MobileGenerationProjection {
-  private state: GenerationState = {
-    isGenerating: false,
-    isThinking: false,
-    conversationId: null,
-    streamingContent: '',
-  };
-  private readonly listeners = new Set<GenerationListener>();
   /** Exact Shared turn whose ephemeral stream currently owns Mobile's single visible buffer. */
   private activeTurnId: string | null = null;
+  private activeConversationId: string | null = null;
+  private cumulativeContent = '';
   private totalReasoningLength = 0;
   private thinkingEnabled = false;
   // Token batching — collect tokens and flush to the store at a controlled rate
@@ -46,22 +32,6 @@ class MobileGenerationProjection {
   private reasoningBuffer = '';
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private lastFlushAt = 0;
-
-  getState(): GenerationState {
-    return { ...this.state };
-  }
-
-  isGeneratingFor(conversationId: string): boolean {
-    return (
-      this.state.isGenerating && this.state.conversationId === conversationId
-    );
-  }
-
-  subscribe(listener: GenerationListener): () => void {
-    this.listeners.add(listener);
-    listener(this.getState());
-    return () => this.listeners.delete(listener);
-  }
 
   async publish(event: ChatSessionEvent): Promise<void> {
     switch (event.type) {
@@ -104,23 +74,18 @@ class MobileGenerationProjection {
     this.activeTurnId = turn.id;
     this.lastFlushAt = Date.now();
     this.totalReasoningLength = 0;
+    this.cumulativeContent = '';
+    this.activeConversationId = turn.conversationId;
     // Shared Models resolved this committed setting into the immutable turn request before native
     // generation began. The UI store must not read a second writable settings projection.
     this.thinkingEnabled = turn.request.request.reasoning?.enabled === true;
-    this.update({
-      isGenerating: true,
-      isThinking: true,
-      conversationId: turn.conversationId,
-      streamingContent: '',
-    });
     useChatStore.getState().startStreaming(turn.conversationId);
   }
 
   private partial(turn: ChatTurn, content: string, reasoning: string): void {
     if (!this.isActive(turn)) return;
-    const previousContent = this.state.streamingContent;
-    const contentDelta = content.startsWith(previousContent)
-      ? content.slice(previousContent.length)
+    const contentDelta = content.startsWith(this.cumulativeContent)
+      ? content.slice(this.cumulativeContent.length)
       : content;
     const reasoningDelta = reasoning.slice(this.totalReasoningLength);
     if (contentDelta) {
@@ -139,7 +104,7 @@ class MobileGenerationProjection {
       }
     }
     this.totalReasoningLength = reasoning.length;
-    this.update({ streamingContent: content, isThinking: !content.length });
+    this.cumulativeContent = content;
   }
 
   private toolStarted(turn: ChatTurn): void {
@@ -149,7 +114,7 @@ class MobileGenerationProjection {
     // Shared reports turn-level cumulative reasoning across tool rounds. Keep
     // the consumed length when the visible segment resets, so the next round
     // appends only its new reasoning instead of repeating the completed round.
-    this.update({ streamingContent: '', isThinking: true });
+    this.cumulativeContent = '';
   }
 
   /** Compaction is forward-looking: text already on screen stays; the continuation streams after it. */
@@ -171,7 +136,7 @@ class MobileGenerationProjection {
       },
     });
     if (this.isActive(turn)) {
-      this.update({ streamingContent: '', isThinking: true });
+      this.cumulativeContent = '';
     }
   }
 
@@ -196,7 +161,7 @@ class MobileGenerationProjection {
       },
     });
     if (this.isActive(turn)) {
-      this.update({ streamingContent: '', isThinking: true });
+      this.cumulativeContent = '';
     }
   }
 
@@ -230,8 +195,6 @@ class MobileGenerationProjection {
       streamingReasoningContent: '',
       streamingForConversationId: null,
       streamingMessageUuid: null,
-      isStreaming: false,
-      isThinking: false,
       lastReplyEnd: {
         conversationId: turn.conversationId,
         persisted: Boolean(turn.responseMessages?.length),
@@ -295,7 +258,7 @@ class MobileGenerationProjection {
   private isActive(turn: ChatTurn): boolean {
     return (
       this.activeTurnId === turn.id &&
-      this.state.conversationId === turn.conversationId
+      this.activeConversationId === turn.conversationId
     );
   }
 
@@ -310,17 +273,8 @@ class MobileGenerationProjection {
     this.lastFlushAt = 0;
     this.thinkingEnabled = false;
     this.activeTurnId = null;
-    this.update({
-      isGenerating: false,
-      isThinking: false,
-      conversationId: null,
-      streamingContent: '',
-    });
-  }
-
-  private update(partial: Partial<GenerationState>): void {
-    this.state = { ...this.state, ...partial };
-    for (const listener of this.listeners) listener(this.getState());
+    this.activeConversationId = null;
+    this.cumulativeContent = '';
   }
 }
 

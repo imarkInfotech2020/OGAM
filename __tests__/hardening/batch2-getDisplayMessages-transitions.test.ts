@@ -19,7 +19,6 @@ import {
 import { createMessage } from '../utils/factories';
 
 const baseStreaming: StreamingState = {
-  isThinking: false,
   streamingMessage: '',
   streamingReasoningContent: '',
   isStreamingForThisConversation: false,
@@ -35,7 +34,6 @@ describe('batch2 getDisplayMessages — thinking -> streaming -> done transition
   it('case6: appends a thinking bubble (empty content, isThinking) before the first token', () => {
     const out = getDisplayMessages([userMsg], {
       ...baseStreaming,
-      isThinking: true,
       isStreamingForThisConversation: true,
     });
 
@@ -54,7 +52,6 @@ describe('batch2 getDisplayMessages — thinking -> streaming -> done transition
   it('case7: replaces thinking with a streaming bubble the moment content exists', () => {
     const out = getDisplayMessages([userMsg], {
       ...baseStreaming,
-      isThinking: false,
       streamingMessage: 'Paris',
       isStreamingForThisConversation: true,
     });
@@ -101,8 +98,7 @@ describe('batch2 getDisplayMessages — thinking -> streaming -> done transition
     const assistantMsg = createMessage({ role: 'assistant', content: 'Paris is the capital of France.' });
     const out = getDisplayMessages([userMsg, assistantMsg], {
       ...baseStreaming,
-      // generation over: not thinking, no live streaming content
-      isThinking: false,
+      // generation over: no live streaming content
       streamingMessage: '',
       isStreamingForThisConversation: false,
     });
@@ -119,7 +115,6 @@ describe('batch2 getDisplayMessages — thinking -> streaming -> done transition
   it('does not append any bubble when the stream is for a different conversation', () => {
     const thinkingElsewhere = getDisplayMessages([userMsg], {
       ...baseStreaming,
-      isThinking: true,
       isStreamingForThisConversation: false,
     });
     expect(thinkingElsewhere).toHaveLength(1);
@@ -136,7 +131,7 @@ describe('batch2 getDisplayMessages — thinking -> streaming -> done transition
   it('cases 6->7->8: full thinking -> streaming -> done sequence for one turn', () => {
     // 6. thinking
     const thinking = getDisplayMessages([userMsg], {
-      ...baseStreaming, isThinking: true, isStreamingForThisConversation: true,
+      ...baseStreaming, isStreamingForThisConversation: true,
     });
     expect((thinking[1] as any).id).toBe('streaming');
 
