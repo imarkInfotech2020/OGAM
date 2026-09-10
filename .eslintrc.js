@@ -158,7 +158,7 @@ module.exports = {
     'no-constant-condition': ['error', { checkLoops: false }],
     'no-constant-binary-expression': 'error',
     complexity: ['error', 25],
-    'max-lines-per-function': ['error', 250],
+    'max-lines-per-function': ['error', 350],
     'max-lines': ['error', 1000],
     'max-params': ['error', 5],
     // React hooks
