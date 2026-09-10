@@ -1,13 +1,16 @@
-import { setupChatScreen } from '../../harness/chatHarness';
+import {
+  CHAT_PLATFORM_ENGINE_CASES,
+  setupChatScreen,
+} from '../../harness/chatHarness';
 
-describe.each(['ios', 'android'] as const)(
-  'Mobile chat send control transition on %s',
-  platform => {
+describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+  'Mobile chat send control transition on $label',
+  ({ platform, engine }) => {
     it('shows the existing loading indicator immediately, then shows Stop while the reply is running', async () => {
-      const h = await setupChatScreen({ engine: 'llama', platform });
+      const h = await setupChatScreen({ engine, platform });
       const view = h.render();
 
-      h.boundary.llama!.scriptCompletion({
+      h.scriptTextTurn({
         text: 'This reply must stay in progress.',
         holdBeforeStream: true,
       });

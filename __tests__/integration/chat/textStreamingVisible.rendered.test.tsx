@@ -1,15 +1,18 @@
-import { setupChatScreen } from '../../harness/chatHarness';
+import {
+  CHAT_PLATFORM_ENGINE_CASES,
+  setupChatScreen,
+} from '../../harness/chatHarness';
 
-describe.each(['ios', 'android'] as const)(
-  'Mobile text streaming visibility on %s',
-  platform => {
+describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+  'Mobile text streaming visibility on $label',
+  ({ platform, engine }) => {
     it('shows the assistant bubble while text is still streaming', async () => {
-      const h = await setupChatScreen({ engine: 'llama', platform });
+      const h = await setupChatScreen({ engine, platform });
       const view = h.render();
       const partial = 'The first part is visible';
       const complete = `${partial}, and then the reply finishes.`;
 
-      h.boundary.llama!.scriptCompletion({
+      h.scriptTextTurn({
         text: complete,
         pauseAfter: partial,
       });
@@ -21,7 +24,7 @@ describe.each(['ios', 'android'] as const)(
         expect(view.queryByText(complete)).toBeNull();
       });
 
-      h.boundary.llama!.releaseStream();
+      h.releaseTextStream();
       await h.rtl.waitFor(() => {
         expect(view.getByText(complete)).toBeVisible();
         expect(view.getByTestId('chat-input')).toBeEnabled();

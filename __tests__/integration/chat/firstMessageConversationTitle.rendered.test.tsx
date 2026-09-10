@@ -1,10 +1,13 @@
-import { setupChatScreen } from '../../harness/chatHarness';
+import {
+  CHAT_PLATFORM_ENGINE_CASES,
+  setupChatScreen,
+} from '../../harness/chatHarness';
 
-describe.each(['ios', 'android'] as const)(
-  'Mobile first-message conversation title journey on %s',
-  platform => {
+describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+  'Mobile first-message conversation title journey on $label',
+  ({ platform, engine }) => {
     it('uses the first sent message as the visible conversation title', async () => {
-      const h = await setupChatScreen({ engine: 'llama', platform });
+      const h = await setupChatScreen({ engine, platform });
       const view = h.render();
       const firstMessage = 'Plan a mountain trip';
 

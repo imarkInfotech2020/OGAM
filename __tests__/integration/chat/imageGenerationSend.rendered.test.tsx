@@ -1,12 +1,15 @@
 import { Modal } from 'react-native';
 
-import { setupChatScreen } from '../../harness/chatHarness';
+import {
+  CHAT_PLATFORM_ENGINE_CASES,
+  setupChatScreen,
+} from '../../harness/chatHarness';
 
-describe.each(['ios', 'android'] as const)(
-  'Mobile image generation send journey on %s',
-  platform => {
+describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+  'Mobile image generation send journey on $label',
+  ({ platform, engine }) => {
     it('keeps the enhanced prompt before the image in one response bubble', async () => {
-      const h = await setupChatScreen({ engine: 'llama', platform });
+      const h = await setupChatScreen({ engine, platform });
       const view = h.render();
 
       await h.placeImageModel({
@@ -55,7 +58,7 @@ describe.each(['ios', 'android'] as const)(
 
       const enhancedPrompt =
         'A green Lamborghini driving on a mountain road, detailed bodywork, natural light.';
-      h.boundary.llama!.scriptCompletion({ text: enhancedPrompt });
+      h.scriptTextTurn({ text: enhancedPrompt });
       await h.tapSend('Draw a green lamborghini');
       await h.rtl.waitFor(() => {
         expect(

@@ -1,12 +1,15 @@
 import { Modal } from 'react-native';
 
-import { setupChatScreen } from '../../harness/chatHarness';
+import {
+  CHAT_PLATFORM_ENGINE_CASES,
+  setupChatScreen,
+} from '../../harness/chatHarness';
 
-describe.each(['ios', 'android'] as const)(
-  'Mobile chat send with Thinking disabled on %s',
-  platform => {
+describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+  'Mobile chat send with Thinking disabled on $label',
+  ({ platform, engine }) => {
     it('disables Thinking in quick settings and shows the clean reply to the next message', async () => {
-      const h = await setupChatScreen({ engine: 'llama', platform });
+      const h = await setupChatScreen({ engine, platform });
       const view = h.render();
 
       h.rtl.fireEvent.press(

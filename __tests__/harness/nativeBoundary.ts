@@ -102,6 +102,8 @@ export interface LiteRTTurn {
   reasoning?: string;
   /** Final content tokens emitted on litert_token before litert_complete. Empty ⇒ the model said nothing. */
   content?: string;
+  /** Alternate content emitted when the native prompt starts with LiteRT's thinking activation token. */
+  thinkingContent?: string;
 }
 
 export interface LiteRTFake {
@@ -147,6 +149,10 @@ export interface LiteRTFake {
    * Used to prove Stop keeps the partial (doesn't discard it). One-shot.
    */
   scriptPartialThenHang(content: string): void;
+  /** Emit one content fragment, pause, then emit the remainder and completion when released. */
+  scriptPartialThenPause(partial: string, remainder: string): void;
+  /** Release a stream held by scriptPartialThenPause. */
+  releaseStream(): void;
   /**
    * Emit a partial REASONING token (litert_thinking) then HANG — the model is mid-THINKING with reasoning on
    * screen but no content yet, still in-flight. Proves Stop keeps a reasoning-only partial. One-shot.
@@ -181,6 +187,8 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
   let pendingHang = false; // one-shot: next send never completes (generation stays in-flight)
   let pendingPartialHang: { content?: string; reasoning?: string } | null =
     null; // one-shot: emit a partial token/reasoning then never complete
+  let pendingPartialPause: { partial: string; remainder: string } | null = null;
+  let releaseStream: (() => void) | null = null;
 
   const emitCompletion = (turn: LiteRTTurn) => {
     if (turn.reasoning) handle.emit('litert_thinking', turn.reasoning);
@@ -203,6 +211,19 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
       });
       return;
     } // partial (content and/or reasoning) shown, then in-flight
+    if (pendingPartialPause !== null) {
+      const paused = pendingPartialPause;
+      pendingPartialPause = null;
+      defer(() => {
+        handle.emit('litert_token', paused.partial);
+        releaseStream = () => {
+          releaseStream = null;
+          if (paused.remainder) handle.emit('litert_token', paused.remainder);
+          handle.emit('litert_complete', '{}');
+        };
+      });
+      return;
+    }
     if (pendingHang) {
       pendingHang = false;
       return;
@@ -213,12 +234,18 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
       defer(() => handle.emit('litert_error', m));
       return;
     }
-    const turn = queue.length
+    const scriptedTurn = queue.length
       ? queue.shift()!
       : pendingTemperatureReply
       ? pendingTemperatureReply(temperature)
       : pending;
     pendingTemperatureReply = null;
+    const turn =
+      typeof text === 'string' &&
+      text.startsWith('<|think|>') &&
+      scriptedTurn?.thinkingContent !== undefined
+        ? { ...scriptedTurn, content: scriptedTurn.thinkingContent }
+        : scriptedTurn;
     currentTurn = turn;
     if (!turn) {
       defer(() => handle.emit('litert_complete', '{}'));
@@ -323,6 +350,10 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
     scriptPartialThenHang: (content: string) => {
       pendingPartialHang = { content };
     },
+    scriptPartialThenPause: (partial: string, remainder: string) => {
+      pendingPartialPause = { partial, remainder };
+    },
+    releaseStream: () => releaseStream?.(),
     scriptThinkingThenHang: (reasoning: string) => {
       pendingPartialHang = { reasoning };
     },
@@ -1342,24 +1373,24 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   // test renderer has no native view for that driver to attach to, so keep this
   // external boundary synchronous in the fresh module graph.
   const instantAnimation = (
-    value?: {setValue?: (next: number) => void},
+    value?: { setValue?: (next: number) => void },
     toValue?: number,
   ) => ({
-    start: (callback?: (result: {finished: boolean}) => void) => {
+    start: (callback?: (result: { finished: boolean }) => void) => {
       if (typeof toValue === 'number') value?.setValue?.(toValue);
-      callback?.({finished: true});
+      callback?.({ finished: true });
     },
     stop: () => {},
     reset: () => {},
   });
   RN.Animated.timing = (
-    value: {setValue?: (next: number) => void},
-    config: {toValue?: number},
+    value: { setValue?: (next: number) => void },
+    config: { toValue?: number },
   ) => instantAnimation(value, config?.toValue);
-  RN.Animated.parallel = (animations: Array<{start?: () => void}>) => ({
-    start: (callback?: (result: {finished: boolean}) => void) => {
+  RN.Animated.parallel = (animations: Array<{ start?: () => void }>) => ({
+    start: (callback?: (result: { finished: boolean }) => void) => {
       animations.forEach(animation => animation.start?.());
-      callback?.({finished: true});
+      callback?.({ finished: true });
     },
     stop: () => {},
     reset: () => {},

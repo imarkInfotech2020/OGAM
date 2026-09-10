@@ -1,10 +1,13 @@
-import { setupChatScreen } from '../../harness/chatHarness';
+import {
+  CHAT_PLATFORM_ENGINE_CASES,
+  setupChatScreen,
+} from '../../harness/chatHarness';
 
-describe.each(['ios', 'android'] as const)(
-  'Mobile text generation resend journey on %s',
-  platform => {
+describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+  'Mobile text generation resend journey on $label',
+  ({ platform, engine }) => {
     it('resends the original message and shows its replacement reply', async () => {
-      const h = await setupChatScreen({ engine: 'llama', platform });
+      const h = await setupChatScreen({ engine, platform });
       const view = h.render();
 
       await h.send('Give me a short greeting.', {
@@ -14,7 +17,7 @@ describe.each(['ios', 'android'] as const)(
         expect(view.getByText('Hello from the first reply.')).toBeVisible();
       });
 
-      h.boundary.llama!.scriptCompletion({
+      h.scriptTextTurn({
         text: 'Hello from the resent reply.',
       });
       await h.openActionMenu('user', 'dots');
@@ -35,7 +38,7 @@ describe.each(['ios', 'android'] as const)(
     });
 
     it('removes the failed attempt when resend succeeds', async () => {
-      const h = await setupChatScreen({ engine: 'llama', platform });
+      const h = await setupChatScreen({ engine, platform });
       const view = h.render();
 
       await h.send('Try this again.', {
@@ -46,7 +49,7 @@ describe.each(['ios', 'android'] as const)(
       });
       h.rtl.fireEvent.press(view.getByText('OK'));
 
-      h.boundary.llama!.scriptCompletion({ text: 'The retry worked.' });
+      h.scriptTextTurn({ text: 'The retry worked.' });
       await h.openActionMenu('user', 'dots');
       h.rtl.fireEvent.press(view.getByTestId('action-retry'));
 

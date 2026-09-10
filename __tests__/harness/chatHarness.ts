@@ -68,6 +68,27 @@ export interface ChatHarnessOptions {
   chatTemplate?: string;
 }
 
+export const CHAT_PLATFORM_ENGINE_CASES = [
+  { label: 'ios/llama', platform: 'ios', engine: 'llama' },
+  { label: 'android/llama', platform: 'android', engine: 'llama' },
+  { label: 'android/litert', platform: 'android', engine: 'litert' },
+] as const satisfies readonly (ChatHarnessOptions & { label: string })[];
+
+type ChatTextScript = {
+  text?: string;
+  content?: string;
+  reasoning?: string;
+  thinkingText?: string;
+  throwMessage?: string;
+  toolCalls?: Array<{
+    name: string;
+    arguments: Record<string, unknown>;
+  }>;
+  completionMeta?: CompletionMeta;
+  pauseAfter?: string;
+  holdBeforeStream?: boolean;
+};
+
 export async function setupChatScreen(opts: ChatHarnessOptions) {
   const platform = opts.platform ?? 'android';
   const ram = opts.ram ?? { platform, totalBytes: 12 * GB, availBytes: 8 * GB };
@@ -251,12 +272,49 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
 
   routeHolder.params = {}; // new chat — the first send() creates the conversation
 
+  const scriptTextTurn = (scripted: ChatTextScript) => {
+    if (opts.engine === 'llama') {
+      boundary.llama!.scriptCompletion(scripted);
+      return;
+    }
+    if (scripted.throwMessage) {
+      boundary.litert.scriptError(scripted.throwMessage);
+      return;
+    }
+    if (scripted.holdBeforeStream) {
+      boundary.litert.scriptHang();
+      return;
+    }
+    const content = scripted.content ?? scripted.text ?? '';
+    if (scripted.pauseAfter !== undefined) {
+      const split = content.indexOf(scripted.pauseAfter);
+      const partialEnd =
+        split < 0 ? content.length : split + scripted.pauseAfter.length;
+      boundary.litert.scriptPartialThenPause(
+        content.slice(0, partialEnd),
+        content.slice(partialEnd),
+      );
+      return;
+    }
+    boundary.litert.scriptTurn({
+      content,
+      reasoning: scripted.reasoning,
+      thinkingContent: scripted.thinkingText,
+      toolCalls: scripted.toolCalls,
+    });
+  };
+
   return {
     boundary,
     React,
     rtl,
     useAppStore,
     useChatStore,
+    scriptTextTurn,
+    releaseTextStream() {
+      if (opts.engine === 'llama') boundary.llama!.releaseStream();
+      else boundary.litert.releaseStream();
+    },
     /** The active conversation id — a NEW chat has none until the first send() creates it. */
     get conversationId(): string | null {
       return useChatStore.getState().activeConversationId;
@@ -709,11 +767,11 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       await useTTSStore
         .getState()
         .updateSettings({
-          modelDownloaded: {
-            ...(useTTSStore.getState().settings.modelDownloaded ?? {}),
-            [engineId]: true,
-          },
-        });
+        modelDownloaded: {
+          ...(useTTSStore.getState().settings.modelDownloaded ?? {}),
+          [engineId]: true,
+        },
+      });
       // GESTURE: open the chat-input quick-settings popover and tap the Voice row (the alternate real entry
       // to voice mode, per the header dropdown). This intent owns on-demand engine
       // initialization; the harness must not wait for eager readiness first.
@@ -792,27 +850,8 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * send button, and await the assistant reply rendering. `scripted` is what the (faked) native engine
      * returns — the real generation pipeline turns it into the rendered bubble.
      */
-    async send(
-      text: string,
-      scripted: {
-        text?: string;
-        content?: string;
-        reasoning?: string;
-        thinkingText?: string;
-        throwMessage?: string;
-        toolCalls?: unknown[];
-        completionMeta?: CompletionMeta;
-      },
-    ) {
-      if (opts.engine === 'llama')
-        boundary.llama!.scriptCompletion(scripted as { text?: string });
-      else
-        boundary.litert.scriptTurn(
-          scripted as {
-            content?: string;
-            toolCalls?: { name: string; arguments: Record<string, unknown> }[];
-          },
-        );
+    async send(text: string, scripted: ChatTextScript) {
+      scriptTextTurn(scripted);
 
       const view = this.view!;
       const input = await rtl.waitFor(() => view.getByTestId('chat-input'));
@@ -890,17 +929,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      * REAL regenerate gesture: open the action menu (via long-press OR 3-dots) and press "Retry".
      */
     async regenerateLast(
-      scripted: {
-        text?: string;
-        content?: string;
-        reasoning?: string;
-        toolCalls?: unknown[];
-      },
+      scripted: ChatTextScript,
       via: 'longpress' | 'dots' = 'longpress',
     ) {
-      if (opts.engine === 'llama')
-        boundary.llama!.scriptCompletion(scripted as { text?: string });
-      else boundary.litert.scriptTurn(scripted as { content?: string });
+      scriptTextTurn(scripted);
       await this.openActionMenu('assistant', via);
       rtl.fireEvent.press(this.view!.getByTestId('action-retry'));
     },
@@ -911,12 +943,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
      */
     async editLastUserMessage(
       newText: string,
-      scripted: { text?: string; content?: string },
+      scripted: ChatTextScript,
       via: 'longpress' | 'dots' = 'longpress',
     ) {
-      if (opts.engine === 'llama')
-        boundary.llama!.scriptCompletion(scripted as { text?: string });
-      else boundary.litert.scriptTurn(scripted as { content?: string });
+      scriptTextTurn(scripted);
       await this.openActionMenu('user', via);
       const view = this.view!;
       rtl.fireEvent.press(view.getByTestId('action-edit'));

@@ -1,10 +1,13 @@
-import { setupChatScreen } from '../../harness/chatHarness';
+import {
+  CHAT_PLATFORM_ENGINE_CASES,
+  setupChatScreen,
+} from '../../harness/chatHarness';
 
-describe.each(['ios', 'android'] as const)(
-  'Mobile text generation edit journey on %s',
-  platform => {
+describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+  'Mobile text generation edit journey on $label',
+  ({ platform, engine }) => {
     it('keeps a start-of-message edit through a keyboard render and resends it', async () => {
-      const h = await setupChatScreen({ engine: 'llama', platform });
+      const h = await setupChatScreen({ engine, platform });
       const view = h.render();
 
       await h.send('Give me a short greeting.', {
@@ -44,7 +47,7 @@ describe.each(['ios', 'android'] as const)(
         'Please give me a short greeting.',
       );
 
-      h.boundary.llama!.scriptCompletion({
+      h.scriptTextTurn({
         text: 'Hello from the edited reply.',
       });
       h.rtl.fireEvent.press(view.getByText('SAVE & RESEND'));
