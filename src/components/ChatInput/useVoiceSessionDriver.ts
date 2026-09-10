@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { voiceSession } from '../../services/voiceSession';
 import { recordingController } from '../../services/recordingController';
+import { logVoiceDiagnostic } from '../../utils/voiceDiagnostics';
 
 /**
  * Obey the session's answer to "may a microphone be open right now".
@@ -25,8 +26,22 @@ export function useVoiceSessionDriver(opts: { startTurn: () => void }): void {
     const stop = voiceSession.subscribe(session => {
       const listening = session.state === 'listen';
       const entered = listening && !wasListening;
+      const previousListening = wasListening;
       wasListening = listening;
-      if (entered) startRef.current();
+      logVoiceDiagnostic('session_observed_by_recorder', {
+        previousListening,
+        state: session.state,
+        phase: session.phase,
+        enteredListening: entered,
+        replayReturnsTo: session.replayReturnsTo,
+      });
+      if (entered) {
+        logVoiceDiagnostic('session_dispatched_recording_start', {
+          state: session.state,
+          phase: session.phase,
+        });
+        startRef.current();
+      }
       // A replay seizing the floor is the one exit from LISTEN the recorder does not drive itself:
       // stop and silence both flow through the recorder before the session moves. Cancel rather than
       // stop - pressing play on a saved message abandons the open turn, it does not finish it, so
@@ -35,7 +50,14 @@ export function useVoiceSessionDriver(opts: { startTurn: () => void }): void {
     });
     // The session may ALREADY be listening when this mounts (hands-free starts there), and a state
     // that never changes produces no event. Checking once is what makes entering the mode work.
-    if (voiceSession.micShouldBeOpen()) startRef.current();
+    if (voiceSession.micShouldBeOpen()) {
+      const session = voiceSession.current();
+      logVoiceDiagnostic('mounted_session_dispatched_recording_start', {
+        state: session.state,
+        phase: session.phase,
+      });
+      startRef.current();
+    }
     return stop;
   }, []);
 }

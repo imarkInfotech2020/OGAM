@@ -13,6 +13,7 @@ import {
 } from '@offgrid/models';
 import type { RemoteMediaModality } from '@offgrid/models';
 import { getApiKeyImpl } from './serverRuntime';
+import { logVoiceDiagnostic, voiceDiagnosticError } from '../../../utils/voiceDiagnostics';
 
 
 export interface RemoteImageResult {
@@ -127,8 +128,17 @@ export const remoteMediaRuntime = {
     input: { fileUri: string; language?: string; model?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<string> {
+    const model = input.model ?? requiredModel(server, 'transcription');
+    const schemeSeparator = input.fileUri.indexOf(':');
+    logVoiceDiagnostic('remote_transcription_requested', {
+      serverId: server.id,
+      provider: server.provider,
+      modelId: model,
+      language: input.language,
+      fileScheme: schemeSeparator > 0 ? input.fileUri.slice(0, schemeSeparator) : 'path',
+    });
     const upload = remoteTranscriptionUpload({
-      model: input.model ?? requiredModel(server, 'transcription'),
+      model,
       language: input.language,
     });
     const body = new FormData();
@@ -138,16 +148,32 @@ export const remoteMediaRuntime = {
       name: upload.file.name,
       type: upload.file.type,
     } as unknown as Blob);
-    const payload = await request({
-      server,
-      modality: 'transcription',
-      init: { method: 'POST', body },
-      signal: options.signal,
-    }, response => response.json() as Promise<{ text?: unknown }>);
+    let payload: { text?: unknown };
+    try {
+      payload = await request({
+        server,
+        modality: 'transcription',
+        init: { method: 'POST', body },
+        signal: options.signal,
+      }, response => response.json() as Promise<{ text?: unknown }>);
+    } catch (error) {
+      logVoiceDiagnostic('remote_transcription_failed', {
+        serverId: server.id,
+        modelId: model,
+        error: voiceDiagnosticError(error),
+      });
+      throw error;
+    }
     if (typeof payload.text !== 'string') {
       throw new TypeError('Remote server returned no transcript');
     }
-    return payload.text.trim();
+    const text = payload.text.trim();
+    logVoiceDiagnostic('remote_transcription_finished', {
+      serverId: server.id,
+      modelId: model,
+      characterCount: text.length,
+    });
+    return text;
   },
 
   async synthesizeVoice(
