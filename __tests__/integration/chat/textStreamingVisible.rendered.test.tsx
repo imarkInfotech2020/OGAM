@@ -8,7 +8,6 @@ describe.each(CHAT_TEXT_SCENARIOS)(
   scenario => {
     it('shows the assistant bubble while text is still streaming', async () => {
       const h = await startChatScreen(scenario);
-      const view = h.view!;
       const partial = 'The first part is visible';
       const complete = `${partial}, and then the reply finishes.`;
 
@@ -19,17 +18,17 @@ describe.each(CHAT_TEXT_SCENARIOS)(
       await h.tapSend('Stream a reply');
 
       await h.rtl.waitFor(() => {
-        expect(view.getByText(partial)).toBeVisible();
-        expect(view.getByTestId('stop-button')).toBeVisible();
-        expect(view.queryByText(complete)).toBeNull();
+        expect(h.assertions.isResponseVisible(partial)).toBe(true);
+        expect(h.assertions.isStopControlVisible()).toBe(true);
+        expect(h.assertions.isResponseHidden(complete)).toBe(true);
       });
 
       h.releaseTextStream();
       await h.rtl.waitFor(() => {
-        expect(view.getByText(complete)).toBeVisible();
-        expect(view.getByTestId('chat-input')).toBeEnabled();
-        expect(view.queryByTestId('stop-button')).toBeNull();
-        expect(view.queryByText('Generation Error')).toBeNull();
+        expect(h.assertions.isResponseVisible(complete)).toBe(true);
+        expect(h.assertions.isComposerEnabled()).toBe(true);
+        expect(h.assertions.isStopControlVisible()).toBe(false);
+        expect(h.assertions.isChatErrorVisible('Generation Error')).toBe(false);
       });
     });
   },

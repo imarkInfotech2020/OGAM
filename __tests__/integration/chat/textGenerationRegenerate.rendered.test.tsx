@@ -8,13 +8,14 @@ describe.each(CHAT_TEXT_SCENARIOS)(
   scenario => {
     it('regenerates an assistant response and shows its replacement', async () => {
       const h = await startChatScreen(scenario);
-      const view = h.view!;
 
       await h.send('Give me a short greeting.', {
         text: 'Hello from the first reply.',
       });
       await h.rtl.waitFor(() => {
-        expect(view.getByText('Hello from the first reply.')).toBeVisible();
+        expect(
+          h.assertions.isResponseVisible('Hello from the first reply.'),
+        ).toBe(true);
       });
 
       await h.regenerateLast(
@@ -24,18 +25,18 @@ describe.each(CHAT_TEXT_SCENARIOS)(
 
       await h.rtl.waitFor(() => {
         expect(
-          h.rtl
-            .within(view.getAllByTestId('user-message')[0])
-            .getByText('Give me a short greeting.'),
-        ).toBeVisible();
+          h.assertions.isUserMessageVisible('Give me a short greeting.'),
+        ).toBe(true);
         expect(
-          view.getByText('Hello from the regenerated reply.'),
-        ).toBeVisible();
-        expect(view.queryByText('Hello from the first reply.')).toBeNull();
-        expect(view.getByTestId('chat-input')).toBeEnabled();
-        expect(view.queryByTestId('action-menu')).toBeNull();
+          h.assertions.isResponseVisible('Hello from the regenerated reply.'),
+        ).toBe(true);
+        expect(
+          h.assertions.isResponseHidden('Hello from the first reply.'),
+        ).toBe(true);
+        expect(h.assertions.isComposerEnabled()).toBe(true);
+        expect(h.assertions.isActionMenuVisible()).toBe(false);
       });
-      expect(view.queryByText('Generation Error')).toBeNull();
+      expect(h.assertions.isChatErrorVisible('Generation Error')).toBe(false);
     });
   },
 );

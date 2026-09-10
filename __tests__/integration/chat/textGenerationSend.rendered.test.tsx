@@ -8,17 +8,18 @@ describe.each(CHAT_TEXT_SCENARIOS)(
   scenario => {
     it('sends one message and shows the completed reply', async () => {
       const h = await startChatScreen(scenario);
-      const view = h.view!;
 
       await h.send('Give me a short greeting.', {
         text: 'Hello from the first reply.',
       });
       await h.rtl.waitFor(() => {
-        expect(view.getByText('Hello from the first reply.')).toBeVisible();
-        expect(view.getByTestId('chat-input')).toBeEnabled();
+        expect(
+          h.assertions.isResponseVisible('Hello from the first reply.'),
+        ).toBe(true);
+        expect(h.assertions.isComposerEnabled()).toBe(true);
       });
 
-      expect(view.queryByText('Generation Error')).toBeNull();
+      expect(h.assertions.isChatErrorVisible('Generation Error')).toBe(false);
     });
   },
 );

@@ -8,67 +8,44 @@ describe.each(CHAT_TEXT_SCENARIOS)(
   scenario => {
     it('keeps a start-of-message edit through a keyboard render and resends it', async () => {
       const h = await startChatScreen(scenario);
-      const view = h.view!;
 
       await h.send('Give me a short greeting.', {
         text: 'Hello from the first reply.',
       });
       await h.rtl.waitFor(() => {
-        expect(view.getByText('Hello from the first reply.')).toBeVisible();
+        expect(
+          h.assertions.isResponseVisible('Hello from the first reply.'),
+        ).toBe(true);
       });
 
-      await h.openActionMenu('user', 'dots');
-      h.rtl.fireEvent.press(view.getByTestId('action-edit'));
-      const editInput = await h.rtl.waitFor(() =>
-        view.getByPlaceholderText('Enter message...'),
-      );
+      await h.openMessageEditor('user');
+      await h.focusOpenEditorAtStartWithKeyboardVisible();
+      h.replaceOpenEditorText('Please give me a short greeting.');
+      expect(
+        h.assertions.isEditorTextVisible('Please give me a short greeting.'),
+      ).toBe(true);
 
-      const { Keyboard } =
-        require('react-native') as typeof import('react-native');
-      await h.rtl.act(async () => {
-        const emitter = (
-          Keyboard as unknown as {
-            _emitter: { emit: (event: string, value: unknown) => void };
-          }
-        )._emitter;
-        const event = { endCoordinates: { height: 320 } };
-        emitter.emit('keyboardWillShow', event);
-        emitter.emit('keyboardDidShow', event);
-      });
-
-      h.rtl.fireEvent(editInput, 'touchStart');
-      h.rtl.fireEvent(editInput, 'selectionChange', {
-        nativeEvent: { selection: { start: 0, end: 0 } },
-      });
-      h.rtl.fireEvent.changeText(editInput, 'Please give me a short greeting.');
-
-      expect(view.getByPlaceholderText('Enter message...')).toHaveProp(
-        'value',
-        'Please give me a short greeting.',
-      );
-
-      h.scriptTextTurn({
+      h.saveUserEditAndResend({
         text: 'Hello from the edited reply.',
       });
-      h.rtl.fireEvent.press(view.getByText('SAVE & RESEND'));
 
       await h.rtl.waitFor(() => {
         expect(
-          h.rtl
-            .within(view.getAllByTestId('user-message')[0])
-            .getByText('Please give me a short greeting.'),
-        ).toBeVisible();
-        expect(view.getByText('Hello from the edited reply.')).toBeVisible();
+          h.assertions.isUserMessageVisible('Please give me a short greeting.'),
+        ).toBe(true);
         expect(
-          h.rtl
-            .within(view.getAllByTestId('user-message')[0])
-            .queryByText('Give me a short greeting.'),
-        ).toBeNull();
-        expect(view.queryByText('Hello from the first reply.')).toBeNull();
-        expect(view.queryByPlaceholderText('Enter message...')).toBeNull();
-        expect(view.getByTestId('chat-input')).toBeEnabled();
+          h.assertions.isResponseVisible('Hello from the edited reply.'),
+        ).toBe(true);
+        expect(
+          h.assertions.isUserMessageVisible('Give me a short greeting.'),
+        ).toBe(false);
+        expect(
+          h.assertions.isResponseHidden('Hello from the first reply.'),
+        ).toBe(true);
+        expect(h.assertions.isMessageEditorClosed()).toBe(true);
+        expect(h.assertions.isComposerEnabled()).toBe(true);
       });
-      expect(view.queryByText('Generation Error')).toBeNull();
+      expect(h.assertions.isChatErrorVisible('Generation Error')).toBe(false);
     });
   },
 );

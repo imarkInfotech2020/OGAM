@@ -8,54 +8,56 @@ describe.each(CHAT_TEXT_SCENARIOS)(
   scenario => {
     it('resends the original message and shows its replacement reply', async () => {
       const h = await startChatScreen(scenario);
-      const view = h.view!;
 
       await h.send('Give me a short greeting.', {
         text: 'Hello from the first reply.',
       });
       await h.rtl.waitFor(() => {
-        expect(view.getByText('Hello from the first reply.')).toBeVisible();
+        expect(
+          h.assertions.isResponseVisible('Hello from the first reply.'),
+        ).toBe(true);
       });
 
-      h.scriptTextTurn({
+      await h.resendLastUserMessage({
         text: 'Hello from the resent reply.',
       });
-      await h.openActionMenu('user', 'dots');
-      h.rtl.fireEvent.press(view.getByTestId('action-retry'));
 
       await h.rtl.waitFor(() => {
         expect(
-          h.rtl
-            .within(view.getAllByTestId('user-message')[0])
-            .getByText('Give me a short greeting.'),
-        ).toBeVisible();
-        expect(view.getByText('Hello from the resent reply.')).toBeVisible();
-        expect(view.queryByText('Hello from the first reply.')).toBeNull();
-        expect(view.getByTestId('chat-input')).toBeEnabled();
-        expect(view.queryByTestId('action-menu')).toBeNull();
+          h.assertions.isUserMessageVisible('Give me a short greeting.'),
+        ).toBe(true);
+        expect(
+          h.assertions.isResponseVisible('Hello from the resent reply.'),
+        ).toBe(true);
+        expect(
+          h.assertions.isResponseHidden('Hello from the first reply.'),
+        ).toBe(true);
+        expect(h.assertions.isComposerEnabled()).toBe(true);
+        expect(h.assertions.isActionMenuVisible()).toBe(false);
       });
-      expect(view.queryByText('Generation Error')).toBeNull();
+      expect(h.assertions.isChatErrorVisible('Generation Error')).toBe(false);
     });
 
     it('removes the failed attempt when resend succeeds', async () => {
       const h = await startChatScreen(scenario);
-      const view = h.view!;
 
       await h.send('Try this again.', {
         throwMessage: 'The first attempt failed.',
       });
       await h.rtl.waitFor(() => {
-        expect(view.getByText('The first attempt failed.')).toBeVisible();
+        expect(
+          h.assertions.isResponseVisible('The first attempt failed.'),
+        ).toBe(true);
       });
-      h.rtl.fireEvent.press(view.getByText('OK'));
+      h.dismissAlert();
 
-      h.scriptTextTurn({ text: 'The retry worked.' });
-      await h.openActionMenu('user', 'dots');
-      h.rtl.fireEvent.press(view.getByTestId('action-retry'));
+      await h.resendLastUserMessage({ text: 'The retry worked.' });
 
       await h.rtl.waitFor(() => {
-        expect(view.getByText('The retry worked.')).toBeVisible();
-        expect(view.queryByText('The first attempt failed.')).toBeNull();
+        expect(h.assertions.isResponseVisible('The retry worked.')).toBe(true);
+        expect(h.assertions.isResponseHidden('The first attempt failed.')).toBe(
+          true,
+        );
       });
     });
   },
