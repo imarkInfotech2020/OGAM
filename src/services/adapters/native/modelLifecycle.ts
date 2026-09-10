@@ -234,9 +234,11 @@ class NativeModelLifecycle {
     await this.imageLoadPromise;
   }
 
-  imageNeedsReload(modelId: string): boolean {
+  async imageNeedsReload(modelId: string): Promise<boolean> {
+    const nativeLoaded = await imageEngine.isModelLoaded();
     return (
-      this.loadedImageModelId === modelId &&
+      !nativeLoaded ||
+      this.loadedImageModelId !== modelId ||
       this.loadedImageModelThreads !== committedImageThreads()
     );
   }

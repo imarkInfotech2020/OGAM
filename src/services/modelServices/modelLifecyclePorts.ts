@@ -199,7 +199,7 @@ export function mobileModelLifecyclePorts(
                 await nativeModelLifecycle.unloadImageModel(true),
               ),
           },
-          forceReload: nativeModelLifecycle.imageNeedsReload(modelId),
+          forceReload: await nativeModelLifecycle.imageNeedsReload(modelId),
         };
       }
       if (modality === 'transcription') {
