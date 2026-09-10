@@ -44,7 +44,6 @@ import {
 import { toWorkspaceMessage } from './types';
 import { requireWorkspaceConversationMessages } from '../../hooks/useApplicationProjection';
 import {
-  appendWorkspaceAssistantMessage,
   createWorkspaceConversation,
   updateWorkspaceConversationProject,
 } from './workspaceChatCommands';
@@ -163,18 +162,22 @@ function offerRunAnyway(error: unknown, retry: () => Promise<void>): boolean {
   return true;
 }
 
-type GenerationFailure = { error: unknown; retry?: () => Promise<void> };
+type GenerationFailure = {
+  error: unknown;
+  retry?: () => Promise<void>;
+  turnId?: string;
+};
 
 function presentGenerationError(
   deps: GenerationDeps,
   conversationId: string,
-  { error, retry }: GenerationFailure,
+  { error, retry, turnId }: GenerationFailure,
 ): void {
   const message =
     error instanceof Error
       ? error.message
       : String(error || 'Failed to generate response');
-  logger.error('[ChatGen] Generation failed', error);
+  logger.error('[ChatGen] Generation failed', {conversationId, error});
   // The refusal is shown once: the failure card carries the reason and the Run anyway action, so the
   // same text is not also written into the conversation.
   if (retry && offerRunAnyway(error, retry)) return;
@@ -214,13 +217,20 @@ function presentGenerationError(
     });
     return;
   }
-  appendWorkspaceAssistantMessage(conversationId, message).catch(
-    () => undefined,
+  const failureBelongsToTurn = Boolean(
+    turnId &&
+      applicationFacade()
+        .workspaceContent.snapshot()
+        .chatTurns.some(
+          turn => turn.id === turnId && turn.status === 'failed',
+        ),
   );
   deps.setAlertState(
     showAlert(
       'Generation Error',
-      'The model could not complete this response. The details are shown in the chat.',
+      failureBelongsToTurn
+        ? 'The model could not complete this response. The failure is shown in the chat.'
+        : message,
     ),
   );
 }
@@ -276,6 +286,7 @@ async function runPersistedChatTurnFn(
   } catch (error) {
     presentGenerationError(deps, call.targetConversationId, {
       error,
+      turnId: call.turnId,
       retry: async () => {
         const persistedMessage = applicationFacade()
           .workspaceContent.snapshot()
@@ -404,6 +415,7 @@ export async function replayPersistedChatTurnFn(
   } catch (error) {
     presentGenerationError(deps, conversationId, {
       error,
+      turnId: persistedMessage.turnId,
       retry: () => replayPersistedChatTurnFn(deps, userMessage, operation),
     });
   }
@@ -416,6 +428,7 @@ export async function editPersistedChatTurnFn(
   const conversationId = deps.activeConversationId;
   if (!conversationId || !deps.hasActiveModel) return;
   await prepareMobileChatGeneration();
+  let turnId: string | undefined;
   try {
     const persistedMessage = applicationFacade()
       .workspaceContent.snapshot()
@@ -427,6 +440,7 @@ export async function editPersistedChatTurnFn(
     if (!persistedMessage?.turnId) {
       throw new Error(`Chat turn not found for message: ${message.id}`);
     }
+    turnId = persistedMessage.turnId;
     await mobileChatSession.edit(
       conversationId,
       persistedMessage.turnId,
@@ -436,6 +450,7 @@ export async function editPersistedChatTurnFn(
   } catch (error) {
     presentGenerationError(deps, conversationId, {
       error,
+      turnId,
       retry: () => editPersistedChatTurnFn(deps, message),
     });
   }

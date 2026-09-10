@@ -27,4 +27,26 @@ describe('Mobile text generation resend journey', () => {
     });
     expect(view.queryByText('Generation Error')).toBeNull();
   });
+
+  it('removes the failed attempt when resend succeeds', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'ios' });
+    const view = h.render();
+
+    await h.send('Try this again.', {
+      throwMessage: 'The first attempt failed.',
+    });
+    await h.rtl.waitFor(() => {
+      expect(view.getByText('The first attempt failed.')).toBeVisible();
+    });
+    h.rtl.fireEvent.press(view.getByText('OK'));
+
+    h.boundary.llama!.scriptCompletion({ text: 'The retry worked.' });
+    await h.openActionMenu('user', 'dots');
+    h.rtl.fireEvent.press(view.getByTestId('action-retry'));
+
+    await h.rtl.waitFor(() => {
+      expect(view.getByText('The retry worked.')).toBeVisible();
+      expect(view.queryByText('The first attempt failed.')).toBeNull();
+    });
+  });
 });

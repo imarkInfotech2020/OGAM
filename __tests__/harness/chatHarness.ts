@@ -799,6 +799,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
         content?: string;
         reasoning?: string;
         thinkingText?: string;
+        throwMessage?: string;
         toolCalls?: unknown[];
         completionMeta?: CompletionMeta;
       },
