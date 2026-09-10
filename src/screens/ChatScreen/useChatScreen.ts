@@ -1,5 +1,4 @@
-import { useModelResidencyStore } from '../../stores/modelResidencyStore';
-import { useRef, useState, useCallback, useMemo } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import {
   NavigationProp,
   useNavigation,
@@ -8,12 +7,11 @@ import {
 } from '@react-navigation/native';
 import { AlertState, initialAlertState } from '../../components';
 import { useAppStore, useChatStore } from '../../stores';
-import { useDiscoveredRemoteModels } from '../../hooks/useDiscoveredRemoteModels';
 import { useActiveTextCapabilities } from '../../hooks/useActiveTextCapabilities';
 import { useSyncIdentityStore } from '../../stores/syncIdentityStore';
 import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
 import { useActiveTextModel } from '../../hooks/useActiveTextModel';
-import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
+import { useActiveImageModel } from '../../hooks/useActiveImageModel';
 import { useMobileModelInventory } from '../../hooks/useMobileModelInventory';
 import {
   useModelsProjection,
@@ -107,22 +105,6 @@ function projectActiveConversation(
 export const useChatScreen = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<ChatScreenRouteProp>();
-  // The store owns "the text model is loading", not this component. The live-stream service
-  // subscribes to that store, so a paired device learns about the wait by construction instead of
-  // sitting on "Preparing reply..." while this phone says "Loading Qwen3.5 2B".
-  const isModelLoading = useChatStore(state => state.isModelLoading);
-  const setIsModelLoading = useChatStore(state => state.setIsModelLoading);
-  const setLoadingModelName = useChatStore(state => state.setLoadingModelName);
-  const [loadingModel, setLoadingModelState] = useState<DownloadedModel | null>(
-    null,
-  );
-  const setLoadingModel = useCallback(
-    (model: DownloadedModel | null) => {
-      setLoadingModelState(model);
-      setLoadingModelName(model?.name ?? null);
-    },
-    [setLoadingModelName],
-  );
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
@@ -162,7 +144,6 @@ export const useChatScreen = () => {
   // list refresh, or another UI/device-state update.
   const downloadedModels = useAppStore(s => s.downloadedModels);
   const loadedSettings = useAppStore(s => s.loadedSettings);
-  const downloadedImageModels = useAppStore(s => s.downloadedImageModels);
   // Actions are created once with the store, so each of these is a stable reference and never
   // causes a render on its own. They are kept as separate selectors rather than bundled with the
   // data above so nothing has to shallow-compare a mixed object of functions and live values.
@@ -175,9 +156,6 @@ export const useChatScreen = () => {
   // reload comparison, generation details, and debug prompt cannot drift from another store copy.
   const settings = useModelsProjection().settings;
   const generatedImages = useGeneratedImageGalleryProjection();
-  const textModelEvicted = useModelResidencyStore(s => s.textModelEvicted);
-
-  const discoveredModels = useDiscoveredRemoteModels();
 
   // Selection only (which conversation is open) - ephemeral UI/navigation state, not durable
   // content. The conversation's durable facts and transcript come only from Workspace Content below.
@@ -205,7 +183,7 @@ export const useChatScreen = () => {
   // resolved by the shared model state). This screen used to re-derive it with its own copy of the rule,
   // which is how it ended up refusing to send to a model the engine had loaded.
   const activeModelInfo = useActiveTextModel();
-  const activeImageSnapshot = useActiveMobileModel('image');
+  const activeImageModelInfo = useActiveImageModel();
   const availableModels = useMobileModelInventory();
 
   // activeModel is for LOCAL models only (for file path, memory checks, etc.)
@@ -215,10 +193,24 @@ export const useChatScreen = () => {
   const activeRemoteModel = activeModelInfo.isRemote
     ? (activeModelInfo.model as RemoteModel | null)
     : null;
-  const hasTextModel = activeModelInfo.modelId !== null;
-  const hasActiveModel = hasTextModel || activeImageSnapshot.model !== null;
+  const hasTextModel = activeModelInfo.selected && activeModelInfo.modelId !== null;
+  const hasImageModel =
+    activeImageModelInfo.selected && activeImageModelInfo.modelId !== null;
+  const hasActiveModel = hasTextModel || hasImageModel;
   const activeModelName = activeModelInfo.modelName;
   const hasAvailableModels = hasUsableChatRoute(availableModels);
+  const isModelLoading =
+    activeModelInfo.loading || activeImageModelInfo.loading;
+  const loadingModelName = activeModelInfo.loading
+    ? activeModelInfo.modelName
+    : activeImageModelInfo.loading
+    ? activeImageModelInfo.modelName
+    : undefined;
+  const textModelEvicted =
+    activeModelInfo.selected &&
+    !activeModelInfo.isRemote &&
+    !activeModelInfo.ready &&
+    !activeModelInfo.loading;
 
   const effectiveProjectId = activeConversation
     ? activeConversation.projectId
@@ -226,17 +218,7 @@ export const useChatScreen = () => {
   const activeProject = effectiveProjectId
     ? projects.find(project => project.id === effectiveProjectId) ?? null
     : null;
-  const activeImageModel =
-    activeImageSnapshot.model?.source === 'local'
-      ? downloadedImageModels.find(
-          model => model.id === activeImageSnapshot.model?.id,
-        )
-      : activeImageSnapshot.model?.serverId
-      ? discoveredModels[activeImageSnapshot.model.serverId]?.find(
-          model => model.id === activeImageSnapshot.model?.id,
-        )
-      : undefined;
-  const imageModelLoaded = !!activeImageModel;
+  const activeImageModel = activeImageModelInfo.model ?? undefined;
   const isGeneratingImage = imageGenState.isGenerating;
   // Shared ChatSessionQueue is the only lifecycle owner. The mobile store below is only the
   // throttled presentation buffer for partial text and reasoning events.
@@ -259,7 +241,7 @@ export const useChatScreen = () => {
     activeConversation,
     activeProject,
     activeImageModel,
-    imageModelLoaded,
+    imageModelLoaded: hasImageModel,
     isStreaming,
     isGeneratingImage,
     imageGenState,
@@ -280,8 +262,6 @@ export const useChatScreen = () => {
     ensureTextModelForChat: () =>
       ensureTextModelForChatFn({
         setShowModelSelector,
-        setLoadingModel,
-        setIsModelLoading,
       }),
     setPendingMessage: (text: string, attachments?: MediaAttachment[]) => {
       pendingMessageRef.current = { text, attachments };
@@ -300,8 +280,6 @@ export const useChatScreen = () => {
     isStreaming,
     settings,
     clearStreamingMessage,
-    setIsModelLoading,
-    setLoadingModel,
     setShowModelSelector,
     setAlertState,
     modelLoadStartTimeRef,
@@ -331,7 +309,7 @@ export const useChatScreen = () => {
         streamingReasoningContent,
         isStreamingForThisConversation,
         isModelLoading,
-        loadingModelName: loadingModel?.name,
+        loadingModelName,
         isGeneratingForThisConversation,
         remotePreviews,
         localDeviceId,
@@ -343,7 +321,7 @@ export const useChatScreen = () => {
       streamingReasoningContent,
       isStreamingForThisConversation,
       isModelLoading,
-      loadingModel?.name,
+      loadingModelName,
       isGeneratingForThisConversation,
       remotePreviews,
       localDeviceId,
@@ -379,7 +357,7 @@ export const useChatScreen = () => {
 
   return {
     isModelLoading,
-    loadingModel,
+    loadingModelName,
     supportsVision,
     showProjectSelector,
     setShowProjectSelector,
@@ -415,7 +393,9 @@ export const useChatScreen = () => {
     activeModelName,
     activeProject,
     activeImageModel,
-    imageModelLoaded,
+    imageModelLoaded: hasImageModel,
+    imageModelReady: activeImageModelInfo.ready,
+    modelError: activeModelInfo.error ?? activeImageModelInfo.error,
     isGeneratingImage,
     imageGenerationProgress: imageGenState.progress,
     imageGenerationStatus: imageGenState.status,

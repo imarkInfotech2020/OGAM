@@ -39,19 +39,6 @@ export interface ChatState {
   resetStreamingSegment: () => void;
   setIsStreaming: (streaming: boolean) => void;
   setIsThinking: (thinking: boolean) => void;
-  /**
-   * The text model is loading, and which one.
-   *
-   * Here rather than in ChatScreen's `useState`, which is where it used to live. A fact known only
-   * to a component is a fact sync cannot see: the phone showed "Loading Qwen3.5 2B" for tens of
-   * seconds while every paired device sat on "Preparing reply...", because the live-stream service
-   * subscribes to THIS store and there was nothing here to read. The image path never had the bug -
-   * its loading state was always a published phase.
-   */
-  isModelLoading: boolean;
-  loadingModelName: string | null;
-  setIsModelLoading: (loading: boolean) => void;
-  setLoadingModelName: (name: string | null) => void;
   lastReplyEnd: ReplyEnd | null;
   noteReplyEndHandled: () => void;
   clearStreamingMessage: () => void;
@@ -78,11 +65,6 @@ type StreamingFields = Pick<
  * and whichever copy was missed would leak that field into the next reply. The type is a `Pick`, so
  * adding a streaming field is a compile error here until it is given a cleared value.
  */
-const MODEL_NOT_LOADING = {
-  isModelLoading: false,
-  loadingModelName: null,
-};
-
 const NO_REPLY_ENDED = { lastReplyEnd: null };
 
 const NO_REPLY_FORMING: StreamingFields = {
@@ -100,7 +82,6 @@ export const useChatStore = create<ChatState>()(
       conversations: [],
       activeConversationId: null,
       ...NO_REPLY_FORMING,
-      ...MODEL_NOT_LOADING,
       ...NO_REPLY_ENDED,
 
       setActiveConversation: conversationId => {
@@ -174,10 +155,6 @@ export const useChatStore = create<ChatState>()(
 
       noteReplyEndHandled: () => set(NO_REPLY_ENDED),
 
-      setIsModelLoading: (loading: boolean) => set({ isModelLoading: loading }),
-      setLoadingModelName: (name: string | null) =>
-        set({ loadingModelName: name }),
-
       getStreamingState: () => {
         const state = get();
         return {
@@ -187,8 +164,6 @@ export const useChatStore = create<ChatState>()(
           reasoningContent: state.streamingReasoningContent,
           isStreaming: state.isStreaming,
           isThinking: state.isThinking,
-          isModelLoading: state.isModelLoading,
-          loadingModelName: state.loadingModelName,
         };
       },
 
