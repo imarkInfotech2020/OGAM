@@ -362,6 +362,14 @@ export async function installRemoteImageModel(
       image: [{ id: modelId, name: 'Remote Image Model' }],
     },
   });
+  const { applicationFacade } =
+    require('../../src/services/applicationFacade') as typeof import('../../src/services/applicationFacade');
+  const refreshed = await applicationFacade().models.refresh();
+  if (!refreshed.ok) {
+    throw new Error(
+      `Remote image catalog refresh failed: ${refreshed.failure.kind}`,
+    );
+  }
   await selectMobileModel({
     source: 'remote',
     hostId: server.id,
@@ -377,6 +385,9 @@ type RemoteSpeechCategory = 'transcription' | 'voice';
 export async function installRemoteSpeechModel(
   category: RemoteSpeechCategory,
 ): Promise<{ serverId: string; modelId: string }> {
+  // Selection activates the route on Off Grid Desktop. Install the external server before the
+  // real application selection command reaches that network boundary.
+  installRemoteSpeechResponses('');
   const { useRemoteServerStore } = require('../../src/stores');
   const {
     remoteServerManager,
@@ -425,8 +436,69 @@ export async function installRemoteSpeechModel(
 
 /** Off Grid Desktop STT and TTS responses at the HTTP boundary. */
 export function installRemoteSpeechResponses(transcript: string): void {
+  const { useRemoteServerStore } = require('../../src/stores');
+  const existingServer = useRemoteServerStore
+    .getState()
+    .servers.find(
+      (candidate: { provider?: string }) =>
+        candidate.provider === 'offgrid-desktop',
+    );
+  const textModels = existingServer?.catalog?.text ?? [];
+  const selectedTextModel = existingServer?.selections?.text;
   global.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
+    if (url.endsWith('/models/activate')) {
+      return response({ success: true });
+    }
+    if (url.endsWith('/models/catalog')) {
+      return response({
+        // Off Grid Desktop exposes one multimodal catalog. A speech-model activation refreshes
+        // that whole catalog; returning speech rows only would falsely remove the selected text
+        // route and make the real Chat screen fall back to "No Model Selected".
+        kinds: [
+          ...(textModels.length > 0 ? ['text'] : []),
+          'transcription',
+          'voice',
+        ],
+        models: [
+          ...textModels.map((model: { id: string; name: string; capabilities?: unknown }) => ({
+            id: model.id,
+            name: model.name,
+            kind: 'text',
+            files: [],
+            ...(model.capabilities ? { capabilities: model.capabilities } : {}),
+          })),
+          {
+            id: 'remote-whisper-model',
+            name: 'Remote Whisper Model',
+            kind: 'transcription',
+            files: [],
+          },
+          {
+            id: 'remote-voice-model',
+            name: 'Remote Voice Model',
+            kind: 'voice',
+            files: [],
+          },
+        ],
+      });
+    }
+    if (url.endsWith('/models/installed')) {
+      return response({
+        installed: [
+          ...textModels.map((model: { id: string }) => model.id),
+          'remote-whisper-model',
+          'remote-voice-model',
+        ],
+      });
+    }
+    if (url.endsWith('/models/active')) {
+      return response({
+        ...(selectedTextModel ? { text: selectedTextModel } : {}),
+        transcription: 'remote-whisper-model',
+        voice: 'remote-voice-model',
+      });
+    }
     if (url.endsWith('/v1/audio/transcriptions')) {
       return response({ text: transcript });
     }
