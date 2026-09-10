@@ -268,12 +268,12 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
           if (completionWon) abortRequested = false;
           // Register the terminal operation before invoking the native move so
           // abort and explicit cancellation always observe the same promise.
+          logger.log('[MODEL-DOWNLOAD-BOUNDARY]', {
+            event: 'promotion_requested',
+            transferId,
+            destination,
+          });
           const terminalMove = Promise.resolve()
-            .then(() => logger.log('[MODEL-DOWNLOAD-BOUNDARY]', {
-              event: 'promotion_requested',
-              transferId,
-              destination,
-            }))
             .then(() => native.moveCompletedDownload(transferId, destination))
             .then(() => undefined);
           const terminal: TerminalOperation = { kind: 'move', promise: terminalMove };

@@ -31,7 +31,7 @@ import { aggregateTextModelDownloads, buildFileDownloadHandler, modelDownloadMat
 import { projectModelFileCardState } from './modelFileCardState';
 import { modelDownloadRepositoryId } from '../../services/startModelDownload';
 import { TextModelImportProgress, TextModelsToolbar } from './TextModelImportControl';
-import { hasPendingDownloadCommand } from '../../hooks/usePendingModelCommand';
+import { isDownloadTransitionPending } from '../../hooks/usePendingModelCommand';
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
 }
@@ -80,9 +80,8 @@ const ModelDetailView: React.FC<DetailProps> = ({
 
   const downloads = useModelDownloadsProjection();
   const activeModelOperations = useModelsProjection().operations.active;
-  const projectorRepairs = activeModelOperations.filter(
-    operation => operation.kind === 'projector_repair' && operation.state === 'active',
-  );
+  const projectorRepairs = activeModelOperations.filter(operation =>
+    operation.kind === 'projector_repair' && operation.state === 'active');
 
   const getFileCardState = (item: ModelFile) => {
     const repositoryId = modelDownloadRepositoryId(selectedModel.id, item.name);
@@ -118,7 +117,8 @@ const ModelDetailView: React.FC<DetailProps> = ({
     const recommended = liteRTMeta ? { highlightText: liteRTMeta.highlight } : undefined;
     const repositoryId = modelDownloadRepositoryId(selectedModel.id, item.name);
     const download = downloads.find(row => modelDownloadMatchesFile(row, repositoryId, item.name));
-    const downloadPending = hasPendingDownloadCommand(activeModelOperations, s.downloadKey, download?.downloadId);
+    const downloadPending = isDownloadTransitionPending({ operations: activeModelOperations,
+      modelId: s.downloadKey, downloadId: download?.downloadId, status: s.progress?.status });
     const retry = async () => {
       if (!download) return;
       const outcome = await applicationFacade().models.retryDownload({ downloadId: download.downloadId });
@@ -159,7 +159,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
         isDownloading={isDownloadingStatus(s.progress?.status)}
         isQueued={isQueuedStatus(s.progress?.status ?? 'completed')}
         isPaused={isPausedStatus(s.progress?.status)}
-        isDownloadPending={downloadPending || s.progress?.status === 'preparing'}
+        isDownloadPending={downloadPending}
         downloadProgress={s.progress?.progress}
         downloadBytes={s.progress && !s.hasFailed ? {
           downloaded: s.progress.bytesDownloaded,

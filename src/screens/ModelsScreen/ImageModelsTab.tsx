@@ -82,7 +82,7 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
   const descriptor = hfModelToDescriptor(model);
   const plan = createImageDownloadPlan(descriptor);
   const entry = useModelDownloadEntry('image', plan.modelId);
-  const downloadPending = usePendingDownloadCommand(plan.modelId, entry?.downloadId);
+  const downloadPending = usePendingDownloadCommand(plan.modelId, entry?.downloadId, entry?.status);
   const transfer = imageTransferState(entry, model.size);
   const authorLabel = model._coreml ? 'Core ML' : imageBackendLabel(model.backend);
   const variantLabel = model.variant ? getVariantLabel(model.variant) : undefined;
@@ -126,7 +126,7 @@ const ImageModelCard: React.FC<ImageModelCardProps> = ({
         isDownloading={transfer.isDownloading}
         isQueued={transfer.isQueued}
         isPaused={transfer.isPaused}
-        isDownloadPending={downloadPending || entry?.status === 'preparing'}
+        isDownloadPending={downloadPending}
         isDownloaded={isDownloaded}
         downloadProgress={transfer.progress}
         downloadBytes={transfer.bytes}
