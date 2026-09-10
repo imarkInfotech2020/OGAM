@@ -41,7 +41,9 @@ export function useActiveTextModel(): ActiveTextModelResult {
     modelId: snapshot.model?.id ?? null,
     modelName: snapshot.model?.name ?? 'Unknown',
     isRemote: snapshot.model?.source === 'remote',
-    selected: snapshot.selectedId !== null,
+    // `model` is the resolved active route. It can be an automatic fallback before a
+    // persisted explicit selection exists, so `selectedId` alone is not availability.
+    selected: snapshot.model !== null,
     ready: snapshot.ready,
     loading: snapshot.model?.loading === true,
     error: snapshot.model?.error ?? null,

@@ -39,7 +39,7 @@ export function useActiveImageModel(): ActiveImageModelResult {
     modelId: runtime?.id ?? null,
     modelName: runtime?.name ?? 'Unknown',
     isRemote: runtime?.source === 'remote',
-    selected: snapshot.selectedId !== null,
+    selected: snapshot.model !== null,
     ready: snapshot.ready,
     loading: runtime?.loading === true,
     error: runtime?.error ?? null,
