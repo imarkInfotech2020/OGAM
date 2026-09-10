@@ -329,7 +329,6 @@ export const useChatScreen = () => {
     generationDeps: genDeps,
     modelDeps,
     activeModelInfo,
-    supportsToolCalling,
     activeModel,
     settings,
     loadedSettings,

@@ -10,7 +10,6 @@ import {
   Project,
 } from '../../types';
 import type { ActiveTextModelResult } from '../../hooks/useActiveTextModel';
-import { useEnabledToolsSetting } from '../../hooks/useEnabledToolsSetting';
 import type { AppSettings } from '../../stores/appStore';
 import { saveImageToGallery } from './useSaveImage';
 import { computePendingSettings } from './pendingSettings';
@@ -41,7 +40,6 @@ interface ChatScreenActionsArgs {
   generationDeps: GenerationDeps;
   modelDeps: Parameters<typeof handleModelSelectFn>[0];
   activeModelInfo: ActiveTextModelResult;
-  supportsToolCalling: boolean;
   activeModel?: DownloadedModel;
   settings: ModelSettingsRecord;
   loadedSettings: Partial<AppSettings> | null;
@@ -65,7 +63,6 @@ export function useChatScreenActions({
   generationDeps,
   modelDeps,
   activeModelInfo,
-  supportsToolCalling,
   activeModel,
   settings,
   loadedSettings,
@@ -120,16 +117,10 @@ export function useChatScreenActions({
     }
   };
 
-  // The Shared committed projection is the read owner. This hook only READS the enabled tools:
-  // the pickers (ToolsScreen, McpServersScreen) own the toggle through the same seam, so no
-  // second writer of `enabledTools` lives on the chat path.
-  const { enabledTools: committedTools } = useEnabledToolsSetting();
-  const enabledTools = supportsToolCalling ? committedTools : [];
   const canReloadTextModel =
     Boolean(activeModelInfo.modelId) && !activeModelInfo.isRemote;
 
   return {
-    enabledTools,
     hasPendingSettings:
       canReloadTextModel &&
       computePendingSettings(activeModel?.engine, settings, loadedSettings),

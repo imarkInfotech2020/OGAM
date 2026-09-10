@@ -2,7 +2,6 @@ import {
   CHAT_GENERATION_RECLAIM_POLICY,
   DEFAULT_IMAGE_MIME,
   generationMessageText,
-  isMemoryToolAllowed,
   runtimeModelRouteId,
   type ChatContextApplicationPorts,
   type ChatGenerationPort,
@@ -32,7 +31,6 @@ import {
   generationMessage,
   mobileWorkspaceGenerationMessage,
 } from './mobileChatTurnRepository';
-import { committedEnabledToolIds } from './committedToolSelection';
 import { useAppStore } from '../../../stores';
 import type { MediaAttachment, Message } from '../../../types';
 import logger from '../../../utils/logger';
@@ -373,30 +371,22 @@ export function mobileChatSessionPorts(
       rag,
       tools: {
         resolve: async ({ identity }) => {
-          // The committed tool selection has one owner: the Shared Models settings record. The chat
-          // path must resolve tools from the same value the Tools screen commits, never from a store
-          // mirror that a sync-applied or remote patch has not reached yet.
-          const enabledToolIds = committedEnabledToolIds();
           const workspaceContent =
             applicationFacade().workspaceContent.snapshot();
-          const admittedToolIds = enabledToolIds.filter(toolId =>
-            isMemoryToolAllowed(toolId, {
-              projectActive:
-                !!identity.projectId &&
-                workspaceContent.projects.some(
-                  project => project.id === identity.projectId,
-                ),
-              allMemory: true,
-            }),
-          );
-          if (!admittedToolIds.length) return {};
           const messages = workspaceContent.messages
             .filter(
               message => message.conversationId === identity.conversationId,
             )
             .map(workspaceMessage)
             .filter(message => !message.isSystemInfo);
-          const tools = await mobileToolDefinitions(admittedToolIds, messages);
+          const tools = await mobileToolDefinitions(messages, {
+            projectActive:
+              !!identity.projectId &&
+              workspaceContent.projects.some(
+                project => project.id === identity.projectId,
+              ),
+            allMemory: true,
+          });
           return tools.length ? { tools, toolChoice: 'auto' } : {};
         },
       },
