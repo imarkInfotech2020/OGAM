@@ -15,8 +15,7 @@
  *     useFocusEffect: () => {}, useIsFocused: () => true,
  *   }));
  *
- *   const h = await setupChatScreen({ engine: 'llama' });   // installs boundary + loads a real engine
- *   h.render();                                             // mounts the real ChatScreen
+ *   const h = await startChatScreen(usingLlama());          // starts the real Chat screen
  *   await h.send('what is the capital of France', { text: 'Paris.' });  // types, presses send, awaits reply
  *   expect(h.view.queryByText(/Paris\./)).not.toBeNull();
  */
@@ -28,13 +27,31 @@ import {
   type CompletionMeta,
 } from './nativeBoundary';
 import { createDownloadedModel } from '../utils/factories';
-import {doMockRealSqlite} from './sqliteFake';
+import { doMockRealSqlite } from './sqliteFake';
+import { ChatScenario, type ChatScenarioOptions } from './chatScenario';
+
+export {
+  CHAT_LOCAL_IMAGE_SCENARIOS,
+  CHAT_LOCAL_TEXT_SCENARIOS,
+  CHAT_IMAGE_SCENARIOS,
+  CHAT_IMAGE_GENERATION_SCENARIOS,
+  CHAT_REMOTE_IMAGE_SCENARIOS,
+  CHAT_SCENARIO_MATRIX,
+  CHAT_THINKING_DISABLED_SCENARIOS,
+  CHAT_TEXT_SCENARIOS,
+  getBackendForPlatform,
+  usingEngine,
+  usingLiteRT,
+  usingLlama,
+  usingRemoteText,
+  withoutTextModel,
+} from './chatScenario';
 
 /** Shared route params the test's navigation mock reads (set by setupChatScreen). */
 export const routeHolder: { params: Record<string, unknown> } = { params: {} };
 
-export interface ChatHarnessOptions {
-  engine: 'llama' | 'litert' | 'remote';
+export interface ChatHarnessOptions extends ChatScenarioOptions {
+  engine: ChatScenario['engine'];
   /** 'ios' surfaces the Metal accelerator path for llama; default 'android'. */
   platform?: 'ios' | 'android';
   ram?: RamProfile;
@@ -68,19 +85,6 @@ export interface ChatHarnessOptions {
   chatTemplate?: string;
 }
 
-export const CHAT_LOCAL_PLATFORM_ENGINE_CASES = [
-  { label: 'ios/llama', platform: 'ios', engine: 'llama' },
-  { label: 'android/llama', platform: 'android', engine: 'llama' },
-  { label: 'android/litert', platform: 'android', engine: 'litert' },
-] as const satisfies readonly (ChatHarnessOptions & { label: string })[];
-
-export const CHAT_PLATFORM_ENGINE_CASES = [
-  CHAT_LOCAL_PLATFORM_ENGINE_CASES[0],
-  { label: 'ios/remote', platform: 'ios', engine: 'remote' },
-  ...CHAT_LOCAL_PLATFORM_ENGINE_CASES.slice(1),
-  { label: 'android/remote', platform: 'android', engine: 'remote' },
-] as const satisfies readonly (ChatHarnessOptions & { label: string })[];
-
 type ChatTextScript = {
   text?: string;
   content?: string;
@@ -96,8 +100,11 @@ type ChatTextScript = {
   holdBeforeStream?: boolean;
 };
 
-export async function setupChatScreen(opts: ChatHarnessOptions) {
+export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
   const platform = opts.platform ?? 'android';
+  const localTextEngine =
+    opts.engine === 'llama' || opts.engine === 'litert' ? opts.engine : null;
+  const hasLocalTextModel = localTextEngine !== null;
   const ram = opts.ram ?? { platform, totalBytes: 12 * GB, availBytes: 8 * GB };
   const boundary = installNativeBoundary({
     llama: opts.engine === 'llama',
@@ -108,6 +115,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     download: opts.download,
   });
   const originalXHR = global.XMLHttpRequest;
+  const originalFetch = global.fetch;
   // The application root now starts Workspace Content and the generated-image gallery before Home
   // renders. Give both real repositories a real SQLite boundary; the global empty-row stub cannot
   // report schema columns and therefore cannot represent their additive migrations.
@@ -146,18 +154,23 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // A realistic small model (2GB) is device-faithful and loads under the budget; memory/OOM tests set
   // their own explicit sizes + RAM profiles and are unaffected.
   const fileSize = opts.modelFileSizeBytes ?? 2 * 1024 * 1024 * 1024;
-  const model = opts.engine === 'remote' ? null : createDownloadedModel({
-    id: 'm',
-    name: opts.modelName ?? 'Test Model',
-    engine: opts.engine,
-    filePath: modelPath,
-    fileName,
-    fileSize,
-    liteRTVision: opts.vision,
-    liteRTAudio: opts.audio,
-  });
+  const model = !hasLocalTextModel
+    ? null
+    : createDownloadedModel({
+        id: 'm',
+        name: opts.modelName ?? 'Test Model',
+        engine: localTextEngine,
+        filePath: modelPath,
+        fileName,
+        fileSize,
+        liteRTVision: opts.vision,
+        liteRTAudio: opts.audio,
+      });
   if (model) boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
-  await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify(model ? [model] : []));
+  await AsyncStorage.setItem(
+    '@local_llm/downloaded_models',
+    JSON.stringify(model ? [model] : []),
+  );
   await AsyncStorage.setItem(
     'local-llm-app-storage',
     JSON.stringify({
@@ -185,16 +198,108 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // profile boundary before the real store hydrates, so spotlight steps cannot intercept chat
   // gestures and the journey never manufactures application state with a direct store write.
 
-  const {startMobileApplicationFixture} = require('./mobileApplicationFixture') as typeof import('./mobileApplicationFixture');
-  const applicationFixture = await startMobileApplicationFixture({pro: opts.pro});
-  const {HomeScreen} = require('../../src/screens/HomeScreen');
+  const { startMobileApplicationFixture } =
+    require('./mobileApplicationFixture') as typeof import('./mobileApplicationFixture');
+  const applicationFixture = await startMobileApplicationFixture({
+    pro: opts.pro,
+  });
+  const { HomeScreen } = require('../../src/screens/HomeScreen');
+
+  const placeLocalImageModel = async (
+    imgOpts: {
+      id?: string;
+      backend?: 'mnn' | 'qnn' | 'coreml';
+      size?: number;
+    } = {},
+  ) => {
+    const { id = 'sd', backend = 'coreml', size } = imgOpts;
+    const archiveName = `${id}-${backend}.zip`;
+    const sourceUri = `/external/${archiveName}`;
+    boundary.fs!.seedTextFile(sourceUri, 'PK', 1024);
+    const zip = require('react-native-zip-archive') as { unzip: jest.Mock };
+    zip.unzip.mockImplementation(
+      async (_archive: string, destination: string) => {
+        const seedFile = (name: string, bytes = 8 * 1024 * 1024) =>
+          boundary.fs!.seedFile(`${destination}/${name}`, bytes);
+        if (backend === 'mnn' || backend === 'qnn') {
+          ['pos_emb.bin', 'token_emb.bin', 'tokenizer.json'].forEach(name =>
+            seedFile(name),
+          );
+          if (backend === 'mnn') {
+            [
+              'unet.mnn',
+              'unet.mnn.weight',
+              'vae_decoder.mnn',
+              'vae_decoder.mnn.weight',
+              'clip_v2.mnn',
+              'clip_v2.mnn.weight',
+            ].forEach(name => seedFile(name));
+          } else {
+            ['unet.bin', 'vae_decoder.bin', 'clip_v2.mnn'].forEach(name =>
+              seedFile(name),
+            );
+          }
+        } else {
+          boundary.fs!.seedDir(`${destination}/model.mlmodelc`);
+          seedFile('model.mlmodelc/model.bin', size ?? 8 * 1024 * 1024);
+        }
+        return destination;
+      },
+    );
+
+    const { importMobileImageArchive } =
+      require('../../src/services/adapters/models/library/imageArchiveImportAdapter') as typeof import('../../src/services/adapters/models/library/imageArchiveImportAdapter');
+    const imported = await importMobileImageArchive({
+      sourceUri,
+      fileName: archiveName,
+    });
+    if (imported.status !== 'imported') {
+      throw new Error(
+        `Image model import failed during ${imported.stage}: ${imported.error}`,
+      );
+    }
+    await applicationFixture.refreshModels();
+    const projected = applicationFixture.application.models
+      .snapshot()
+      .inventory.find(candidate => candidate.id === imported.model.id);
+    if (!projected)
+      throw new Error(
+        'Imported image model was not published to the application inventory.',
+      );
+    return imported.model;
+  };
+
+  const placeRemoteImageModel = async () => {
+    const { installRemoteImageModel, installRemoteImageResponse } =
+      require('./remoteHarness') as typeof import('./remoteHarness');
+    installRemoteImageResponse();
+    const remote = await installRemoteImageModel();
+    await applicationFixture.refreshModels();
+    return remote;
+  };
+
+  let scenarioImagePlaced = false;
 
   if (opts.engine === 'remote') {
-    const {installRemoteModel} = require('./remoteHarness') as typeof import('./remoteHarness');
+    const { installRemoteModel } =
+      require('./remoteHarness') as typeof import('./remoteHarness');
     await installRemoteModel({
-      caps: {supportsVision: true, supportsToolCalling: true, supportsThinking: true},
+      caps: {
+        supportsVision: true,
+        supportsToolCalling: true,
+        supportsThinking: true,
+      },
     });
     await applicationFixture.refreshModels();
+  }
+  if (
+    opts.engine === 'none' &&
+    opts instanceof ChatScenario &&
+    opts.imageBackend
+  ) {
+    if (opts.imageBackend === 'remote') await placeRemoteImageModel();
+    else await placeLocalImageModel({ backend: opts.imageBackend });
+    scenarioImagePlaced = true;
   }
 
   // GESTURE: mount the real Home screen — its REAL hydration loads the record — then open the picker and TAP
@@ -209,10 +314,12 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       },
     }),
   );
-  if (opts.engine !== 'remote') {
+  if (hasLocalTextModel) {
     await rtl.waitFor(
       () => {
-        expect(useAppStore.getState().downloadedModels.length).toBeGreaterThan(0);
+        expect(useAppStore.getState().downloadedModels.length).toBeGreaterThan(
+          0,
+        );
       },
       { timeout: 4000 },
     );
@@ -232,8 +339,15 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   await rtl.waitFor(
     () => {
       // The selection is the shared active route; the store carries no selection field any more.
-      expect(applicationFixture.application.models.snapshot().active.text?.model?.id ?? null).toBe(
-        opts.engine === 'remote' ? 'remote-model' : 'm',
+      expect(
+        applicationFixture.application.models.snapshot().active.text?.model
+          ?.id ?? null,
+      ).toBe(
+        opts.engine === 'remote'
+          ? 'remote-model'
+          : hasLocalTextModel
+          ? 'm'
+          : null,
       );
     },
     { timeout: 4000 },
@@ -241,7 +355,8 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   await rtl.waitFor(
     () => {
       // The user cannot start the next action until the picker has finished closing.
-      if (opts.engine !== 'remote') expect(home.queryAllByTestId(/^text-model-row-/)).toHaveLength(0);
+      if (hasLocalTextModel)
+        expect(home.queryAllByTestId(/^text-model-row-/)).toHaveLength(0);
     },
     { timeout: 4000 },
   );
@@ -257,15 +372,18 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // readiness gate passes deterministically). This is the real native-faked load, not a state shortcut.
   // deferInitialLoad leaves the model selected-but-not-loaded (the real lazy-on-select state) so a test
   // can assert nothing is eager-warmed; the first send then triggers the real lazy load.
-  if (!opts.deferInitialLoad && opts.engine !== 'remote') {
-    const {modelsFailureMessage} = require('@offgrid/application') as typeof import('@offgrid/application');
+  if (!opts.deferInitialLoad && hasLocalTextModel) {
+    const { modelsFailureMessage } =
+      require('@offgrid/application') as typeof import('@offgrid/application');
     const outcome = await applicationFixture.application.models.load({
       modality: 'text',
       modelId: applicationFixture.selectedModelId('text'),
     });
     if (!outcome.ok) {
       throw new Error(
-        `Model load failed: ${outcome.failure.kind}: ${modelsFailureMessage(outcome.failure)}`,
+        `Model load failed: ${outcome.failure.kind}: ${modelsFailureMessage(
+          outcome.failure,
+        )}`,
       );
     }
     await applicationFixture.refreshModels();
@@ -278,13 +396,16 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // token-flush timer that fires inside the NEXT suite and fails it, which is why exactly one rendered
   // suite failed per run with a different name every time.
   {
-    const { mobileChatSession } = require('../../src/screens/ChatScreen/mobileChatSession');
+    const {
+      mobileChatSession,
+    } = require('../../src/screens/ChatScreen/mobileChatSession');
     (
       globalThis as unknown as { __GEN_CLEANUP__?: () => Promise<void> }
     ).__GEN_CLEANUP__ = async () => {
       mobileChatSession.stop();
       await applicationFixture.dispose();
       global.XMLHttpRequest = originalXHR;
+      global.fetch = originalFetch;
     };
   }
 
@@ -292,8 +413,14 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
 
   let releaseRemoteStream: (() => void) | null = null;
   const remoteSse = (content: string, reasoning?: string) =>
-    `${reasoning ? `data: ${JSON.stringify({choices: [{delta: {reasoning_content: reasoning}}]})}\n\n` : ''}` +
-    `data: ${JSON.stringify({choices: [{delta: {content}}]})}\n\n` +
+    `${
+      reasoning
+        ? `data: ${JSON.stringify({
+            choices: [{ delta: { reasoning_content: reasoning } }],
+          })}\n\n`
+        : ''
+    }` +
+    `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n` +
     'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
     'data: [DONE]\n\n';
   const scriptTextTurn = (scripted: ChatTextScript) => {
@@ -302,19 +429,25 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       return;
     }
     if (opts.engine === 'remote') {
-      const {installRemoteStream} = require('./remoteHarness') as typeof import('./remoteHarness');
+      const { installRemoteStream } =
+        require('./remoteHarness') as typeof import('./remoteHarness');
       const content = scripted.content ?? scripted.text ?? '';
       let body: string;
       if (scripted.throwMessage) {
-        body = `data: ${JSON.stringify({error: {message: scripted.throwMessage}})}\n\n`;
+        body = `data: ${JSON.stringify({
+          error: { message: scripted.throwMessage },
+        })}\n\n`;
       } else if (scripted.holdBeforeStream) {
         body = `__PAUSE__\n${remoteSse(content, scripted.reasoning)}`;
       } else if (scripted.pauseAfter !== undefined) {
         const split = content.indexOf(scripted.pauseAfter);
-        const partialEnd = split < 0 ? content.length : split + scripted.pauseAfter.length;
+        const partialEnd =
+          split < 0 ? content.length : split + scripted.pauseAfter.length;
         body = remoteSse(content.slice(0, partialEnd)).replace(
           'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
-          `__PAUSE__\ndata: ${JSON.stringify({choices: [{delta: {content: content.slice(partialEnd)}}]})}\n\n`,
+          `__PAUSE__\ndata: ${JSON.stringify({
+            choices: [{ delta: { content: content.slice(partialEnd) } }],
+          })}\n\n`,
         );
       } else {
         body = remoteSse(content, scripted.reasoning);
@@ -324,11 +457,15 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
         let thinkingRequested = false;
         try {
           const request = JSON.parse(requestBody) as {
-            chat_template_kwargs?: {enable_thinking?: boolean};
+            chat_template_kwargs?: { enable_thinking?: boolean };
             think?: boolean;
           };
-          thinkingRequested = request.chat_template_kwargs?.enable_thinking === true || request.think === true;
-        } catch { /* malformed input stays on the clean scripted path */ }
+          thinkingRequested =
+            request.chat_template_kwargs?.enable_thinking === true ||
+            request.think === true;
+        } catch {
+          /* malformed input stays on the clean scripted path */
+        }
         return thinkingRequested ? remoteSse(scripted.thinkingText) : body;
       }).release;
       return;
@@ -336,6 +473,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     if (scripted.throwMessage) {
       boundary.litert.scriptError(scripted.throwMessage);
       return;
+    }
+    if (opts.engine === 'none') {
+      throw new Error('This scenario has no text model to script.');
     }
     if (scripted.holdBeforeStream) {
       boundary.litert.scriptHang();
@@ -367,6 +507,16 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     useAppStore,
     useChatStore,
     scriptTextTurn,
+    scriptImageTurnFor(
+      scenario: ChatScenario,
+      scripted: { enhancedPrompt: string; thinkingText: string },
+    ) {
+      if (scenario.engine === 'none') return;
+      scriptTextTurn({
+        text: scripted.enhancedPrompt,
+        thinkingText: scripted.thinkingText,
+      });
+    },
     releaseTextStream() {
       if (opts.engine === 'llama') boundary.llama!.releaseStream();
       else if (opts.engine === 'litert') boundary.litert.releaseStream();
@@ -447,51 +597,83 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
         size?: number;
       } = {},
     ) {
-      const {
-        id = 'sd',
-        backend = 'coreml',
-        size,
-      } = imgOpts;
+      return placeLocalImageModel(imgOpts);
+    },
 
-      const archiveName = `${id}-${backend}.zip`;
-      const sourceUri = `/external/${archiveName}`;
-      boundary.fs!.seedTextFile(sourceUri, 'PK', 1024);
-      const zip = require('react-native-zip-archive') as {unzip: jest.Mock};
-      zip.unzip.mockImplementation(async (_archive: string, destination: string) => {
-        const seedFile = (name: string, bytes = 8 * 1024 * 1024) =>
-          boundary.fs!.seedFile(`${destination}/${name}`, bytes);
-        if (backend === 'mnn' || backend === 'qnn') {
-          ['pos_emb.bin', 'token_emb.bin', 'tokenizer.json'].forEach(name => seedFile(name));
-          if (backend === 'mnn') {
-            [
-              'unet.mnn',
-              'unet.mnn.weight',
-              'vae_decoder.mnn',
-              'vae_decoder.mnn.weight',
-              'clip_v2.mnn',
-              'clip_v2.mnn.weight',
-            ].forEach(name => seedFile(name));
-          } else {
-            ['unet.bin', 'vae_decoder.bin', 'clip_v2.mnn'].forEach(name => seedFile(name));
-          }
-        } else {
-          boundary.fs!.seedDir(`${destination}/model.mlmodelc`);
-          seedFile('model.mlmodelc/model.bin', size ?? 8 * 1024 * 1024);
-        }
-        return destination;
-      });
-
-      const {importMobileImageArchive} = require('../../src/services/adapters/models/library/imageArchiveImportAdapter') as typeof import('../../src/services/adapters/models/library/imageArchiveImportAdapter');
-      const imported = await importMobileImageArchive({sourceUri, fileName: archiveName});
-      if (imported.status !== 'imported') {
-        throw new Error(`Image model import failed during ${imported.stage}: ${imported.error}`);
+    /** Place the image route declared by the scenario. Tests never map an OS to a backend. */
+    async placeImageModelFor(scenario: ChatScenario) {
+      if (!scenario.imageBackend) {
+        throw new Error(`${scenario.label} does not declare an image backend.`);
       }
-      await applicationFixture.refreshModels();
-      const projected = applicationFixture.application.models
-        .snapshot()
-        .inventory.find(candidate => candidate.id === imported.model.id);
-      if (!projected) throw new Error('Imported image model was not published to the application inventory.');
-      return imported.model;
+      if (scenario.imageBackend === 'remote') {
+        if (scenarioImagePlaced) return null;
+        scenarioImagePlaced = true;
+        return placeRemoteImageModel();
+      }
+      if (scenarioImagePlaced) return null;
+      scenarioImagePlaced = true;
+      return placeLocalImageModel({ backend: scenario.imageBackend });
+    },
+
+    /** Set the visible in-chat Thinking choice through the real quick-settings control. */
+    async setThinkingEnabledViaUI(enabled: boolean) {
+      const view = this.view!;
+      rtl.fireEvent.press(
+        await rtl.waitFor(() => view.getByTestId('quick-settings-button')),
+      );
+      const toggle = await rtl.waitFor(() =>
+        view.getByTestId('quick-thinking-toggle'),
+      );
+      const readsEnabled = () => Boolean(rtl.within(toggle).queryByText('ON'));
+      if (readsEnabled() !== enabled) rtl.fireEvent.press(toggle);
+      await rtl.waitFor(() => expect(readsEnabled()).toBe(enabled));
+      const { Modal } =
+        require('react-native') as typeof import('react-native');
+      const modal = view
+        .UNSAFE_getAllByType(Modal)
+        .find(candidate =>
+          rtl.within(candidate).queryByTestId('quick-thinking-toggle'),
+        );
+      if (!modal) throw new Error('The quick-settings menu is not open.');
+      rtl.fireEvent(modal, 'requestClose');
+      await rtl.waitFor(() => {
+        expect(view.queryByTestId('quick-thinking-toggle')).toBeNull();
+      });
+    },
+
+    /** Set prompt enhancement through the real Chat Settings sheet. */
+    async setImageEnhancementEnabledViaUI(enabled: boolean) {
+      const view = this.view!;
+      rtl.fireEvent.press(view.getByTestId('chat-settings-icon'));
+      rtl.fireEvent.press(
+        await rtl.waitFor(() => view.getByTestId('modal-image-accordion')),
+      );
+      rtl.fireEvent.press(
+        await rtl.waitFor(() =>
+          view.getByTestId(enabled ? 'image-enhance-on' : 'image-enhance-off'),
+        ),
+      );
+      const enabledDescription =
+        'Text model refines your prompt before image generation (slower but better results)';
+      const disabledDescription =
+        opts.engine === 'none'
+          ? 'Download a text model to enable prompt enhancement'
+          : 'Use your prompt directly for image generation (faster)';
+      await rtl.waitFor(() => {
+        expect(
+          view.getByText(enabled ? enabledDescription : disabledDescription),
+        ).toBeVisible();
+      });
+      const { Modal } =
+        require('react-native') as typeof import('react-native');
+      const modal = view
+        .UNSAFE_getAllByType(Modal)
+        .find(candidate => rtl.within(candidate).queryByText('Chat Settings'));
+      if (!modal) throw new Error('The Chat Settings sheet is not open.');
+      rtl.fireEvent(modal, 'requestClose');
+      await rtl.waitFor(() => {
+        expect(view.queryByText('Chat Settings')).toBeNull();
+      });
     },
 
     /**
@@ -654,6 +836,20 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       });
     },
 
+    /** Attach a document through the real attach popover and native picker boundary. */
+    async attachDocumentViaUI() {
+      const view = this.view!;
+      rtl.fireEvent.press(
+        await rtl.waitFor(() => view.getByTestId('attach-button')),
+      );
+      rtl.fireEvent.press(
+        await rtl.waitFor(() => view.getByTestId('attach-document')),
+      );
+      await rtl.waitFor(() => {
+        expect(view.queryByText('document.txt')).not.toBeNull();
+      });
+    },
+
     /**
      * Arrive-via-UI: turn on "Show Generation Details" by tapping its real segmented control (the same
      * control the settings screen renders). Needed to see the per-message details (model, tok/s, tools
@@ -680,8 +876,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       const {
         TranscriptionModelsTab,
       } = require('../../src/screens/ModelsScreen/TranscriptionModelsTab');
-      const { createTranscriptionModelsSelector } = require('@offgrid/application') as typeof import('@offgrid/application');
-      const { refreshTranscriptionModels } = require('../../src/services/transcriptionModelApplication') as typeof import('../../src/services/transcriptionModelApplication');
+      const { createTranscriptionModelsSelector } =
+        require('@offgrid/application') as typeof import('@offgrid/application');
+      const { refreshTranscriptionModels } =
+        require('../../src/services/transcriptionModelApplication') as typeof import('../../src/services/transcriptionModelApplication');
       const selectTranscriptionModels = createTranscriptionModelsSelector();
 
       boundary.fs!.seedFile(
@@ -718,7 +916,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
 
     /** Acquire the selected Whisper runtime through the same residency intent used by microphone demand. */
     async loadSelectedWhisperOnDemand(modelId = 'tiny.en') {
-      const { mobileResidencyIntents } = require('../../src/services/modelServices/residencyIntents');
+      const {
+        mobileResidencyIntents,
+      } = require('../../src/services/modelServices/residencyIntents');
       const result = await mobileResidencyIntents.ensureTranscription(modelId);
       expect(result).toBe('loaded');
     },
@@ -821,9 +1021,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       // BOUNDARY: the persisted artifact a completed voice-model download leaves — drives shouldLoad in the
       // REAL KokoroTTSBridge. Set via the real store action (like the LLM's @local_llm/downloaded_models
       // record). NOT a phase/isReady poke: readiness below is EMERGENT from the real engine + executorch fake.
-      await useTTSStore
-        .getState()
-        .updateSettings({
+      await useTTSStore.getState().updateSettings({
         modelDownloaded: {
           ...(useTTSStore.getState().settings.modelDownloaded ?? {}),
           [engineId]: true,
@@ -1014,4 +1212,40 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       rtl.fireEvent.press(view.getByText('SAVE & RESEND'));
     },
   };
+}
+
+/**
+ * Start the real Chat screen and apply every declared scenario state through public UI actions.
+ * Boundary-only model and file fixtures remain inside setupChatScreen.
+ */
+export async function startChatScreen(scenario: ChatScenario) {
+  const h = await setupChatScreen(scenario);
+  if (scenario.modality === 'voice') await h.setupWhisperModel();
+  if (scenario.tools?.includes('built-in')) {
+    const { AVAILABLE_TOOLS } =
+      require('../../src/services/tools') as typeof import('../../src/services/tools');
+    for (const tool of AVAILABLE_TOOLS) h.enableToolViaUI(tool.id);
+  }
+  if (scenario.tools?.some(tool => tool !== 'built-in')) {
+    throw new Error(
+      `${scenario.label} requires a Pro, remote, or MCP tool boundary that has not been declared.`,
+    );
+  }
+
+  h.render();
+  if (scenario.imageBackend) await h.placeImageModelFor(scenario);
+  if (scenario.thinkingEnabled !== undefined) {
+    await h.setThinkingEnabledViaUI(scenario.thinkingEnabled);
+  }
+  if (scenario.imageEnhancementEnabled !== undefined) {
+    await h.setImageEnhancementEnabledViaUI(scenario.imageEnhancementEnabled);
+  }
+  if (scenario.modality === 'voice') await h.enterVoiceMode();
+  if (scenario.photoSource) {
+    await h.attachImageViaUI(
+      scenario.photoSource === 'gallery' ? 'library' : 'camera',
+    );
+  }
+  if (scenario.documentAttached) await h.attachDocumentViaUI();
+  return h;
 }

@@ -25,8 +25,8 @@ export function installRemoteStream(
   const bodies: string[] = bodyFactory
     ? []
     : Array.isArray(sseBody)
-      ? [...sseBody]
-      : [sseBody as string];
+    ? [...sseBody]
+    : [sseBody as string];
   let releaseFn: (() => void) | null = null;
   class FakeXHR {
     responseText = '';
@@ -36,22 +36,33 @@ export function installRemoteStream(
     onreadystatechange: null | (() => void) = null;
     onerror: null | (() => void) = null;
     ontimeout: null | (() => void) = null;
-    open(): void { this.readyState = 1; }
-    setRequestHeader(): void { /* headers irrelevant to the fake */ }
-    abort(): void { /* no-op */ }
+    open(): void {
+      this.readyState = 1;
+    }
+    setRequestHeader(): void {
+      /* headers irrelevant to the fake */
+    }
+    abort(): void {
+      /* no-op */
+    }
     send(requestBody?: string): void {
       // Emit the captured body line-by-line, one per macrotask, so the REAL incremental parser runs like it
       // does on device — works for both OpenAI SSE (`data: {…}\n\n`) and Ollama NDJSON (`{…}\n`).
       const body = bodyFactory
         ? bodyFactory(requestBody ?? '')
-        : bodies.length > 1 ? bodies.shift()! : bodies[0];
+        : bodies.length > 1
+        ? bodies.shift()!
+        : bodies[0];
       this.responseText = '';
       const chunks = body.match(/[^\n]*\n/g) ?? [body];
       let i = 0;
       const pump = (): void => {
         if (i < chunks.length) {
           const chunk = chunks[i++];
-          if (chunk.trim() === '__PAUSE__') { releaseFn = () => setTimeout(pump, 0); return; } // hold here
+          if (chunk.trim() === '__PAUSE__') {
+            releaseFn = () => setTimeout(pump, 0);
+            return;
+          } // hold here
           this.responseText += chunk;
           this.onprogress?.();
           setTimeout(pump, 0);
@@ -72,18 +83,28 @@ export function installRemoteStream(
  *  added, its models discovered, the transport registered, and its canonical route selected). Discovery is the
  *  network boundary; we pre-place its result, then mount + gesture as the user. `caps` mirrors what a
  *  server actually advertises (LM Studio/Ollama do NOT advertise supportsThinking → no thinking toggle). */
-export async function installRemoteModel(opts: {
-  name?: string;
-  endpoint?: string;
-  provider?: 'openai-compatible' | 'anthropic';
-  caps?: Partial<{ supportsVision: boolean; supportsToolCalling: boolean; supportsThinking: boolean }>;
-} = {}): Promise<{ serverId: string; modelId: string }> {
-   
+export async function installRemoteModel(
+  opts: {
+    name?: string;
+    endpoint?: string;
+    provider?: 'openai-compatible' | 'anthropic';
+    caps?: Partial<{
+      supportsVision: boolean;
+      supportsToolCalling: boolean;
+      supportsThinking: boolean;
+    }>;
+  } = {},
+): Promise<{ serverId: string; modelId: string }> {
   const { useRemoteServerStore } = require('../../src/stores');
-  const { remoteServerManager } = require('../../src/services/modelServices/remoteServerController');
+  const {
+    remoteServerManager,
+  } = require('../../src/services/modelServices/remoteServerController');
   const { llmService } = require('../../src/services/llm');
-  const { clearMobileModel, selectMobileModel } = require('../../src/services/modelServices');
-   
+  const {
+    clearMobileModel,
+    selectMobileModel,
+  } = require('../../src/services/modelServices');
+
   // A remote model is only USED when no local model is loaded/selected: generationService prefers a loaded
   // local model, and the dispatch keys off appStore.activeModelId. On device, selecting a remote model
   // clears the local selection and no local model is loaded — mirror that so the send routes remote.
@@ -94,10 +115,17 @@ export async function installRemoteModel(opts: {
   const provider = opts.provider ?? 'openai-compatible';
   const modelId = 'remote-model';
 
-  const server = await remoteServerManager.addServer({ name, endpoint, provider });
+  const server = await remoteServerManager.addServer({
+    name,
+    endpoint,
+    provider,
+  });
   const serverId = server.id;
   const model = {
-    id: modelId, name: 'Remote Model', serverId, lastUpdated: 't',
+    id: modelId,
+    name: 'Remote Model',
+    serverId,
+    lastUpdated: 't',
     capabilities: {
       supportsVision: false,
       supportsToolCalling: false,
@@ -112,6 +140,59 @@ export async function installRemoteModel(opts: {
 
   // The application service registers the transport as part of the atomic save transaction.
   // Select through the shared route owner after projecting the discovered catalog.
-  await selectMobileModel({ source: 'remote', hostId: serverId, modality: 'text', modelId });
+  await selectMobileModel({
+    source: 'remote',
+    hostId: serverId,
+    modality: 'text',
+    modelId,
+  });
   return { serverId, modelId };
+}
+
+/** Select a remote image model through the same remote catalog and route used by the app. */
+export async function installRemoteImageModel(
+  opts: {
+    name?: string;
+    endpoint?: string;
+    modelId?: string;
+  } = {},
+): Promise<{ serverId: string; modelId: string }> {
+  const { useRemoteServerStore } = require('../../src/stores');
+  const {
+    remoteServerManager,
+  } = require('../../src/services/modelServices/remoteServerController');
+  const { selectMobileModel } = require('../../src/services/modelServices');
+
+  const current = useRemoteServerStore.getState().servers[0];
+  const server =
+    current ??
+    (await remoteServerManager.addServer({
+      name: opts.name ?? 'Remote Image Server',
+      endpoint: opts.endpoint ?? 'http://localhost:1234',
+      provider: 'openai-compatible',
+    }));
+  const modelId = opts.modelId ?? 'remote-image-model';
+  await remoteServerManager.updateServer(server.id, {
+    catalog: {
+      ...server.catalog,
+      image: [{ id: modelId, name: 'Remote Image Model' }],
+    },
+  });
+  await selectMobileModel({
+    source: 'remote',
+    hostId: server.id,
+    modality: 'image',
+    modelId,
+  });
+  return { serverId: server.id, modelId };
+}
+
+/** Replay one OpenAI-compatible image response at the external HTTP boundary. */
+export function installRemoteImageResponse(): void {
+  global.fetch = (async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ data: [{ b64_json: 'aW1hZ2U=' }] }),
+    text: async () => '',
+  })) as unknown as typeof fetch;
 }
