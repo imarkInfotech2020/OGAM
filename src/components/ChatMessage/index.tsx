@@ -330,7 +330,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   // value from an earlier render.
   const handleSaveEdit = (text: string) => {
     const trimmed = text.trim();
-    if (trimmed !== message.content) onEdit?.(message, trimmed);
+    if (trimmed !== displayContent) onEdit?.(message, trimmed);
     setIsEditing(false);
   };
 

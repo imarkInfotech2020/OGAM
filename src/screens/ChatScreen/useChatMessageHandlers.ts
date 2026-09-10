@@ -1,6 +1,7 @@
 import { Dispatch, SetStateAction } from 'react';
 import { showAlert, AlertState } from '../../components';
 import { Message } from '../../types';
+import { replacePortableMessageText } from '@offgrid/application';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import {
   editPersistedChatTurnFn,
@@ -10,6 +11,7 @@ import {
 } from './useChatGenerationActions';
 import type { GenerationDeps } from './useChatGenerationActions';
 import { supersedeSyncedReplies } from '../../services/sync/supersedeSyncedReplies';
+import { applicationFacade } from '../../services/applicationFacade';
 import { requireWorkspaceConversationMessages } from '../../hooks/useApplicationProjection';
 import { toWorkspaceMessage } from './types';
 
@@ -67,10 +69,50 @@ type EditParams = {
   setDebugInfo: SetState<any>;
 };
 
+async function editAssistantMessage(
+  conversationId: string,
+  message: Message,
+  newContent: string,
+): Promise<void> {
+  const workspaceContent = applicationFacade().workspaceContent;
+  const record = workspaceContent
+    .snapshot()
+    .messages.find(
+      candidate =>
+        candidate.id === message.id &&
+        candidate.conversationId === conversationId,
+    );
+  if (!record || record.portable.role !== 'assistant') {
+    throw new Error(`Assistant message not found: ${message.id}`);
+  }
+  const outcome = await workspaceContent.execute({
+    type: 'update_message',
+    messageId: record.id,
+    portable: {
+      ...record.portable,
+      content: replacePortableMessageText(record.portable.content, newContent),
+    },
+  });
+  if (!outcome.ok) throw new Error(outcome.failure.message);
+}
+
 export async function handleEditMessageFn(genDeps: GenerationDeps, p: EditParams): Promise<void> {
+  if (!p.activeConversationId) return;
+  if (p.message.role === 'assistant') {
+    try {
+      await editAssistantMessage(
+        p.activeConversationId,
+        p.message,
+        p.newContent,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      genDeps.setAlertState(showAlert('Edit Error', message));
+    }
+    return;
+  }
   // Same as retry: no model loaded → alert instead of a silent no-op.
   if (!p.hasActiveModel) { genDeps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
-  if (!p.activeConversationId) return;
   // Same as resend: a synced reply is a live preview until its op lands, so clear it before regenerating.
   supersedeSyncedReplies(p.activeConversationId);
   // Shared ChatSession.edit is the sole durable writer; the edited content reaches the UI through

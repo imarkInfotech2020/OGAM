@@ -67,9 +67,10 @@ export const MessageOverlays: React.FC<MessageOverlaysProps> = ({
     <EditSheet
       visible={isEditing}
       onClose={onCancelEdit}
-      defaultValue={message.content}
+      defaultValue={isUser ? message.content : displayContent}
       onSave={onSaveEdit}
       onCancel={onCancelEdit}
+      resendsAfterSave={isUser}
       styles={styles}
       colors={colors}
     />

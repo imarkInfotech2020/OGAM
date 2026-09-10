@@ -82,7 +82,7 @@ export function ActionMenuSheet({
           </AnimatedPressable>
         )}
 
-        {isUser && canEdit && (
+        {canEdit && (
           <AnimatedPressable
             testID="action-edit"
             hapticType="selection"
@@ -190,6 +190,7 @@ interface EditSheetProps {
   /** Receives the text as typed. The draft never leaves this sheet before Save. */
   onSave: (text: string) => void;
   onCancel: () => void;
+  resendsAfterSave: boolean;
   styles: any;
   colors: any;
 }
@@ -205,6 +206,7 @@ export function EditSheet({
   defaultValue,
   onSave,
   onCancel,
+  resendsAfterSave,
   styles,
   colors,
 }: EditSheetProps) {
@@ -246,7 +248,9 @@ export function EditSheet({
             style={[styles.editButton, styles.editButtonSave]}
             onPress={() => onSave(draft)}
           >
-            <Text style={[styles.editButtonText, styles.editButtonTextSave]}>SAVE & RESEND</Text>
+            <Text style={[styles.editButtonText, styles.editButtonTextSave]}>
+              {resendsAfterSave ? 'SAVE & RESEND' : 'SAVE'}
+            </Text>
           </AnimatedPressable>
         </View>
       </View>
