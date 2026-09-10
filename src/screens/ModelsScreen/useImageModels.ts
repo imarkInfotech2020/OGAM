@@ -31,11 +31,11 @@ import { applicationFacade } from '../../services/applicationFacade';
 import { mobileImageDownloadSelection } from '../../services/adapters/models/modelControlCatalogPort';
 import { getUserFacingDownloadMessage } from '../../utils/downloadErrors';
 import {
+  createImageDownloadPlan,
   filterImageCatalog,
   isRecommendedImageCatalogModel,
   recommendedImageBackendFilter,
 } from '@offgrid/application';
-import { createImageDownloadPlan } from '@offgrid/models';
 
 export function useImageModels(setAlertState: (s: AlertState) => void) {
   const [availableHFModels, setAvailableHFModels] = useState<HFImageModel[]>(

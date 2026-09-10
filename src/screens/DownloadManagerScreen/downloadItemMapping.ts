@@ -5,9 +5,11 @@ import { DownloadedModel, ONNXImageModel } from '../../types';
 import { DownloadItem } from './items';
 import { imageBackendLabel } from '../../utils/imageBackend';
 import { downloadFileRoleLabel } from '../../utils/downloadStatus';
-import type { ModelsSnapshot } from '@offgrid/application';
+import {
+  describeModelCredibility,
+  type ModelsSnapshot,
+} from '@offgrid/application';
 import { mobileImageDownloadMetadata } from '../../services/modelServices/modelDownloadRequests';
-import { describeModelCredibility } from '@offgrid/models';
 
 /**
  * How a download store row, a queued start, or a finished model becomes one Download Manager row.

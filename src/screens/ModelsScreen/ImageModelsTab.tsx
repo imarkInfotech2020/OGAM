@@ -8,8 +8,11 @@ import { showAlert } from '../../components/CustomAlert';
 import { useTheme, useThemedStyles } from '../../theme';
 import { HFImageModel, getVariantLabel } from '../../services/huggingFaceModelBrowser';
 import { ImageModelRecommendation } from '../../types';
-import { isModelDownloadInProgress, modelsFailureMessage } from '@offgrid/application';
-import { createImageDownloadPlan } from '@offgrid/models';
+import {
+  createImageDownloadPlan,
+  isModelDownloadInProgress,
+  modelsFailureMessage,
+} from '@offgrid/application';
 import { useModelDownloadEntry } from '../../hooks/useModelDownloadsProjection';
 import { isDownloadingStatus, isFailedStatus, isPausedStatus, isQueuedStatus } from '../../utils/downloadStatus';
 import { imageBackendLabel } from '../../utils/imageBackend';

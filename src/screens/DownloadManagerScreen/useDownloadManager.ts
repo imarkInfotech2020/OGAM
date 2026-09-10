@@ -11,6 +11,7 @@ import {
   hardwareService,
 } from '../../services';
 import {
+  imageDownloadDescriptorFromMetadata,
   modelsFailureMessage,
   visionRepairMessage,
 } from '@offgrid/application';
@@ -30,7 +31,6 @@ import { buildModelDeleteConfirmation } from '../../components/modelDeleteConfir
 import { autoSetupImageCatalogProvider } from '../../services/autoSetupImageCatalogProvider';
 import { mobileImageDownloadSelection } from '../../services/adapters/models/modelControlCatalogPort';
 import { mobileImageDownloadMetadata } from '../../services/modelServices/modelDownloadRequests';
-import { imageDownloadDescriptorFromMetadata } from '@offgrid/models';
 import { isFailedStatus } from '../../utils/downloadStatus';
 
 export interface UseDownloadManagerResult {
