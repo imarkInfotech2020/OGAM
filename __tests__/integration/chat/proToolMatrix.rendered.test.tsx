@@ -27,7 +27,7 @@ describe.each(CHAT_PRO_TOOL_SCENARIOS)(
         expect(h.assertions.isToolCallVisible('read_calendar_events')).toBe(
           true,
         );
-        expect(h.view!.getByTestId('chat-input')).toBeEnabled();
+        expect(h.assertions.isComposerEnabled()).toBe(true);
       });
       expect(
         await h.assertions.isToolCallClickable(
