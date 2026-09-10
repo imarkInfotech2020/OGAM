@@ -59,6 +59,13 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
   async start(input: Parameters<DownloadTransferPort['start']>[0]): Promise<{ transferId?: string }> {
     this.assertAvailable();
     if (input.signal.aborted) throw new DownloadAbortedError();
+    logger.log('[MODEL-DOWNLOAD-BOUNDARY]', {
+      event: 'start_requested',
+      artifactId: input.id,
+      fileName: input.destination.split('/').pop() ?? input.id,
+      expectedBytes: input.expectedBytes ?? 0,
+      resume: input.resume === true,
+    });
     if (Platform.OS === 'android' && typeof native.requestNotificationPermission === 'function') {
       try { native.requestNotificationPermission(); } catch { /* permission is optional */ }
     }
@@ -78,6 +85,11 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
       resume: input.resume === true,
     });
     const transferId = String(result.downloadId);
+    logger.log('[MODEL-DOWNLOAD-BOUNDARY]', {
+      event: 'start_accepted',
+      artifactId: input.id,
+      transferId,
+    });
     input.onStarted?.(transferId);
     await this.waitForTransfer({
       transferId,
@@ -257,6 +269,11 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
           // Register the terminal operation before invoking the native move so
           // abort and explicit cancellation always observe the same promise.
           const terminalMove = Promise.resolve()
+            .then(() => logger.log('[MODEL-DOWNLOAD-BOUNDARY]', {
+              event: 'promotion_requested',
+              transferId,
+              destination,
+            }))
             .then(() => native.moveCompletedDownload(transferId, destination))
             .then(() => undefined);
           const terminal: TerminalOperation = { kind: 'move', promise: terminalMove };
@@ -268,6 +285,11 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
             if (settled) return;
             settled = true;
             cleanup();
+            logger.log('[MODEL-DOWNLOAD-BOUNDARY]', {
+              event: 'promotion_completed',
+              transferId,
+              destination,
+            });
             if (abortRequested) reject(new DownloadAbortedError());
             else resolve();
           }, cause => {
@@ -277,6 +299,12 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
             if (settled) return;
             settled = true;
             cleanup();
+            logger.error('[MODEL-DOWNLOAD-BOUNDARY]', {
+              event: 'promotion_failed',
+              transferId,
+              destination,
+              reason: cause instanceof Error ? cause.message : String(cause),
+            });
             reject(cause);
           });
         },
@@ -286,6 +314,12 @@ export class NativeDownloadTransferAdapter implements DownloadTransferPort {
           if (settled || this.terminalOperations.has(transferId)) return;
           settled = true;
           cleanup();
+          logger.error('[MODEL-DOWNLOAD-BOUNDARY]', {
+            event: 'transfer_failed',
+            transferId,
+            reason: event.reason ?? 'Download failed',
+            reasonCode: event.reasonCode,
+          });
           reject(new Error(event.reason ?? 'Download failed'));
         },
       });
