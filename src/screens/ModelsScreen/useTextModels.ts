@@ -3,8 +3,7 @@ import {
   useCallback,
   useDeferredValue,
   useMemo,
-  useEffect,
-  useRef,
+  useEffect, useRef,
 } from 'react';
 import { Keyboard, BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -475,7 +474,6 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   const setSizeFilter = useCallback((size: SizeFilter) => patchFilter({ size }), [patchFilter]);
   const setQuantFilter = useCallback((quant: string) => patchFilter({ quant }), [patchFilter]);
   const setSortOption = useCallback((sort: SortOption) => patchFilter({ sort }), [patchFilter]);
-
   const {
     ramGB,
     deviceRecommendation,
@@ -492,14 +490,11 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
   return {
     searchQuery, setSearchQuery, isLoading, isRefreshing, setIsRefreshing,
     hasSearched, selectedModel, setSelectedModel, modelFiles, setModelFiles,
-    isLoadingFiles, filterState, setFilterState, textFiltersVisible,
-    setTextFiltersVisible, downloadedModels, hasActiveFilters, ramGB,
-    deviceRecommendation, filteredResults, recommendedAsModelInfo,
-    trendingAsModelInfo, handleSearch, handleSelectModel, handleDownload,
-    handleRepairMmProj, handleCancelDownload, handleDeleteModel,
-    loadDownloadedModels, clearFilters, toggleFilterDimension, toggleOrg,
-    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter,
-    setSortOption, isModelDownloaded, getDownloadedModel,
-    isRepairingVisionModel,
+    isLoadingFiles, filterState, setFilterState, textFiltersVisible, setTextFiltersVisible,
+    downloadedModels, hasActiveFilters, ramGB, deviceRecommendation, filteredResults, recommendedAsModelInfo,
+    trendingAsModelInfo, handleSearch, handleSelectModel, handleDownload, handleRepairMmProj,
+    handleCancelDownload, handleDeleteModel, loadDownloadedModels, clearFilters, toggleFilterDimension, toggleOrg,
+    setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption, isModelDownloaded,
+    getDownloadedModel, isRepairingVisionModel,
   };
 }
