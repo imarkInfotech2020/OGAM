@@ -25,6 +25,7 @@ import { mobileImageChatGeneration } from '../../services/modelServices/imageCha
 import {
   mobileChatRequestDefaults,
   mobileGenerationMessage,
+  mobileWorkspaceGenerationMessage,
   withMobileChatCommandOptions,
 } from '../../services/adapters/models/mobileChatHostPort';
 import type {
@@ -361,11 +362,38 @@ export async function replayPersistedChatTurnFn(
   if (!conversationId || !deps.hasActiveModel) return;
   if (blockedImageForNonVisionModel(deps, userMessage.attachments)) return;
   await prepareMobileChatGeneration();
+  const workspaceContent = applicationFacade().workspaceContent.snapshot();
+  const persistedMessage = workspaceContent.messages.find(
+    message =>
+      message.id === userMessage.id &&
+      message.conversationId === conversationId,
+  );
+  if (!persistedMessage) return;
+  if (persistedMessage.turnId === null) {
+    const conversation = workspaceContent.conversations.find(
+      candidate => candidate.id === conversationId,
+    );
+    await runPersistedChatTurnFn(deps, {
+      setDebugInfo: () => undefined,
+      targetConversationId: conversationId,
+      turnId: generateId(),
+      userMessageId: persistedMessage.id,
+      userMessage: mobileWorkspaceGenerationMessage(persistedMessage),
+      projectId: conversation?.projectId ?? undefined,
+      imageMode:
+        operation?.type === 'image'
+          ? 'force'
+          : operation?.type === 'text'
+          ? 'disabled'
+          : 'auto',
+    });
+    return;
+  }
   generationSession.begin(conversationId);
   try {
     const turn = await mobileChatSession.regenerate(
       conversationId,
-      userMessage.id,
+      persistedMessage.turnId,
       {
         operation,
         options: mobileCommandOptions(deps),
