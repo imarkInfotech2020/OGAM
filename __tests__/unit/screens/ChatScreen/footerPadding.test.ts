@@ -15,10 +15,10 @@ describe('computeFooterPaddingBottom', () => {
     expect(computeFooterPaddingBottom(true, 48, 'android')).toBe(0);
   });
 
-  it('caps the iOS home-indicator inset at 4', () => {
-    expect(computeFooterPaddingBottom(false, 0, 'ios')).toBe(0);
-    expect(computeFooterPaddingBottom(false, 4, 'ios')).toBe(4);
-    expect(computeFooterPaddingBottom(false, 34, 'ios')).toBe(4);
+  it('lifts the iOS composer by one spacing step and caps the home-indicator inset', () => {
+    expect(computeFooterPaddingBottom(false, 0, 'ios')).toBe(8);
+    expect(computeFooterPaddingBottom(false, 4, 'ios')).toBe(12);
+    expect(computeFooterPaddingBottom(false, 34, 'ios')).toBe(12);
   });
 
   it('caps a thin Android gesture-navigation inset at 4', () => {

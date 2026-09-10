@@ -30,6 +30,7 @@ import { useModelResidencyBusy } from '../../services/modelServices/useModelResi
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
+import { SPACING } from '../../constants';
 
 export type ChatMessageAreaProps = {
   flatListRef: React.RefObject<FlatList | null>;
@@ -41,17 +42,16 @@ export type ChatMessageAreaProps = {
   renderItem: (info: { item: any; index: number }) => React.JSX.Element;
 };
 
-// The bottom gap below the input controls should visually MATCH the top gap
-// (the ChatInput container's paddingTop = 12), not consume the full home-indicator
-// safe-area inset — that made the bottom feel like a large dead band vs the top.
-// The container already pads its bottom by 8, so cap the extra footer at 4 → 12
-// total, symmetric with the top. Collapses to 0 while the keyboard is up.
+// Keep the composer clear of the iPhone home indicator. The input owns its base padding;
+// this footer adds one design-system spacing step on iOS and preserves the existing capped inset.
+// It collapses while the keyboard is up so no gap opens above the keyboard.
 //
 // iOS reports its home-indicator overlay at about 34px on many devices. Android can
 // report a similarly tall inset for an opaque 3-button navigation bar. The size
 // alone cannot distinguish them: iOS is always an overlay here, while only Android
 // needs the tall-inset exception for real navigation controls.
 const FOOTER_SAFE_CAP = 4;
+const IOS_COMPOSER_LIFT = SPACING.sm;
 // Home-indicator / gesture-nav overlays sit at ~24px or below on the devices we
 // target; a 3-button nav bar is taller. Above this, treat the inset as opaque.
 const OVERLAY_INSET_MAX = 24;
@@ -61,7 +61,8 @@ export const computeFooterPaddingBottom = (
   platform: typeof Platform.OS = Platform.OS,
 ): number => {
   if (keyboardVisible) return 0;
-  if (platform === 'ios') return Math.min(insetBottom, FOOTER_SAFE_CAP);
+  if (platform === 'ios')
+    return IOS_COMPOSER_LIFT + Math.min(insetBottom, FOOTER_SAFE_CAP);
   // Opaque nav bar (tall inset): pad the full inset so controls clear it.
   if (insetBottom > OVERLAY_INSET_MAX) return insetBottom;
   // Thin overlay inset: keep the symmetric-with-top cap.
