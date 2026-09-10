@@ -41,7 +41,7 @@ describe('batch2 getDisplayMessages — thinking -> streaming -> done transition
 
     expect(out).toHaveLength(2);
     const bubble = out[1] as any;
-    expect(bubble.id).toBe('thinking');
+    expect(bubble.id).toBe('streaming');
     expect(bubble.isThinking).toBe(true);
     expect(bubble.content).toBe(''); // no generated text yet
     expect(bubble.isStreaming).toBeUndefined();
@@ -138,7 +138,7 @@ describe('batch2 getDisplayMessages — thinking -> streaming -> done transition
     const thinking = getDisplayMessages([userMsg], {
       ...baseStreaming, isThinking: true, isStreamingForThisConversation: true,
     });
-    expect((thinking[1] as any).id).toBe('thinking');
+    expect((thinking[1] as any).id).toBe('streaming');
 
     // 7. first token -> streaming
     const streaming = getDisplayMessages([userMsg], {

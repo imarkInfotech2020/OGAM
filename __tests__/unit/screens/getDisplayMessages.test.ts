@@ -22,7 +22,7 @@ describe('getDisplayMessages', () => {
       isGeneratingForThisConversation: true,
     });
     const last = out[out.length - 1] as any;
-    expect(last.id).toBe('thinking');
+    expect(last.id).toBe('streaming');
     expect(last.isThinking).toBe(true);
     expect(last.content).toBe('Loading Qwen3.5-0.8B...');
   });
@@ -53,7 +53,7 @@ describe('getDisplayMessages', () => {
       isStreamingForThisConversation: true,
     });
     const last = out[out.length - 1] as any;
-    expect(last.id).toBe('thinking');
+    expect(last.id).toBe('streaming');
     expect(last.content).toBe('');
   });
 

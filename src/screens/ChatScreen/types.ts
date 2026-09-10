@@ -277,7 +277,7 @@ function localDisplayMessages(
     return [
       ...allMessages,
       {
-        id: 'thinking',
+        id: STREAMING_MESSAGE_ID,
         role: 'assistant' as const,
         content: streaming.loadingModelName
           ? `Loading ${streaming.loadingModelName}...`
@@ -294,7 +294,7 @@ function localDisplayMessages(
     return [
       ...allMessages,
       {
-        id: 'thinking',
+        id: STREAMING_MESSAGE_ID,
         role: 'assistant' as const,
         content: '',
         timestamp: Date.now(),

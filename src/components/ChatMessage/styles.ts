@@ -269,6 +269,11 @@ const createThinkingStyles = (colors: ThemeColors) => ({
     padding: 8,
     gap: 6,
   },
+  // A collapsed row is a control, not a label. One token step on each edge makes its
+  // minimum content height 44px (20px icon + 12px top + 12px bottom) without a magic number.
+  thinkingHeaderCollapsed: {
+    paddingVertical: SPACING.md,
+  },
   thinkingHeaderIconBox: {
     width: 20,
     height: 20,
