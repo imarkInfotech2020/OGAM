@@ -22,7 +22,7 @@ describe.each(CHAT_DOCUMENT_ATTACHMENT_SCENARIOS)(
       const h = await startChatScreen(scenario);
 
       expect(h.assertions.isAttachedDocumentVisible()).toBe(true);
-      expect(h.view!.getByText('document.txt')).toBeVisible();
+      expect(h.assertions.isDocumentNameVisible('document.txt')).toBe(true);
     });
   },
 );
