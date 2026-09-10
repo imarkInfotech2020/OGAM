@@ -19,6 +19,8 @@ export interface ChatAssertions {
   isAttachedDocumentVisible(): boolean;
   isToolCallVisible(toolName: string): boolean;
   isToolResultVisible(detail: TextMatcher): boolean;
+  isVoicePlaybackControlVisible(): boolean;
+  isVoiceTranscriptClickable(text: TextMatcher): Promise<boolean>;
   isAttachedPhotoClickable(): Promise<boolean>;
   isAttachedDocumentClickable(): Promise<boolean>;
   isToolCallClickable(
@@ -128,6 +130,26 @@ export function createChatAssertions(
 
     isToolResultVisible(detail) {
       return isVisible(view.queryByText(detail));
+    },
+
+    isVoicePlaybackControlVisible() {
+      const responses = view.queryAllByTestId('assistant-message');
+      const response = responses[responses.length - 1];
+      if (!response) return false;
+      const scoped = rtl.within(response);
+      return ['Play', 'Pause', 'Stop'].some(
+        label => scoped.queryByLabelText(label) !== null,
+      );
+    },
+
+    async isVoiceTranscriptClickable(text) {
+      const responses = view.queryAllByTestId('assistant-message');
+      const response = responses[responses.length - 1];
+      if (!response) return false;
+      const scoped = rtl.within(response);
+      const toggle = scoped.queryByText('Show transcript');
+      if (!toggle) return false;
+      return pressAndObserve(rtl, toggle, () => scoped.queryByText(text));
     },
 
     async isAttachedPhotoClickable() {

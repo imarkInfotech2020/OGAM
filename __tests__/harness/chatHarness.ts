@@ -1060,6 +1060,14 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
       t.unmount();
     },
 
+    /** Select the scenario's remote STT or TTS route through the Mobile model command. */
+    async setupRemoteSpeechModel(category: 'transcription' | 'voice') {
+      const { installRemoteSpeechModel } =
+        require('./remoteHarness') as typeof import('./remoteHarness');
+      await installRemoteSpeechModel(category);
+      await applicationFixture.refreshModels();
+    },
+
     /** Acquire the selected Whisper runtime through the same residency intent used by microphone demand. */
     async loadSelectedWhisperOnDemand(modelId = 'tiny.en') {
       const {
@@ -1162,17 +1170,19 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     async enterVoiceMode() {
       const view = this.view!;
 
-      const { useTTSStore } = require('@offgrid/pro/audio/ttsStore');
-      const engineId = useTTSStore.getState().settings.engineId;
-      // BOUNDARY: the persisted artifact a completed voice-model download leaves — drives shouldLoad in the
-      // REAL KokoroTTSBridge. Set via the real store action (like the LLM's @local_llm/downloaded_models
-      // record). NOT a phase/isReady poke: readiness below is EMERGENT from the real engine + executorch fake.
-      await useTTSStore.getState().updateSettings({
-        modelDownloaded: {
-          ...(useTTSStore.getState().settings.modelDownloaded ?? {}),
-          [engineId]: true,
-        },
-      });
+      if (scenario?.ttsEngine !== 'remote') {
+        const { useTTSStore } = require('@offgrid/pro/audio/ttsStore');
+        const engineId = useTTSStore.getState().settings.engineId;
+        // BOUNDARY: the persisted artifact a completed voice-model download leaves — drives shouldLoad in the
+        // REAL KokoroTTSBridge. Set via the real store action (like the LLM's @local_llm/downloaded_models
+        // record). NOT a phase/isReady poke: readiness below is EMERGENT from the real engine + executorch fake.
+        await useTTSStore.getState().updateSettings({
+          modelDownloaded: {
+            ...(useTTSStore.getState().settings.modelDownloaded ?? {}),
+            [engineId]: true,
+          },
+        });
+      }
       // GESTURE: open the chat-input quick-settings popover and tap the Voice row (the alternate real entry
       // to voice mode, per the header dropdown). This intent owns on-demand engine
       // initialization; the harness must not wait for eager readiness first.
@@ -1205,22 +1215,15 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
       },
     ) {
       const view = this.view!;
-      if (scripted) {
-        if (opts.engine === 'llama')
-          boundary.llama!.scriptCompletion(scripted as { text?: string });
-        else
-          boundary.litert.scriptTurn(
-            scripted as {
-              content?: string;
-              toolCalls?: Array<{
-                name: string;
-                arguments: Record<string, unknown>;
-              }>;
-            },
-          );
+      if (scripted) scriptTextTurn(scripted);
+      if (scenario?.sttEngine === 'remote') {
+        const { installRemoteSpeechResponses } =
+          require('./remoteHarness') as typeof import('./remoteHarness');
+        installRemoteSpeechResponses(transcript);
+      } else {
+        // BOUNDARY: the whisper model transcribes the recorded audio file to this text.
+        boundary.whisper!.setFileTranscript(transcript);
       }
-      // BOUNDARY: the whisper model transcribes the recorded audio file to this text.
-      boundary.whisper!.setFileTranscript(transcript);
       const btn = () => view.getByTestId('voice-record-button-audio');
       rtl.fireEvent.press(await rtl.waitFor(btn)); // tap: start recording
       await this.settle(50);
@@ -1368,6 +1371,12 @@ export async function startChatScreen(scenario: ChatScenario) {
   const h = await setupChatScreen(scenario);
   if (scenario.chatMode === 'voice' && scenario.sttEngine === 'whisper') {
     await h.setupWhisperModel();
+  }
+  if (scenario.chatMode === 'voice' && scenario.sttEngine === 'remote') {
+    await h.setupRemoteSpeechModel('transcription');
+  }
+  if (scenario.chatMode === 'voice' && scenario.ttsEngine === 'remote') {
+    await h.setupRemoteSpeechModel('voice');
   }
   if (scenario.tools?.includes('built-in')) {
     const { AVAILABLE_TOOLS } =

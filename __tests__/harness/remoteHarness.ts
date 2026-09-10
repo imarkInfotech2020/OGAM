@@ -371,6 +371,79 @@ export async function installRemoteImageModel(
   return { serverId: server.id, modelId };
 }
 
+type RemoteSpeechCategory = 'transcription' | 'voice';
+
+/** Select an Off Grid Desktop speech route through the same remote-model application command. */
+export async function installRemoteSpeechModel(
+  category: RemoteSpeechCategory,
+): Promise<{ serverId: string; modelId: string }> {
+  const { useRemoteServerStore } = require('../../src/stores');
+  const {
+    remoteServerManager,
+  } = require('../../src/services/modelServices/remoteServerController');
+  const { selectMobileModel } = require('../../src/services/modelServices');
+  const fixture = remoteProviderFixture('offgrid-desktop');
+  const current = useRemoteServerStore.getState().servers.find(
+    (candidate: { provider?: string }) => candidate.provider === fixture.provider,
+  );
+  const server =
+    current ??
+    (await remoteServerManager.addServer({
+      name: fixture.name,
+      endpoint: fixture.endpoint,
+      provider: fixture.provider,
+      modelManagement: fixture.modelManagement,
+    }));
+  const latest =
+    useRemoteServerStore.getState().servers.find(
+      (candidate: { id: string }) => candidate.id === server.id,
+    ) ?? server;
+  const modelId =
+    category === 'transcription' ? 'remote-whisper-model' : 'remote-voice-model';
+  await remoteServerManager.updateServer(server.id, {
+    catalog: {
+      ...latest.catalog,
+      [category]: [
+        {
+          id: modelId,
+          name:
+            category === 'transcription'
+              ? 'Remote Whisper Model'
+              : 'Remote Voice Model',
+        },
+      ],
+    },
+  });
+  await selectMobileModel({
+    source: 'remote',
+    hostId: server.id,
+    modality: category,
+    modelId,
+  });
+  return { serverId: server.id, modelId };
+}
+
+/** Off Grid Desktop STT and TTS responses at the HTTP boundary. */
+export function installRemoteSpeechResponses(transcript: string): void {
+  global.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith('/v1/audio/transcriptions')) {
+      return response({ text: transcript });
+    }
+    if (url.endsWith('/v1/audio/speech')) {
+      const bytes = Uint8Array.from([82, 73, 70, 70]).buffer;
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => 'audio/wav' },
+        arrayBuffer: async () => bytes,
+        text: async () => '',
+      } as unknown as Response;
+    }
+    return response({});
+  }) as typeof fetch;
+}
+
 /** Replay the Off Grid Desktop image control plane and generation response at the HTTP boundary. */
 export function installRemoteImageResponse(): void {
   let activeImage = 'remote-image-model';
