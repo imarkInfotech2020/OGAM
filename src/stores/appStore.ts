@@ -164,16 +164,6 @@ export interface AppState extends ProAccessSlice {
   setDownloadedImageModels: (models: ONNXImageModel[]) => void;
   addDownloadedImageModel: (model: ONNXImageModel) => void;
   removeDownloadedImageModel: (modelId: string) => void;
-  isGeneratingImage: boolean;
-  imageGenerationProgress: { step: number; totalSteps: number } | null;
-  imageGenerationStatus: string | null;
-  imagePreviewPath: string | null;
-  setIsGeneratingImage: (generating: boolean) => void;
-  setImageGenerationProgress: (
-    progress: { step: number; totalSteps: number } | null,
-  ) => void;
-  setImageGenerationStatus: (status: string | null) => void;
-  setImagePreviewPath: (path: string | null) => void;
   generatedImages: GeneratedImage[];
   addGeneratedImage: (image: GeneratedImage) => void;
   removeGeneratedImage: (imageId: string) => void;
@@ -246,8 +236,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
  * The durable slice of the app store: settings, onboarding, counters, Pro admission and the
  * generated-image gallery.
  *
- * Everything else the store holds is ephemeral projection state - the model load flag, the image
- * generation flag/progress/status/preview - and is never reloaded.
+ * Everything else the store holds is ephemeral projection state, such as the model load flag, and
+ * is never reloaded.
  */
 const persistedAppSlice = (state: AppState) => ({
   themeMode: state.themeMode,
@@ -366,18 +356,6 @@ export const useAppStore = create<AppState>()(
             m => m.id !== modelId,
           ),
         })),
-      // Image generation state
-      isGeneratingImage: false,
-      imageGenerationProgress: null,
-      imageGenerationStatus: null,
-      imagePreviewPath: null,
-      setIsGeneratingImage: generating =>
-        set({ isGeneratingImage: generating }),
-      setImageGenerationProgress: progress =>
-        set({ imageGenerationProgress: progress }),
-      setImageGenerationStatus: status =>
-        set({ imageGenerationStatus: status }),
-      setImagePreviewPath: path => set({ imagePreviewPath: path }),
       // Gallery
       generatedImages: [],
       addGeneratedImage: image =>

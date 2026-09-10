@@ -148,10 +148,6 @@ export const useChatScreen = () => {
   // causes a render on its own. They are kept as separate selectors rather than bundled with the
   // data above so nothing has to shallow-compare a mixed object of functions and live values.
   const setDownloadedImageModels = useAppStore(s => s.setDownloadedImageModels);
-  const setAppIsGeneratingImage = useAppStore(s => s.setIsGeneratingImage);
-  const setAppImageGenerationStatus = useAppStore(
-    s => s.setImageGenerationStatus,
-  );
   // Model policy is committed and published by Shared Models. Keep the exact reactive record so
   // reload comparison, generation details, and debug prompt cannot drift from another store copy.
   const settings = useModelsProjection().settings;
@@ -247,8 +243,6 @@ export const useChatScreen = () => {
     downloadedModels,
     setAlertState,
     setIsClassifying,
-    setAppImageGenerationStatus,
-    setAppIsGeneratingImage,
     clearStreamingMessage,
     setActiveConversation,
     generatedImageIds: generatedImages

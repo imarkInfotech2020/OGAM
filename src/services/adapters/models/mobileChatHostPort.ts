@@ -64,8 +64,6 @@ export { mobileChatRequestDefaults } from './mobileChatSettingsProjection';
 export interface MobileChatCommandOptions {
   imageMode?: 'auto' | 'force' | 'disabled';
   onClassifying?: (active: boolean) => void;
-  onClassifierStatus?: (status: string | null) => void;
-  onClassifierTextFallback?: () => void;
   ensureTextRoute?: () => Promise<boolean>;
 }
 
@@ -188,8 +186,6 @@ export function mobileChatOperationCommand(input: {
     requestedOperation: input.requestedOperation,
     imageMode: options?.imageMode,
     onClassifying: options?.onClassifying,
-    onClassifierStatus: options?.onClassifierStatus,
-    onClassifierTextFallback: options?.onClassifierTextFallback,
     ensureTextRoute: options?.ensureTextRoute,
   };
 }

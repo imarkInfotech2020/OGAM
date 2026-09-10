@@ -74,8 +74,6 @@ export type GenerationDeps = {
   downloadedModels: DownloadedModel[];
   setAlertState: SetState<AlertState>;
   setIsClassifying: SetState<boolean>;
-  setAppImageGenerationStatus: (value: string | null) => void;
-  setAppIsGeneratingImage: (value: boolean) => void;
   clearStreamingMessage: () => void;
   setActiveConversation: (conversationId: string | null) => void;
   generatedImageIds: readonly string[];
@@ -120,11 +118,6 @@ function mobileCommandOptions(
   return {
     imageMode,
     onClassifying: deps.setIsClassifying,
-    onClassifierStatus: deps.setAppImageGenerationStatus,
-    onClassifierTextFallback: () => {
-      deps.setAppImageGenerationStatus(null);
-      deps.setAppIsGeneratingImage(false);
-    },
     ensureTextRoute: deps.ensureTextModelForChat,
   };
 }
