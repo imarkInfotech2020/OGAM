@@ -1338,6 +1338,32 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   if (whisperFake) jest.doMock('whisper.rn', () => whisperFake.module);
 
   const RN = require('react-native');
+  // resetModules() also restores React Native's native animation driver. The
+  // test renderer has no native view for that driver to attach to, so keep this
+  // external boundary synchronous in the fresh module graph.
+  const instantAnimation = (
+    value?: {setValue?: (next: number) => void},
+    toValue?: number,
+  ) => ({
+    start: (callback?: (result: {finished: boolean}) => void) => {
+      if (typeof toValue === 'number') value?.setValue?.(toValue);
+      callback?.({finished: true});
+    },
+    stop: () => {},
+    reset: () => {},
+  });
+  RN.Animated.timing = (
+    value: {setValue?: (next: number) => void},
+    config: {toValue?: number},
+  ) => instantAnimation(value, config?.toValue);
+  RN.Animated.parallel = (animations: Array<{start?: () => void}>) => ({
+    start: (callback?: (result: {finished: boolean}) => void) => {
+      animations.forEach(animation => animation.start?.());
+      callback?.({finished: true});
+    },
+    stop: () => {},
+    reset: () => {},
+  });
   // resetModules() creates a fresh React Native View class after jest.setup installed the
   // host-measurement boundary. Restore the native layout callback on this module graph so anchored
   // controls open through their real measureInWindow path.

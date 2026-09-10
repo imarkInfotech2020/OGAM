@@ -200,6 +200,13 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     },
     { timeout: 4000 },
   );
+  await rtl.waitFor(
+    () => {
+      // The user cannot start the next action until the picker has finished closing.
+      expect(home.queryAllByTestId(/^text-model-row-/)).toHaveLength(0);
+    },
+    { timeout: 4000 },
+  );
 
   // GESTURE: with the model now selected, tap "New Chat" on Home — the real way a user starts a chat. A new
   // chat has NO conversation yet; it is created on the first message (real app behavior). No createConversation.
