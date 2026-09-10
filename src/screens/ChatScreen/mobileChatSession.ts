@@ -144,6 +144,9 @@ export const mobileChatSession = {
 
   stop: (): boolean => applicationFacade().models.chat.stop(),
 
+  snapshot: (): ChatQueueProjection =>
+    applicationFacade().models.chat.snapshot(),
+
   stopConversation: (conversationId: string): number =>
     applicationFacade().models.chat.stopConversation(conversationId),
 
