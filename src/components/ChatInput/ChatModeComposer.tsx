@@ -10,6 +10,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import type { ThemeColors } from '../../theme';
 import type { MediaAttachment } from '../../types';
 import { CustomAlert, hideAlert, type AlertState } from '../CustomAlert';
+import logger from '../../utils/logger';
 import {
   VoiceRecordButton,
   type VoiceRecordInteractionMode,
@@ -149,6 +150,21 @@ export const ChatModeComposer: React.FC<ChatModeComposerProps> = props => {
                 multiline
                 scrollEnabled
                 editable={!props.disabled}
+                onPressIn={() =>
+                  logger.log(
+                    `[COMPOSER-SM] input press disabled=${Boolean(
+                      props.disabled,
+                    )} voiceStatus=${props.showVoiceStatus}`,
+                  )
+                }
+                onFocus={() =>
+                  logger.log(
+                    `[COMPOSER-SM] input focus disabled=${Boolean(
+                      props.disabled,
+                    )} voiceStatus=${props.showVoiceStatus}`,
+                  )
+                }
+                onBlur={() => logger.log('[COMPOSER-SM] input blur')}
                 blurOnSubmit={false}
                 returnKeyType="default"
               />
