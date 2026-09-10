@@ -107,7 +107,7 @@ describe('image extraction recovery after relaunch', () => {
     const screen = render(React.createElement(DownloadManagerScreen, {}));
 
     await waitFor(() => {
-      expect(screen.queryByText(FILE_NAME)).not.toBeNull();
+      expect(screen.queryByText('Anything V5')).not.toBeNull();
     });
     expect(screen.queryByText('Interrupted')).not.toBeNull();
     expect(screen.queryByText('Retry')).not.toBeNull();

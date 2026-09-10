@@ -15,7 +15,10 @@ import {
   recoveredModelBaseName,
 } from '@offgrid/models';
 import { resolveCoreMLModelDir } from '../../../../utils/coreMLModelUtils';
-import { ensureImageExtractionComplete } from '../../../../utils/imageModelIntegrity';
+import {
+  ensureImageExtractionComplete,
+  validateImageModelDir,
+} from '../../../../utils/imageModelIntegrity';
 import {
   isModelProjectorFile as isMMProjFile,
   pickProjectorForModel as pickMmProjForModel,
@@ -297,6 +300,15 @@ export async function scanForUntrackedImageModels(opts: ScanImageModelsOpts): Pr
     if (totalSize === 0) continue;
 
     const identity = recoveredImageModelIdentity(item.name);
+    // A non-empty directory is not proof of an installed model. An interrupted unzip can leave a
+    // large partial tree here; adopting it makes the durable download journal look completed and
+    // removes its Retry action. Only the platform integrity boundary can confirm that this directory
+    // is an installed image model.
+    const ready = await RNFS.exists(`${item.path}/_ready`);
+    if (!ready) {
+      const integrity = await validateImageModelDir(item.path, identity.backend);
+      if (!integrity.complete) continue;
+    }
     const newModel: ONNXImageModel = {
       // Derived from the directory name and NOTHING else. `Date.now()` meant the same directory
       // adopted twice produced two ids nothing downstream could reconcile, and anything holding the
