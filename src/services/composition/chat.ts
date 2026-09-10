@@ -9,6 +9,7 @@ import {
 import {
   createWorkspaceContentChatSessionRepository,
   type ModelsChatPlatformPort,
+  type WorkspaceContentCommand,
 } from '@offgrid/application';
 import {
   mobileChatContextPorts,
@@ -30,8 +31,16 @@ const chatOperation = once(
   () => new ChatOperationApplicationService(mobileChatOperationPorts(generationIntent())),
 );
 const chatContext = once(() => new ChatContextApplicationService(mobileChatContextPorts()));
+// The chat session outlives an application-root restart during Fast Refresh and test isolation.
+// Resolve the current Workspace Content owner for every operation instead of capturing the first
+// root forever. The adapter exposes only the two repository operations the session needs.
+const currentWorkspaceContent = {
+  snapshot: () => applicationFacade().workspaceContent.snapshot(),
+  execute: (command: WorkspaceContentCommand) =>
+    applicationFacade().workspaceContent.execute(command),
+};
 const chatRepository = once(() => createWorkspaceContentChatSessionRepository({
-  workspaceContent: applicationFacade().workspaceContent,
+  workspaceContent: currentWorkspaceContent,
   newId: generateId,
   now: Date.now,
 }));
