@@ -12,7 +12,6 @@ import { useDiscoveredRemoteModels } from '../../hooks/useDiscoveredRemoteModels
 import { useActiveTextCapabilities } from '../../hooks/useActiveTextCapabilities';
 import { useSyncIdentityStore } from '../../stores/syncIdentityStore';
 import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
-import { useHasActiveStreamText } from './useActiveStreamText';
 import { useActiveTextModel } from '../../hooks/useActiveTextModel';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { useMobileModelInventory } from '../../hooks/useMobileModelInventory';
@@ -189,9 +188,10 @@ export const useChatScreen = () => {
   );
   const isStreaming = useChatStore(s => s.isStreaming);
   const isThinking = useChatStore(s => s.isThinking);
-  // Whether the live reply has text yet - NOT the text. The text is its own projection, read by the
-  // one row that draws it (useActiveStreamText), so a ~20/sec token flush never reaches this hook.
-  const hasStreamingText = useHasActiveStreamText();
+  const streamingMessage = useChatStore(s => s.streamingMessage);
+  const streamingReasoningContent = useChatStore(
+    s => s.streamingReasoningContent,
+  );
   const clearStreamingMessage = useChatStore(s => s.clearStreamingMessage);
   const setActiveConversation = useChatStore(s => s.setActiveConversation);
 
@@ -327,11 +327,8 @@ export const useChatScreen = () => {
     () =>
       getDisplayMessages(activeConversation?.messages || [], {
         isThinking,
-        // Token-free by design. `hasStreamingText` says the live row belongs in the list; the row
-        // itself reads the text, so the list is rebuilt once per turn instead of once per flush.
-        streamingMessage: '',
-        streamingReasoningContent: '',
-        hasStreamingText,
+        streamingMessage,
+        streamingReasoningContent,
         isStreamingForThisConversation,
         isModelLoading,
         loadingModelName: loadingModel?.name,
@@ -342,7 +339,8 @@ export const useChatScreen = () => {
     [
       activeConversation?.messages,
       isThinking,
-      hasStreamingText,
+      streamingMessage,
+      streamingReasoningContent,
       isStreamingForThisConversation,
       isModelLoading,
       loadingModel?.name,
