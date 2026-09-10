@@ -79,6 +79,104 @@ export function installRemoteStream(
   return { release: () => releaseFn?.() };
 }
 
+export type RemoteHarnessProvider =
+  | 'lmstudio'
+  | 'ollama'
+  | 'offgrid-desktop';
+
+export function remoteProviderFixture(provider: RemoteHarnessProvider): {
+  name: string;
+  endpoint: string;
+  provider: RemoteHarnessProvider;
+  modelManagement?: 'offgrid-desktop-v1';
+} {
+  if (provider === 'ollama') {
+    return {
+      name: 'Ollama',
+      endpoint: 'http://localhost:11434',
+      provider,
+    };
+  }
+  if (provider === 'offgrid-desktop') {
+    return {
+      name: 'Off Grid AI Desktop',
+      endpoint: 'http://localhost:7878',
+      provider,
+      modelManagement: 'offgrid-desktop-v1',
+    };
+  }
+  return {
+    name: 'LM Studio',
+    endpoint: 'http://localhost:1234',
+    provider,
+  };
+}
+
+/** Provider-shaped text stream replayed at the XHR boundary. */
+export function remoteTextStreamBody(
+  provider: RemoteHarnessProvider,
+  input: {
+    contentChunks: readonly string[];
+    reasoning?: string;
+    error?: string;
+    pauseBefore?: boolean;
+    pauseAfterChunk?: number;
+  },
+): string {
+  const lines: string[] = [];
+  if (input.pauseBefore) lines.push('__PAUSE__');
+  if (provider === 'ollama') {
+    if (input.error) return `${JSON.stringify({ error: input.error })}\n`;
+    if (input.reasoning) {
+      lines.push(
+        JSON.stringify({
+          message: { role: 'assistant', thinking: input.reasoning },
+          done: false,
+        }),
+      );
+    }
+    input.contentChunks.forEach((content, index) => {
+      lines.push(
+        JSON.stringify({
+          message: { role: 'assistant', content },
+          done: false,
+        }),
+      );
+      if (input.pauseAfterChunk === index) lines.push('__PAUSE__');
+    });
+    lines.push(
+      JSON.stringify({
+        message: { role: 'assistant', content: '' },
+        done: true,
+      }),
+    );
+    return `${lines.join('\n')}\n`;
+  }
+
+  if (input.error) {
+    lines.push(`data: ${JSON.stringify({ error: { message: input.error } })}`);
+    return `${lines.join('\n\n')}\n\n`;
+  }
+  if (input.reasoning) {
+    lines.push(
+      `data: ${JSON.stringify({
+        choices: [{ delta: { reasoning_content: input.reasoning } }],
+      })}`,
+    );
+  }
+  input.contentChunks.forEach((content, index) => {
+    lines.push(
+      `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`,
+    );
+    if (input.pauseAfterChunk === index) lines.push('__PAUSE__');
+  });
+  lines.push(
+    'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+    'data: [DONE]',
+  );
+  return `${lines.join('\n\n')}\n\n`;
+}
+
 /** Make a remote OpenAI-compatible model the ACTIVE model — the real connect flow's end state (server
  *  added, its models discovered, the transport registered, and its canonical route selected). Discovery is the
  *  network boundary; we pre-place its result, then mount + gesture as the user. `caps` mirrors what a
@@ -87,7 +185,7 @@ export async function installRemoteModel(
   opts: {
     name?: string;
     endpoint?: string;
-    provider?: 'openai-compatible' | 'anthropic';
+    provider?: RemoteHarnessProvider | 'openai-compatible' | 'anthropic';
     caps?: Partial<{
       supportsVision: boolean;
       supportsToolCalling: boolean;
@@ -95,7 +193,6 @@ export async function installRemoteModel(
     }>;
   } = {},
 ): Promise<{ serverId: string; modelId: string }> {
-  const { useRemoteServerStore } = require('../../src/stores');
   const {
     remoteServerManager,
   } = require('../../src/services/modelServices/remoteServerController');
@@ -110,33 +207,42 @@ export async function installRemoteModel(
   // clears the local selection and no local model is loaded — mirror that so the send routes remote.
   await llmService.unloadModel();
   await clearMobileModel('text');
-  const name = opts.name ?? 'LM Studio';
-  const endpoint = opts.endpoint ?? 'http://localhost:1234';
-  const provider = opts.provider ?? 'openai-compatible';
+  const requestedProvider = opts.provider ?? 'lmstudio';
+  const fixture =
+    requestedProvider === 'openai-compatible' || requestedProvider === 'anthropic'
+      ? null
+      : remoteProviderFixture(requestedProvider);
+  const name = opts.name ?? fixture?.name ?? 'Remote Server';
+  const endpoint = opts.endpoint ?? fixture?.endpoint ?? 'http://localhost:1234';
+  const provider = requestedProvider;
   const modelId = 'remote-model';
 
   const server = await remoteServerManager.addServer({
     name,
     endpoint,
     provider,
+    selections: { text: modelId },
+    catalog: {
+      text: [
+        {
+          id: modelId,
+          name: 'Remote Model',
+          capabilities: {
+            supportsVision: false,
+            supportsToolCalling: false,
+            supportsThinking: false,
+            acceptsThinkingKwarg: !!opts.caps?.supportsThinking,
+            maxContextLength: 4096,
+            ...opts.caps,
+          },
+        },
+      ],
+    },
+    ...(fixture?.modelManagement
+      ? { modelManagement: fixture.modelManagement }
+      : {}),
   });
   const serverId = server.id;
-  const model = {
-    id: modelId,
-    name: 'Remote Model',
-    serverId,
-    lastUpdated: 't',
-    capabilities: {
-      supportsVision: false,
-      supportsToolCalling: false,
-      supportsThinking: false,
-      acceptsThinkingKwarg: !!opts.caps?.supportsThinking,
-      maxContextLength: 4096,
-      ...opts.caps,
-    },
-  };
-  const store = useRemoteServerStore.getState();
-  store.setDiscoveredModels(serverId, [model]);
 
   // The application service registers the transport as part of the atomic save transaction.
   // Select through the shared route owner after projecting the discovered catalog.
@@ -155,6 +261,7 @@ export async function installRemoteImageModel(
     name?: string;
     endpoint?: string;
     modelId?: string;
+    provider?: 'offgrid-desktop';
   } = {},
 ): Promise<{ serverId: string; modelId: string }> {
   const { useRemoteServerStore } = require('../../src/stores');
@@ -163,13 +270,17 @@ export async function installRemoteImageModel(
   } = require('../../src/services/modelServices/remoteServerController');
   const { selectMobileModel } = require('../../src/services/modelServices');
 
-  const current = useRemoteServerStore.getState().servers[0];
+  const fixture = remoteProviderFixture(opts.provider ?? 'offgrid-desktop');
+  const current = useRemoteServerStore.getState().servers.find(
+    (candidate: { provider?: string }) => candidate.provider === fixture.provider,
+  );
   const server =
     current ??
     (await remoteServerManager.addServer({
-      name: opts.name ?? 'Remote Image Server',
-      endpoint: opts.endpoint ?? 'http://localhost:1234',
-      provider: 'openai-compatible',
+      name: opts.name ?? fixture.name,
+      endpoint: opts.endpoint ?? fixture.endpoint,
+      provider: fixture.provider,
+      modelManagement: fixture.modelManagement,
     }));
   const modelId = opts.modelId ?? 'remote-image-model';
   await remoteServerManager.updateServer(server.id, {
@@ -187,12 +298,54 @@ export async function installRemoteImageModel(
   return { serverId: server.id, modelId };
 }
 
-/** Replay one OpenAI-compatible image response at the external HTTP boundary. */
+/** Replay the Off Grid Desktop image control plane and generation response at the HTTP boundary. */
 export function installRemoteImageResponse(): void {
-  global.fetch = (async () => ({
+  let activeImage = 'remote-image-model';
+  global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/models/activate')) {
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        id?: string;
+        kind?: string;
+      };
+      if (body.kind === 'image' && body.id) activeImage = body.id;
+      return response({ success: true });
+    }
+    if (url.endsWith('/models/catalog')) {
+      return response({
+        kinds: ['text', 'image'],
+        models: [
+          {
+            id: 'remote-model',
+            name: 'Remote Model',
+            kind: 'text',
+            files: [],
+            capabilities: { vision: true, tools: true, thinking: true },
+          },
+          {
+            id: 'remote-image-model',
+            name: 'Remote Image Model',
+            kind: 'image',
+            files: [],
+          },
+        ],
+      });
+    }
+    if (url.endsWith('/models/installed')) {
+      return response({ installed: ['remote-model', 'remote-image-model'] });
+    }
+    if (url.endsWith('/models/active')) {
+      return response({ text: 'remote-model', image: activeImage });
+    }
+    return response({ data: [{ b64_json: 'aW1hZ2U=' }] });
+  }) as typeof fetch;
+}
+
+function response(body: unknown): Response {
+  return {
     ok: true,
     status: 200,
-    json: async () => ({ data: [{ b64_json: 'aW1hZ2U=' }] }),
-    text: async () => '',
-  })) as unknown as typeof fetch;
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as Response;
 }

@@ -438,6 +438,7 @@ export interface LlamaFake {
 function makeLlamaFake(
   onRelease?: () => void,
   chatTemplate?: string,
+  supportsVision = false,
 ): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [], clearCache: [] };
   let modelInfo: Record<string, unknown> = {};
@@ -638,7 +639,7 @@ function makeLlamaFake(
       setTimeout(() => onRelease?.(), 50);
     }),
     tokenize: jest.fn().mockResolvedValue({ tokens: [1, 2, 3] }),
-    initMultimodal: jest.fn().mockResolvedValue(false),
+    initMultimodal: jest.fn().mockResolvedValue(supportsVision),
     // The post-init multimodal probe. A scripted hold parks the caller here — the real device's
     // window between context init and capability detection — until releaseMultimodalHold().
     getMultimodalSupport: jest.fn(async () => {
@@ -650,7 +651,7 @@ function makeLlamaFake(
         });
         mmHoldEngaged = false;
       }
-      return { vision: false, audio: false };
+      return { vision: supportsVision, audio: false };
     }),
     // Embedding boundary (embedding-model contexts, initLlama({embedding:true})): return a device-shaped
     // 384-dim vector derived from the text so RAG cosine ranking is real. Matches all-MiniLM-L6-v2 (384).
@@ -1287,6 +1288,10 @@ export interface InstallOpts {
    *  supportsNativeThinking (reasoning-delimiter detection). Omit for the reasoning-capable default;
    *  pass a marker-free template (e.g. Mistral's) to model a non-thinking model. */
   llamaChatTemplate?: string;
+  /** Return device-shaped successful multimodal initialization from the llama.rn boundary. */
+  llamaVision?: boolean;
+  /** Android SoC identifier reported by the native diffusion/device boundary. */
+  androidSocModel?: string;
   /** Seed a stateful background-download native module (boundary.download). */
   download?: boolean;
   /** Replace the global whisper.rn stub with a driveable STT context (boundary.whisper). */
@@ -1357,10 +1362,19 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
 
   // Diffusion writes its rendered PNG to the (memfs) disk when fs is present, like the native module.
   const diffusion = makeDiffusionFake(fsFake);
+  if (opts.androidSocModel) {
+    diffusion.module.getSoCModel = jest
+      .fn()
+      .mockResolvedValue(opts.androidSocModel);
+  }
 
   // Scriptable llama.rn: override the global stub so completion output is under test control.
   const llamaFake = opts.llama
-    ? makeLlamaFake(freeModelMemory, opts.llamaChatTemplate)
+    ? makeLlamaFake(
+        freeModelMemory,
+        opts.llamaChatTemplate,
+        opts.llamaVision,
+      )
     : undefined;
   if (llamaFake) jest.doMock('llama.rn', () => llamaFake.module);
 
@@ -1478,6 +1492,10 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   (DeviceInfo.getUsedMemory as jest.Mock).mockResolvedValue(
     ram.totalBytes - ram.availBytes,
   );
+  if (opts.androidSocModel) {
+    (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom');
+    (DeviceInfo.getModel as jest.Mock).mockReturnValue('Snapdragon test device');
+  }
 
   const setRam = (profile: RamProfile) => {
     memState.availBytes = profile.availBytes;

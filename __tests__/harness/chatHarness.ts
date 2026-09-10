@@ -29,22 +29,39 @@ import {
 import { createDownloadedModel } from '../utils/factories';
 import { doMockRealSqlite } from './sqliteFake';
 import { ChatScenario, type ChatScenarioOptions } from './chatScenario';
+import { createChatAssertions } from './chatAssertions';
+
+export { createChatAssertions, type ChatAssertions } from './chatAssertions';
 
 export {
   CHAT_LOCAL_IMAGE_SCENARIOS,
   CHAT_LOCAL_TEXT_SCENARIOS,
+  CHAT_CAPABILITIES,
   CHAT_DOCUMENT_ATTACHMENT_SCENARIOS,
   CHAT_IMAGE_SCENARIOS,
   CHAT_IMAGE_GENERATION_SCENARIOS,
   CHAT_PHOTO_ATTACHMENT_SCENARIOS,
   CHAT_REMOTE_IMAGE_SCENARIOS,
+  CHAT_PLATFORMS,
+  CHAT_REMOTE_PROVIDERS,
+  CHAT_REMOTE_PROVIDERS_BY_CAPABILITY,
+  CHAT_RUNTIME_MATRIX,
+  CHAT_RUNTIME_SUPPORT,
   CHAT_SCENARIO_MATRIX,
   CHAT_THINKING_DISABLED_SCENARIOS,
   CHAT_TEXT_SCENARIOS,
+  CHAT_VOICE_SCENARIOS,
+  forEveryChatModeRuntime,
+  forEveryRuntime,
+  forEveryRuntimeCombination,
+  forEveryTextRuntime,
   getBackendForPlatform,
   usingEngine,
   usingLiteRT,
   usingLlama,
+  usingLMStudio,
+  usingOGAD,
+  usingOllama,
   usingRemoteText,
   withoutTextModel,
 } from './chatScenario';
@@ -104,6 +121,8 @@ type ChatTextScript = {
 
 export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
   const platform = opts.platform ?? 'android';
+  const scenario = opts instanceof ChatScenario ? opts : null;
+  const remoteTextProvider = scenario?.remoteTextProvider ?? 'lmstudio';
   const localTextEngine =
     opts.engine === 'llama' || opts.engine === 'litert' ? opts.engine : null;
   const hasLocalTextModel = localTextEngine !== null;
@@ -111,6 +130,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
   const boundary = installNativeBoundary({
     llama: opts.engine === 'llama',
     llamaChatTemplate: opts.chatTemplate,
+    llamaVision: opts.engine === 'llama' && opts.vision,
+    androidSocModel:
+      scenario?.imageBackend === 'qnn' ? 'SM8550-AB' : undefined,
     fs: true,
     ram,
     whisper: opts.whisper,
@@ -169,6 +191,8 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     opts.modelFileName ??
     (opts.engine === 'litert' ? 'gemma.litertlm' : 'ggml-small.gguf');
   const modelPath = `${docs}/models/${fileName}`;
+  const mmProjFileName = `mmproj-${fileName}`;
+  const mmProjPath = `${docs}/models/${mmProjFileName}`;
   // fileSize drives the residency budget. The factory default is 4GB, which under the GPU-aware text
   // overhead (2.2× on a non-CPU backend, e.g. iOS METAL) needs ~8.8GB and no longer fits the default
   // 8GB-avail profile — so a chat-flow test (not a memory test) would spuriously hit the fit refusal.
@@ -186,8 +210,22 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         fileSize,
         liteRTVision: opts.vision,
         liteRTAudio: opts.audio,
+        isVisionModel: opts.engine === 'llama' && opts.vision,
+        mmProjPath:
+          opts.engine === 'llama' && opts.vision ? mmProjPath : undefined,
+        mmProjFileName:
+          opts.engine === 'llama' && opts.vision
+            ? mmProjFileName
+            : undefined,
+        mmProjFileSize:
+          opts.engine === 'llama' && opts.vision
+            ? 500 * 1024 * 1024
+            : undefined,
       });
   if (model) boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
+  if (opts.engine === 'llama' && opts.vision) {
+    boundary.fs!.seedFile(mmProjPath, 500 * 1024 * 1024);
+  }
   await AsyncStorage.setItem(
     '@local_llm/downloaded_models',
     JSON.stringify(model ? [model] : []),
@@ -294,7 +332,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     const { installRemoteImageModel, installRemoteImageResponse } =
       require('./remoteHarness') as typeof import('./remoteHarness');
     installRemoteImageResponse();
-    const remote = await installRemoteImageModel();
+    const remote = await installRemoteImageModel({
+      provider: scenario?.remoteImageProvider ?? 'offgrid-desktop',
+    });
     await applicationFixture.refreshModels();
     return remote;
   };
@@ -305,6 +345,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     const { installRemoteModel } =
       require('./remoteHarness') as typeof import('./remoteHarness');
     await installRemoteModel({
+      provider: remoteTextProvider,
       caps: {
         supportsVision: true,
         supportsToolCalling: true,
@@ -434,46 +475,37 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
   routeHolder.params = {}; // new chat — the first send() creates the conversation
 
   let releaseRemoteStream: (() => void) | null = null;
-  const remoteSse = (content: string, reasoning?: string) =>
-    `${
-      reasoning
-        ? `data: ${JSON.stringify({
-            choices: [{ delta: { reasoning_content: reasoning } }],
-          })}\n\n`
-        : ''
-    }` +
-    `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n` +
-    'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
-    'data: [DONE]\n\n';
   const scriptTextTurn = (scripted: ChatTextScript) => {
     if (opts.engine === 'llama') {
       boundary.llama!.scriptCompletion(scripted);
       return;
     }
     if (opts.engine === 'remote') {
-      const { installRemoteStream } =
+      const { installRemoteStream, remoteTextStreamBody } =
         require('./remoteHarness') as typeof import('./remoteHarness');
       const content = scripted.content ?? scripted.text ?? '';
-      let body: string;
-      if (scripted.throwMessage) {
-        body = `data: ${JSON.stringify({
-          error: { message: scripted.throwMessage },
-        })}\n\n`;
-      } else if (scripted.holdBeforeStream) {
-        body = `__PAUSE__\n${remoteSse(content, scripted.reasoning)}`;
-      } else if (scripted.pauseAfter !== undefined) {
+      const bodyFor = (output: string, reasoning?: string): string => {
+        let contentChunks = [output];
+        let pauseAfterChunk: number | undefined;
+        if (scripted.pauseAfter !== undefined) {
         const split = content.indexOf(scripted.pauseAfter);
         const partialEnd =
           split < 0 ? content.length : split + scripted.pauseAfter.length;
-        body = remoteSse(content.slice(0, partialEnd)).replace(
-          'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
-          `__PAUSE__\ndata: ${JSON.stringify({
-            choices: [{ delta: { content: content.slice(partialEnd) } }],
-          })}\n\n`,
-        );
-      } else {
-        body = remoteSse(content, scripted.reasoning);
-      }
+          contentChunks = [
+            output.slice(0, partialEnd),
+            output.slice(partialEnd),
+          ];
+          pauseAfterChunk = 0;
+        }
+        return remoteTextStreamBody(remoteTextProvider, {
+          contentChunks,
+          reasoning,
+          error: scripted.throwMessage,
+          pauseBefore: scripted.holdBeforeStream,
+          pauseAfterChunk,
+        });
+      };
+      const body = bodyFor(content, scripted.reasoning);
       releaseRemoteStream = installRemoteStream(requestBody => {
         if (!scripted.thinkingText) return body;
         let thinkingRequested = false;
@@ -488,7 +520,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         } catch {
           /* malformed input stays on the clean scripted path */
         }
-        return thinkingRequested ? remoteSse(scripted.thinkingText) : body;
+        return thinkingRequested ? bodyFor(scripted.thinkingText) : body;
       }).release;
       return;
     }
@@ -549,6 +581,12 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
       return useChatStore.getState().activeConversationId;
     },
     view: null as ReturnType<typeof rtl.render> | null,
+    get assertions() {
+      if (!this.view) {
+        throw new Error('Render the Chat screen before reading visible outcomes.');
+      }
+      return createChatAssertions(this.view, rtl);
+    },
 
     /**
      * Arrive-via-UI: enable a built-in tool the way the user does — navigate to the Tools tab (a real
@@ -1250,7 +1288,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
  */
 export async function startChatScreen(scenario: ChatScenario) {
   const h = await setupChatScreen(scenario);
-  if (scenario.modality === 'voice') await h.setupWhisperModel();
+  if (scenario.chatMode === 'voice' && scenario.sttEngine === 'whisper') {
+    await h.setupWhisperModel();
+  }
   if (scenario.tools?.includes('built-in')) {
     const { AVAILABLE_TOOLS } =
       require('../../src/services/tools') as typeof import('../../src/services/tools');
@@ -1270,7 +1310,7 @@ export async function startChatScreen(scenario: ChatScenario) {
   if (scenario.imageEnhancementEnabled !== undefined) {
     await h.setImageEnhancementEnabledViaUI(scenario.imageEnhancementEnabled);
   }
-  if (scenario.modality === 'voice') await h.enterVoiceMode();
+  if (scenario.chatMode === 'voice') await h.enterVoiceMode();
   if (scenario.photoSource) {
     await h.attachImageViaUI(
       scenario.photoSource === 'gallery' ? 'library' : 'camera',
