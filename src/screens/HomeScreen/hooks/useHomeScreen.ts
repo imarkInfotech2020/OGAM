@@ -326,7 +326,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   const startNewChat = () => {
     // Allow image-only users to start a chat; conversation is lazily created in useChatScreen
-    if (!activeTextModelId && !activeImageModelId) {
+    if (!activeTextModelId && !activeImageRoute) {
       return;
     }
     navigation.navigate('Chat', {});
@@ -396,6 +396,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     conversations,
     activeTextModel,
     activeImageModel,
+    activeImageRoute,
     recentConversations,
     // Remote model state
     remoteTextModels,

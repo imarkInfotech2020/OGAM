@@ -9,6 +9,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { useModelsProjection } from '../../hooks/useApplicationProjection';
+import { useActiveTextModel } from '../../hooks/useActiveTextModel';
 import {
   clearMobileModel,
   hardwareService,
@@ -339,9 +340,7 @@ const ImagePromptEnhancementToggle: React.FC<ImageSettingsSaveState> = ({ save, 
   const styles = useThemedStyles(createStyles);
   const enhanceImagePrompts =
     useModelsProjection().settings.enhanceImagePrompts === true;
-  // Prompt enhancement runs a text model, so it needs one available. Only the COUNT matters here,
-  // and it is compared in the selector, so adding a model wakes this row only when it crosses zero.
-  const hasTextModel = useAppStore(s => s.downloadedModels.length > 0);
+  const hasTextModel = useActiveTextModel().modelId !== null;
   const enhanceOn = enhanceImagePrompts && hasTextModel;
 
   return (

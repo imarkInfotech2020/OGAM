@@ -77,6 +77,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     conversations,
     activeTextModel,
     activeImageModel,
+    activeImageRoute,
     recentConversations,
     // Remote model state
     remoteTextModels,
@@ -203,7 +204,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </AnimatedEntry>
 
           {/* New Chat Button */}
-          {activeTextModel || activeImageModelId ? (
+          {activeTextModel || activeImageRoute ? (
             <Button
               title="New Chat"
               onPress={startNewChat}
