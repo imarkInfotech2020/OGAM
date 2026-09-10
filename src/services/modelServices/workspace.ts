@@ -84,15 +84,22 @@ const lazyRemote: RemotePorts = {
   },
 };
 
-// Remote reachability, from the transport registry and server health.
-function remoteStatus(serverId: string): { ready: boolean; error?: string } {
+// Remote media adapters call their server directly. Their readiness must not depend on the text
+// transport registry: a server can expose voice, image, or transcription without a text model.
+// An untested server stays routable so the real request can establish its result; only a known
+// unhealthy server is unavailable.
+function remoteStatus(
+  serverId: string,
+  modality: 'text' | 'image' | 'transcription' | 'voice' | 'embedding',
+): { ready: boolean; error?: string } {
   const unhealthy =
     useRemoteServerStore.getState().serverHealth[serverId]?.status ===
     'unhealthy';
-  return {
-    ready: !!remoteTextTransportRegistry.get(serverId),
-    ...(unhealthy ? { error: 'Remote server is unavailable' } : {}),
-  };
+  if (unhealthy) return { ready: false, error: 'Remote server is unavailable' };
+  if (modality === 'text') {
+    return { ready: remoteTextTransportRegistry.has(serverId) };
+  }
+  return { ready: true };
 }
 
 // Device memory as the residency manager's memory source.
@@ -148,6 +155,6 @@ export const mobileModelWorkspacePorts: ModelWorkspacePorts = {
       DERIVED_TEXT_MODALITIES.includes(modality as DerivedTextModality)
         ? null
         : mobileExecutionAdapterId('remote', server.id, modality),
-    status: server => remoteStatus(server.id),
+    status: (server, modality) => remoteStatus(server.id, modality),
   },
 };

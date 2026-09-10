@@ -7,6 +7,7 @@ import {
   remoteErrorBodyMessage,
   remoteImageRequest,
   remoteMediaEndpoint,
+  remoteSupportedVoicesFromError,
   remoteTranscriptionUpload,
   remoteVoicePayload,
   resolveRemoteRoute,
@@ -15,6 +16,7 @@ import type { RemoteMediaModality } from '@offgrid/models';
 import { getApiKeyImpl } from './serverRuntime';
 import { logVoiceDiagnostic, voiceDiagnosticError } from '../../../utils/voiceDiagnostics';
 
+const negotiatedRemoteVoices = new Map<string, string>();
 
 export interface RemoteImageResult {
   base64?: string;
@@ -181,22 +183,64 @@ export const remoteMediaRuntime = {
     input: { text: string; voice?: string; model?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteVoiceResult> {
-    return request({
-      server,
-      modality: 'voice',
-      init: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(remoteVoicePayload({
-          model: input.model ?? requiredModel(server, 'voice'),
-          text: input.text,
-          voice: input.voice,
-        })),
-      },
-      signal: options.signal,
-    }, async response => ({
-      audio: await response.arrayBuffer(),
-      contentType: response.headers.get('content-type') ?? DEFAULT_REMOTE_SPEECH_MIME,
-    }));
+    const model = input.model ?? requiredModel(server, 'voice');
+    logVoiceDiagnostic('remote_voice_requested', {
+      serverId: server.id,
+      provider: server.provider,
+      modelId: model,
+      characterCount: input.text.length,
+    });
+    const voiceKey = `${server.id}\u0000${model}`;
+    const synthesize = (voice?: string) => request({
+        server,
+        modality: 'voice',
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(remoteVoicePayload({
+            model,
+            text: input.text,
+            voice,
+          })),
+        },
+        signal: options.signal,
+      }, async response => ({
+        audio: await response.arrayBuffer(),
+        contentType: response.headers.get('content-type') ?? DEFAULT_REMOTE_SPEECH_MIME,
+      }));
+    try {
+      let result: RemoteVoiceResult;
+      try {
+        result = await synthesize(
+          input.voice ?? negotiatedRemoteVoices.get(voiceKey),
+        );
+      } catch (error) {
+        const supported = remoteSupportedVoicesFromError(error);
+        if (!supported.length) throw error;
+        const voice = supported[0];
+        negotiatedRemoteVoices.set(voiceKey, voice);
+        logVoiceDiagnostic('remote_voice_negotiated', {
+          serverId: server.id,
+          modelId: model,
+          voice,
+          supportedVoiceCount: supported.length,
+        });
+        result = await synthesize(voice);
+      }
+      logVoiceDiagnostic('remote_voice_finished', {
+        serverId: server.id,
+        modelId: model,
+        byteCount: result.audio.byteLength,
+        contentType: result.contentType,
+      });
+      return result;
+    } catch (error) {
+      logVoiceDiagnostic('remote_voice_failed', {
+        serverId: server.id,
+        modelId: model,
+        error: voiceDiagnosticError(error),
+      });
+      throw error;
+    }
   },
 };
