@@ -417,10 +417,21 @@ export async function editPersistedChatTurnFn(
   if (!conversationId || !deps.hasActiveModel) return;
   await prepareMobileChatGeneration();
   try {
+    const persistedMessage = applicationFacade()
+      .workspaceContent.snapshot()
+      .messages.find(
+        candidate =>
+          candidate.id === message.id &&
+          candidate.conversationId === conversationId,
+      );
+    if (!persistedMessage?.turnId) {
+      throw new Error(`Chat turn not found for message: ${message.id}`);
+    }
     await mobileChatSession.edit(
       conversationId,
-      message.id,
+      persistedMessage.turnId,
       message,
+      mobileCommandOptions(deps),
     );
   } catch (error) {
     presentGenerationError(deps, conversationId, {

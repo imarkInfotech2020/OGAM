@@ -136,15 +136,18 @@ export const mobileChatSession = {
     conversationId: string,
     turnId: string,
     message: Message,
+    options: MobileChatCommandOptions = {},
   ): Promise<ChatTurn> {
     applicationFacade().models.chat.invalidate(conversationId);
-    return requireChatTurn(
-      await applicationFacade().models.chat.edit({
-        conversationId,
-        turnId,
-        userMessage: mobileGenerationMessage(message),
-        request: mobileChatRequestDefaults(),
-      }),
+    return withMobileChatCommandOptions(turnId, options, async () =>
+      requireChatTurn(
+        await applicationFacade().models.chat.edit({
+          conversationId,
+          turnId,
+          userMessage: mobileGenerationMessage(message),
+          request: mobileChatRequestDefaults(),
+        }),
+      ),
     );
   },
 
