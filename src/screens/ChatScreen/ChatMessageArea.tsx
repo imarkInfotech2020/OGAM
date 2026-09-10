@@ -148,7 +148,6 @@ const ModelStatusBar: React.FC<{
 // FlatList is a PureComponent: an inline literal or arrow here is a NEW prop on every render, so
 // it re-renders every mounted cell. These do not depend on render state, so they are declared once.
 const keyExtractor = (item: { id: string }) => item.id;
-const dismissKeyboard = () => Keyboard.dismiss();
 const MAINTAIN_VISIBLE_CONTENT_POSITION = {
   minIndexForVisible: 0,
   autoscrollToTopThreshold: 100,
@@ -301,7 +300,6 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           scrollEventThrottle={16}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
-          onTouchStart={dismissKeyboard}
           maintainVisibleContentPosition={MAINTAIN_VISIBLE_CONTENT_POSITION}
           removeClippedSubviews={REMOVE_CLIPPED_SUBVIEWS}
         />

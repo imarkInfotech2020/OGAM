@@ -215,6 +215,9 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   useEffect(() => {
     if (visible) {
+      // The sheet is already presented. In particular, do not run the opening
+      // keyboard-dismiss cycle again after an auto-focused input opens it.
+      if (modalVisible) return;
       pendingAnimateIn.current = true;
       // Dismiss keyboard first, then open — prevents animation conflict
       const keyboardVisible = Keyboard.isVisible?.() ?? false;
