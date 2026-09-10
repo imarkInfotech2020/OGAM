@@ -1381,6 +1381,11 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   // Driveable whisper.rn: override the global stub so realtime/file transcription is under test control.
   const whisperFake = opts.whisper ? makeWhisperFake() : undefined;
   if (whisperFake) jest.doMock('whisper.rn', () => whisperFake.module);
+  jest.doMock('react-native-calendar-events', () => ({
+    requestPermissions: jest.fn().mockResolvedValue('authorized'),
+    fetchAllEvents: jest.fn().mockResolvedValue([]),
+    saveEvent: jest.fn().mockResolvedValue('event-1'),
+  }));
 
   const RN = require('react-native');
   // resetModules() also restores React Native's native animation driver. The

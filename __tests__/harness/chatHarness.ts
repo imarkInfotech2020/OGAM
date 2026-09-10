@@ -49,6 +49,9 @@ export {
   CHAT_RUNTIME_SUPPORT,
   CHAT_SCENARIO_MATRIX,
   CHAT_THINKING_DISABLED_SCENARIOS,
+  CHAT_BUILT_IN_TOOL_SCENARIOS,
+  CHAT_PRO_TOOL_SCENARIOS,
+  CHAT_MCP_TOOL_SCENARIOS,
   CHAT_TEXT_SCENARIOS,
   CHAT_VOICE_SCENARIOS,
   forEveryChatModeRuntime,
@@ -114,6 +117,7 @@ type ChatTextScript = {
     name: string;
     arguments: Record<string, unknown>;
   }>;
+  afterToolsText?: string;
   completionMeta?: CompletionMeta;
   pauseAfter?: string;
   holdBeforeStream?: boolean;
@@ -347,7 +351,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     await installRemoteModel({
       provider: remoteTextProvider,
       caps: {
-        supportsVision: true,
+        supportsVision: Boolean(opts.vision),
         supportsToolCalling: true,
         supportsThinking: true,
       },
@@ -477,7 +481,14 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
   let releaseRemoteStream: (() => void) | null = null;
   const scriptTextTurn = (scripted: ChatTextScript) => {
     if (opts.engine === 'llama') {
-      boundary.llama!.scriptCompletion(scripted);
+      if (scripted.toolCalls?.length && scripted.afterToolsText !== undefined) {
+        boundary.llama!.scriptCompletions([
+          scripted,
+          { text: scripted.afterToolsText },
+        ]);
+      } else {
+        boundary.llama!.scriptCompletion(scripted);
+      }
       return;
     }
     if (opts.engine === 'remote') {
@@ -488,9 +499,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         let contentChunks = [output];
         let pauseAfterChunk: number | undefined;
         if (scripted.pauseAfter !== undefined) {
-        const split = content.indexOf(scripted.pauseAfter);
-        const partialEnd =
-          split < 0 ? content.length : split + scripted.pauseAfter.length;
+          const split = content.indexOf(scripted.pauseAfter);
+          const partialEnd =
+            split < 0 ? content.length : split + scripted.pauseAfter.length;
           contentChunks = [
             output.slice(0, partialEnd),
             output.slice(partialEnd),
@@ -506,7 +517,27 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         });
       };
       const body = bodyFor(content, scripted.reasoning);
+      const toolBody = remoteTextStreamBody(remoteTextProvider, {
+        contentChunks: content ? [content] : [],
+        reasoning: scripted.reasoning,
+        error: scripted.throwMessage,
+        pauseBefore: scripted.holdBeforeStream,
+        toolCalls: scripted.toolCalls,
+      });
+      const finalBody = bodyFor(scripted.afterToolsText ?? content);
       releaseRemoteStream = installRemoteStream(requestBody => {
+        if (scripted.toolCalls?.length) {
+          try {
+            const request = JSON.parse(requestBody) as {
+              messages?: Array<{ role?: string }>;
+            };
+            return request.messages?.some(message => message.role === 'tool')
+              ? finalBody
+              : toolBody;
+          } catch {
+            return toolBody;
+          }
+        }
         if (!scripted.thinkingText) return body;
         let thinkingRequested = false;
         try {
@@ -535,7 +566,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
       boundary.litert.scriptHang();
       return;
     }
-    const content = scripted.content ?? scripted.text ?? '';
+    const content =
+      scripted.toolCalls?.length && scripted.afterToolsText !== undefined
+        ? scripted.afterToolsText
+        : scripted.content ?? scripted.text ?? '';
     if (scripted.pauseAfter !== undefined) {
       const split = content.indexOf(scripted.pauseAfter);
       const partialEnd =
@@ -606,6 +640,50 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         value,
       );
       tools.unmount();
+    },
+
+    /** Enable a Pro email/calendar tool through the real Pro Tools screen. */
+    enableProToolViaUI(toolId: string, value: boolean = true) {
+      const { McpServersScreen } = require('../../pro/ui/McpServersScreen');
+      const { Switch } = require('react-native');
+      const tools = rtl.render(React.createElement(McpServersScreen, {}));
+      const row = tools.getByTestId(`pro-tool-row-${toolId}`);
+      rtl.fireEvent(
+        rtl.within(row).UNSAFE_getByType(Switch),
+        'valueChange',
+        value,
+      );
+      tools.unmount();
+    },
+
+    /** Add and connect an external MCP server through the real Pro Tools UI. */
+    async enableMcpToolViaUI() {
+      const { installMcpBoundary, TEST_MCP_URL, TEST_MCP_TOOL } =
+        require('./mcpBoundary') as typeof import('./mcpBoundary');
+      const { McpServersScreen } = require('../../pro/ui/McpServersScreen');
+      installMcpBoundary();
+      const tools = rtl.render(React.createElement(McpServersScreen, {}));
+
+      rtl.fireEvent.press(tools.getByTestId('mcp-add-server'));
+      rtl.fireEvent.press(
+        await rtl.waitFor(() => tools.getByTestId('add-custom-server')),
+      );
+      rtl.fireEvent.changeText(
+        await rtl.waitFor(() => tools.getByPlaceholderText('e.g. Slack')),
+        'Test MCP',
+      );
+      rtl.fireEvent.changeText(
+        tools.getByPlaceholderText('https://api.example.com/mcp'),
+        TEST_MCP_URL,
+      );
+      rtl.fireEvent.press(tools.getByText('Add'));
+
+      await rtl.waitFor(() => {
+        expect(tools.getByText('Active')).toBeVisible();
+        expect(tools.getByText('1/1 tools')).toBeVisible();
+      });
+      tools.unmount();
+      return TEST_MCP_TOOL;
     },
 
     /**
@@ -902,7 +980,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     async attachDocumentViaUI() {
       const view = this.view!;
       if (platform === 'ios') {
-        const supportsVision = opts.vision || opts.engine === 'remote';
+        const supportsVision = Boolean(opts.vision);
         actionSheetSelections.push(supportsVision ? 1 : 0);
       }
       rtl.fireEvent.press(
@@ -1296,9 +1374,15 @@ export async function startChatScreen(scenario: ChatScenario) {
       require('../../src/services/tools') as typeof import('../../src/services/tools');
     for (const tool of AVAILABLE_TOOLS) h.enableToolViaUI(tool.id);
   }
-  if (scenario.tools?.some(tool => tool !== 'built-in')) {
+  if (scenario.tools?.includes('pro')) {
+    h.enableProToolViaUI('read_calendar_events');
+  }
+  if (scenario.tools?.includes('mcp')) {
+    await h.enableMcpToolViaUI();
+  }
+  if (scenario.tools?.includes('remote')) {
     throw new Error(
-      `${scenario.label} requires a Pro, remote, or MCP tool boundary that has not been declared.`,
+      `${scenario.label} requires a remote companion tool boundary that has not been declared.`,
     );
   }
 

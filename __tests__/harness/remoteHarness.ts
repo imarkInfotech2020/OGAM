@@ -6,6 +6,7 @@
  *
  * Ground the SSE in a real captured response (docs/wire-captures/*lmstudio* / *ollama*), never a guess.
  */
+import { mcpBoundaryResponse, TEST_MCP_URL } from './mcpBoundary';
 
 /** Behavior-faithful fake of the streaming XMLHttpRequest transport. Replays `sseBody` incrementally via
  *  onprogress (as chunked SSE arrives on device), then completes 200 — exactly what createStreamingRequest
@@ -36,16 +37,43 @@ export function installRemoteStream(
     onreadystatechange: null | (() => void) = null;
     onerror: null | (() => void) = null;
     ontimeout: null | (() => void) = null;
-    open(): void {
+    onload: null | (() => void) = null;
+    onabort: null | (() => void) = null;
+    timeout = 0;
+    private method = '';
+    private url = '';
+    open(method: string, url: string): void {
+      this.method = method;
+      this.url = url;
       this.readyState = 1;
     }
     setRequestHeader(): void {
       /* headers irrelevant to the fake */
     }
+    getResponseHeader(name: string): string | null {
+      if (this.url === TEST_MCP_URL) {
+        return name.toLowerCase() === 'content-type'
+          ? 'application/json'
+          : null;
+      }
+      return null;
+    }
     abort(): void {
-      /* no-op */
+      this.onabort?.();
     }
     send(requestBody?: string): void {
+      const mcpResponse = mcpBoundaryResponse(
+        this.method,
+        this.url,
+        requestBody ?? '',
+      );
+      if (mcpResponse) {
+        this.status = mcpResponse.status;
+        this.responseText = mcpResponse.body;
+        this.readyState = 4;
+        queueMicrotask(() => this.onload?.());
+        return;
+      }
       // Emit the captured body line-by-line, one per macrotask, so the REAL incremental parser runs like it
       // does on device — works for both OpenAI SSE (`data: {…}\n\n`) and Ollama NDJSON (`{…}\n`).
       const body = bodyFactory
@@ -119,6 +147,10 @@ export function remoteTextStreamBody(
     contentChunks: readonly string[];
     reasoning?: string;
     error?: string;
+    toolCalls?: ReadonlyArray<{
+      name: string;
+      arguments: Record<string, unknown>;
+    }>;
     pauseBefore?: boolean;
     pauseAfterChunk?: number;
   },
@@ -144,6 +176,19 @@ export function remoteTextStreamBody(
       );
       if (input.pauseAfterChunk === index) lines.push('__PAUSE__');
     });
+    if (input.toolCalls?.length) {
+      lines.push(
+        JSON.stringify({
+          message: {
+            role: 'assistant',
+            tool_calls: input.toolCalls.map(call => ({
+              function: { name: call.name, arguments: call.arguments },
+            })),
+          },
+          done: false,
+        }),
+      );
+    }
     lines.push(
       JSON.stringify({
         message: { role: 'assistant', content: '' },
@@ -170,8 +215,36 @@ export function remoteTextStreamBody(
     );
     if (input.pauseAfterChunk === index) lines.push('__PAUSE__');
   });
+  if (input.toolCalls?.length) {
+    lines.push(
+      `data: ${JSON.stringify({
+        choices: [
+          {
+            delta: {
+              tool_calls: input.toolCalls.map((call, index) => ({
+                index,
+                id: `call-${index}`,
+                type: 'function',
+                function: {
+                  name: call.name,
+                  arguments: JSON.stringify(call.arguments),
+                },
+              })),
+            },
+          },
+        ],
+      })}`,
+    );
+  }
   lines.push(
-    'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+    `data: ${JSON.stringify({
+      choices: [
+        {
+          delta: {},
+          finish_reason: input.toolCalls?.length ? 'tool_calls' : 'stop',
+        },
+      ],
+    })}`,
     'data: [DONE]',
   );
   return `${lines.join('\n\n')}\n\n`;
