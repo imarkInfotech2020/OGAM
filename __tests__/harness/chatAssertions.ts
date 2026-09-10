@@ -5,11 +5,16 @@ type TestingLibrary = typeof import('@testing-library/react-native');
 type TextMatcher = string | RegExp;
 
 export interface ChatAssertions {
+  isResponseVisible(text: TextMatcher): boolean;
+  isGeneratedImageVisible(): boolean;
+  isGeneratedImageLoaded(): boolean;
+  isGeneratedImageCaptionVisible(prompt: TextMatcher): boolean;
   isThinkingVisible(): boolean;
   isPromptEnhancementVisible(): boolean;
   isAttachedPhotoVisible(): boolean;
   isAttachedDocumentVisible(): boolean;
   isToolCallVisible(toolName: string): boolean;
+  isToolResultVisible(detail: TextMatcher): boolean;
   isAttachedPhotoClickable(): Promise<boolean>;
   isAttachedDocumentClickable(): Promise<boolean>;
   isToolCallClickable(
@@ -34,6 +39,16 @@ async function pressAndObserve(
   }
 }
 
+function isVisible(target: ReactTestInstance | null): boolean {
+  if (!target) return false;
+  try {
+    expect(target).toBeVisible();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Queries and gestures for user-visible Chat outcomes. These methods never read stores,
  * component callbacks, call counts, or other implementation details.
@@ -43,6 +58,22 @@ export function createChatAssertions(
   rtl: TestingLibrary,
 ): ChatAssertions {
   return {
+    isResponseVisible(text) {
+      return isVisible(view.queryByText(text));
+    },
+
+    isGeneratedImageVisible() {
+      return isVisible(view.queryByTestId('generated-image-content'));
+    },
+
+    isGeneratedImageLoaded() {
+      return isVisible(view.queryByLabelText('Generated image loaded'));
+    },
+
+    isGeneratedImageCaptionVisible(prompt) {
+      return isVisible(view.queryByText(prompt));
+    },
+
     isThinkingVisible() {
       return Boolean(
         view.queryByTestId('thinking-block') ??
@@ -67,6 +98,10 @@ export function createChatAssertions(
         view.queryByTestId(`tool-result-label-${toolName}`) !== null ||
         view.queryByTestId(`tool-result-accordion-${toolName}`) !== null
       );
+    },
+
+    isToolResultVisible(detail) {
+      return isVisible(view.queryByText(detail));
     },
 
     async isAttachedPhotoClickable() {
