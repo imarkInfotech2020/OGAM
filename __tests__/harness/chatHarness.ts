@@ -950,7 +950,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         }
         rtl.fireEvent.press(view.getByTestId('send-button')); // fallback
       };
-      await rtl.act(async () => {
+      // A tap is synchronous. Keep this act synchronous so the caller can observe the submitted
+      // frame before the asynchronous chat operation advances the control to Stop.
+      rtl.act(() => {
         pressSend();
       });
     },

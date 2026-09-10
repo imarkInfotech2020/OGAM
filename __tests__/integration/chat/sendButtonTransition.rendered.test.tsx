@@ -8,49 +8,28 @@ describe.each(CHAT_TEXT_SCENARIOS)(
   scenario => {
     it('shows the existing loading indicator immediately, then shows Stop while the reply is running', async () => {
       const h = await startChatScreen(scenario);
-      const view = h.view!;
 
       h.scriptTextTurn({
         text: 'This reply must stay in progress.',
         holdBeforeStream: true,
       });
 
-      const input = await h.rtl.waitFor(() => view.getByTestId('chat-input'));
-      h.rtl.act(() => {
-        input.props.onChangeText('Send this now');
-      });
+      await h.tapSend('Send this now');
 
-      const sendButton = await h.rtl.waitFor(() =>
-        view.getByTestId('send-button'),
-      );
-      let pressable: typeof sendButton | null = sendButton;
-      while (pressable && typeof pressable.props.onPress !== 'function') {
-        pressable = pressable.parent;
-      }
-      if (!pressable) throw new Error('The send control is not pressable.');
-      const pressSend = pressable.props.onPress as () => void;
-      h.rtl.act(() => {
-        pressSend();
-      });
-
-      expect(view.getByTestId('send-loading-dots')).toBeVisible();
-      expect(view.queryByTestId('send-button')).toBeNull();
+      expect(h.assertions.isSendLoadingVisible()).toBe(true);
+      expect(h.assertions.isSendControlVisible()).toBe(false);
 
       await h.rtl.waitFor(() => {
-        expect(view.getByTestId('stop-button')).toBeVisible();
-        expect(view.queryByTestId('send-loading-dots')).toBeNull();
+        expect(h.assertions.isStopControlVisible()).toBe(true);
+        expect(h.assertions.isSendLoadingVisible()).toBe(false);
       });
 
-      h.rtl.fireEvent.press(view.getByTestId('stop-button'));
+      h.stopGeneration();
       await h.rtl.waitFor(() => {
-        expect(
-          h.rtl
-            .within(view.getAllByTestId('user-message')[0])
-            .getByText('Send this now'),
-        ).toBeVisible();
-        expect(view.getByTestId('chat-input')).toBeEnabled();
-        expect(view.queryByTestId('stop-button')).toBeNull();
-        expect(view.queryByText('Generation Error')).toBeNull();
+        expect(h.assertions.isUserMessageVisible('Send this now')).toBe(true);
+        expect(h.assertions.isComposerEnabled()).toBe(true);
+        expect(h.assertions.isStopControlVisible()).toBe(false);
+        expect(h.assertions.isChatErrorVisible('Generation Error')).toBe(false);
       });
     });
   },
