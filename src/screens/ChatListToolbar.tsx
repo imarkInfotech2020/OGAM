@@ -117,7 +117,7 @@ export const ChatSearchEmpty: React.FC = () => {
   );
 };
 
-const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   toolbar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -136,6 +136,7 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     borderColor: colors.border,
     borderRadius: 8,
     backgroundColor: colors.surface,
+    ...shadows.small,
   },
   searchInput: {
     ...TYPOGRAPHY.bodySmall,
@@ -151,6 +152,9 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
     height: 40,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    ...shadows.small,
   },
   checkbox: {
     width: 20,
