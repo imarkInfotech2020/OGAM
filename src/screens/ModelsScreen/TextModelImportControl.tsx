@@ -12,7 +12,7 @@ interface Props {
 }
 
 /** Text-only placement for the existing text/vision import workflow. */
-export const TextModelImportButton: React.FC<Omit<Props, 'importProgress'>> = ({
+const TextModelImportButton: React.FC<Omit<Props, 'importProgress'>> = ({
   colors,
   styles,
   isImporting,
