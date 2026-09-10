@@ -88,6 +88,11 @@ describe.each(['ios', 'android'] as const)(
       expect(
         h.rtl.within(imageResponse).getByText(/green Lamborghini driving/i),
       ).toBeVisible();
+      expect(
+        h.rtl
+          .within(imageResponse)
+          .getByText(/Generated image for:.*Draw a green lamborghini/),
+      ).toBeVisible();
       expect(view.getAllByText('Enhanced prompt')).toHaveLength(1);
 
       const bubble = h.rtl.within(imageResponse).getByTestId('message-bubble');
@@ -98,8 +103,14 @@ describe.each(['ios', 'android'] as const)(
       const imageIndex = renderedNodes.indexOf(
         h.rtl.within(bubble).getByTestId('generated-image-content'),
       );
+      const captionIndex = renderedNodes.indexOf(
+        h.rtl
+          .within(bubble)
+          .getByText(/Generated image for:.*Draw a green lamborghini/),
+      );
       expect(promptIndex).toBeGreaterThanOrEqual(0);
-      expect(imageIndex).toBeGreaterThan(promptIndex);
+      expect(captionIndex).toBeGreaterThan(promptIndex);
+      expect(imageIndex).toBeGreaterThan(captionIndex);
       expect(view.queryByText('Generation Error')).toBeNull();
     });
   },
