@@ -472,12 +472,11 @@ export async function generateImageForPersistedTurnFn(
 }
 
 export async function handleStopFn(
-  deps: Pick<GenerationDeps, 'activeConversationId' | 'isGeneratingImage'>,
+  deps: Pick<GenerationDeps, 'activeConversationId'>,
 ): Promise<void> {
   const before = mobileChatSession.snapshot();
   logger.log(
-    `[CHAT-STOP] requested image=${String(deps.isGeneratingImage)} ` +
-      `running=${before.entries.filter(entry => entry.status === 'running').length} ` +
+    `[CHAT-STOP] requested running=${before.entries.filter(entry => entry.status === 'running').length} ` +
       `queued=${before.entries.filter(entry => entry.status === 'queued').length}`,
   );
   callHook(HOOKS.audioStop);
@@ -490,14 +489,6 @@ export async function handleStopFn(
         .map(entry => `${entry.turnId}:${entry.status}`)
         .join(',') || 'none'}`,
   );
-  if (stopped === 0 && deps.isGeneratingImage) {
-    try {
-      await mobileImageChatGeneration.cancel();
-      logger.log('[CHAT-STOP] image cancellation completed');
-    } catch (error) {
-      logger.error('Error stopping image generation', error);
-    }
-  }
 }
 
 export async function executeDeleteConversationFn(

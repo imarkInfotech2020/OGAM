@@ -38,7 +38,6 @@ import type { GenerationDeps } from './useChatGenerationActions';
 import { getDisplayMessages, toWorkspaceMessage } from './types';
 import { needsVisionRepair } from '../../utils/visionRepair';
 import {
-  isStreamingActiveConversation,
   useChatAudioLifecycle,
   useChatConversationLifecycle,
   useChatPresentationLifecycle,
@@ -186,7 +185,6 @@ export const useChatScreen = () => {
   const streamingForConversationId = useChatStore(
     s => s.streamingForConversationId,
   );
-  const isStreaming = useChatStore(s => s.isStreaming);
   const isThinking = useChatStore(s => s.isThinking);
   const streamingMessage = useChatStore(s => s.streamingMessage);
   const streamingReasoningContent = useChatStore(
@@ -240,10 +238,15 @@ export const useChatScreen = () => {
       : undefined;
   const imageModelLoaded = !!activeImageModel;
   const isGeneratingImage = imageGenState.isGenerating;
-  const isStreamingForThisConversation = isStreamingActiveConversation(
-    streamingForConversationId,
-    activeConversationId,
-  );
+  // Shared ChatSessionQueue is the only lifecycle owner. The mobile store below is only the
+  // throttled presentation buffer for partial text and reasoning events.
+  const isStreaming = generatingConversationIds.length > 0;
+  const isGeneratingForThisConversation =
+    activeConversationId != null &&
+    generatingConversationIds.includes(activeConversationId);
+  const isStreamingForThisConversation =
+    isGeneratingForThisConversation &&
+    streamingForConversationId === activeConversationId;
 
   const genDeps = {
     activeModelId: activeModelInfo.modelId,
@@ -315,9 +318,6 @@ export const useChatScreen = () => {
     setDownloadedImageModels,
   });
 
-  const isGeneratingForThisConversation =
-    activeConversationId != null &&
-    generatingConversationIds.includes(activeConversationId);
   // Replies generating on paired devices. Empty unless Pro's chat-stream service is running.
   const remotePreviews = useRemoteChatStreamPreviews(activeConversationId);
   const localDeviceId = useSyncIdentityStore(s => s.localDeviceId);
