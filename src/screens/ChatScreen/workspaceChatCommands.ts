@@ -13,13 +13,18 @@ function isConversationPut(
 
 export async function createWorkspaceConversation(
   input: { readonly pendingProjectId?: string },
-  modelId: string,
-  projectId?: string,
+  options: {
+    readonly modelId: string;
+    readonly projectId?: string;
+    readonly title?: string;
+  },
 ): Promise<string> {
+  const title = options.title?.trim();
   const outcome = await applicationFacade().workspaceContent.execute({
     type: 'create_conversation',
-    modelId,
-    projectId: projectId ?? input.pendingProjectId,
+    modelId: options.modelId,
+    projectId: options.projectId ?? input.pendingProjectId,
+    ...(title ? { title } : {}),
   });
   if (!outcome.ok) throw new Error(outcome.failure.message);
   const created = outcome.value.changes.find(isConversationPut);

@@ -202,7 +202,10 @@ function presentGenerationError(
             text: 'New chat',
             onPress: () => {
               if (!modelId) return;
-              createWorkspaceConversation(deps, modelId, sourceProjectId)
+              createWorkspaceConversation(deps, {
+                modelId,
+                projectId: sourceProjectId,
+              })
                 .then(nextId => {
                   deps.setActiveConversation(nextId);
                   deps.setAlertState(hideAlert());
@@ -337,7 +340,10 @@ export async function handleSendFn(
   let projectId = deps.activeConversation?.projectId;
   if (!conversationId) {
     const modelId = deps.activeModelInfo?.modelId || deps.activeImageModel?.id;
-    conversationId = await createWorkspaceConversation(deps, modelId!);
+    conversationId = await createWorkspaceConversation(deps, {
+      modelId: modelId!,
+      title: call.text,
+    });
     projectId = deps.pendingProjectId;
     deps.setActiveConversation(conversationId);
   }
