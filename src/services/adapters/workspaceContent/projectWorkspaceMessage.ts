@@ -36,6 +36,13 @@ function audioFormat(mimeType: string | undefined): 'wav' | 'mp3' | undefined {
   return undefined;
 }
 
+/** React Native accepts remote/content URIs as-is; local files require an explicit file URI. */
+function attachmentUri(stored: string | undefined): string {
+  if (!stored) return '';
+  const resolved = resolveDocumentPath(stored);
+  return resolved.startsWith('/') ? `file://${resolved}` : resolved;
+}
+
 function projectAttachments(record: MessageRecord): MediaAttachment[] | undefined {
   if (typeof record.portable.content === 'string') return undefined;
   const locations = record.local?.contentLocations ?? [];
@@ -43,7 +50,7 @@ function projectAttachments(record: MessageRecord): MediaAttachment[] | undefine
   record.portable.content.forEach((part, index) => {
     if (part.type === 'text') return;
     const location = attachmentLocation(locations, part, index);
-    const uri = location?.uri ? resolveDocumentPath(location.uri) : '';
+    const uri = attachmentUri(location?.uri);
     const common = {
       id: attachmentId(record, part, index),
       uri,
