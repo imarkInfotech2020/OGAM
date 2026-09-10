@@ -135,15 +135,19 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     llama: opts.engine === 'llama',
     llamaChatTemplate: opts.chatTemplate,
     llamaVision: opts.engine === 'llama' && opts.vision,
-    androidSocModel:
-      scenario?.imageBackend === 'qnn' ? 'SM8550-AB' : undefined,
+    androidSocModel: scenario?.imageBackend === 'qnn' ? 'SM8550-AB' : undefined,
     fs: true,
     ram,
     whisper: opts.whisper,
+    microphone: scenario?.chatMode === 'voice',
     download: opts.download,
   });
   const originalXHR = global.XMLHttpRequest;
   const originalFetch = global.fetch;
+  const formDataGlobal = globalThis as unknown as {
+    FormData?: typeof FormData;
+  };
+  const originalFormData = formDataGlobal.FormData;
   // The application root now starts Workspace Content and the generated-image gallery before Home
   // renders. Give both real repositories a real SQLite boundary; the global empty-row stub cannot
   // report schema columns and therefore cannot represent their additive migrations.
@@ -162,6 +166,11 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
 
   const React = require('react');
   const rtl = requireRTL();
+  // Node's WHATWG FormData rejects React Native's device-shaped file part
+  // ({ uri, name, type }). Use React Native's external transport boundary so
+  // remote transcription exercises the same multipart input as the app.
+  formDataGlobal.FormData = require('react-native/Libraries/Network/FormData')
+    .default as typeof FormData;
   const { ActionSheetIOS } =
     require('react-native') as typeof import('react-native');
   const originalShowActionSheet = ActionSheetIOS.showActionSheetWithOptions;
@@ -218,9 +227,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         mmProjPath:
           opts.engine === 'llama' && opts.vision ? mmProjPath : undefined,
         mmProjFileName:
-          opts.engine === 'llama' && opts.vision
-            ? mmProjFileName
-            : undefined,
+          opts.engine === 'llama' && opts.vision ? mmProjFileName : undefined,
         mmProjFileSize:
           opts.engine === 'llama' && opts.vision
             ? 500 * 1024 * 1024
@@ -472,6 +479,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
       await applicationFixture.dispose();
       global.XMLHttpRequest = originalXHR;
       global.fetch = originalFetch;
+      formDataGlobal.FormData = originalFormData;
       ActionSheetIOS.showActionSheetWithOptions = originalShowActionSheet;
     };
   }
@@ -617,7 +625,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     view: null as ReturnType<typeof rtl.render> | null,
     get assertions() {
       if (!this.view) {
-        throw new Error('Render the Chat screen before reading visible outcomes.');
+        throw new Error(
+          'Render the Chat screen before reading visible outcomes.',
+        );
       }
       return createChatAssertions(this.view, rtl);
     },
@@ -1064,8 +1074,9 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     async setupRemoteSpeechModel(category: 'transcription' | 'voice') {
       const { installRemoteSpeechModel } =
         require('./remoteHarness') as typeof import('./remoteHarness');
-      await installRemoteSpeechModel(category);
-      await applicationFixture.refreshModels();
+      await rtl.act(async () => {
+        await installRemoteSpeechModel(category);
+      });
     },
 
     /** Acquire the selected Whisper runtime through the same residency intent used by microphone demand. */
@@ -1176,22 +1187,55 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         // BOUNDARY: the persisted artifact a completed voice-model download leaves — drives shouldLoad in the
         // REAL KokoroTTSBridge. Set via the real store action (like the LLM's @local_llm/downloaded_models
         // record). NOT a phase/isReady poke: readiness below is EMERGENT from the real engine + executorch fake.
-        await useTTSStore.getState().updateSettings({
-          modelDownloaded: {
-            ...(useTTSStore.getState().settings.modelDownloaded ?? {}),
-            [engineId]: true,
-          },
+        await rtl.act(async () => {
+          await useTTSStore.getState().updateSettings({
+            modelDownloaded: {
+              ...(useTTSStore.getState().settings.modelDownloaded ?? {}),
+              [engineId]: true,
+            },
+          });
         });
+        // A mixed local/remote matrix can have a remote voice route available from the STT
+        // server. Select Kokoro through the real model card, as the user does, instead of
+        // assuming that "downloaded" also means "selected".
+        const { VoiceModelsPanel } = require('@offgrid/pro/audio/ui/VoiceModelsPanel');
+        const voiceModels = rtl.render(
+          React.createElement(VoiceModelsPanel, {}),
+        );
+        const kokoroCard = await rtl.waitFor(() =>
+          voiceModels.getByTestId(
+            'voice-model-card-software-mansion/executorch-kokoro',
+          ),
+        );
+        rtl.fireEvent.press(kokoroCard);
+        await rtl.waitFor(() => {
+          const voice =
+            applicationFixture.application.models.snapshot().active.voice;
+          expect(voice?.model?.source).toBe('local');
+          expect(voice?.ready).toBe(true);
+        });
+        voiceModels.unmount();
       }
-      // GESTURE: open the chat-input quick-settings popover and tap the Voice row (the alternate real entry
-      // to voice mode, per the header dropdown). This intent owns on-demand engine
-      // initialization; the harness must not wait for eager readiness first.
-      rtl.fireEvent.press(
-        await rtl.waitFor(() => view.getByTestId('quick-settings-button')),
+      // GESTURE: use the persistent Chat/Voice control that the product now exposes above the input.
+      // This intent owns on-demand engine initialization; the harness must not wait for eager readiness
+      // first.
+      const modeToggle = await rtl.waitFor(() =>
+        view.getByTestId('chat-mode-toggle'),
       );
-      rtl.fireEvent.press(
-        await rtl.waitFor(() => view.getByTestId('quick-tts-mode')),
-      );
+      let pressable = modeToggle;
+      while (pressable && typeof pressable.props.onPress !== 'function') {
+        pressable = pressable.parent;
+      }
+      if (!pressable) throw new Error('The Chat/Voice control is not pressable.');
+      await rtl.act(async () => {
+        await pressable.props.onPress();
+      });
+      await rtl.waitFor(() => {
+        expect(
+          applicationFixture.application.speech.snapshot().preferences
+            .voiceMode,
+        ).toBe(true);
+      });
       await rtl.waitFor(
         () => {
           expect(view.getByTestId('voice-record-button-audio')).toBeTruthy();
@@ -1224,10 +1268,21 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         // BOUNDARY: the whisper model transcribes the recorded audio file to this text.
         boundary.whisper!.setFileTranscript(transcript);
       }
-      const btn = () => view.getByTestId('voice-record-button-audio');
-      rtl.fireEvent.press(await rtl.waitFor(btn)); // tap: start recording
+      const pressVoiceButton = async () => {
+        let target = await rtl.waitFor(() =>
+          view.getByTestId('voice-record-button-audio'),
+        );
+        while (target && typeof target.props.onPress !== 'function') {
+          target = target.parent;
+        }
+        if (!target) throw new Error('The voice record control is not pressable.');
+        await rtl.act(async () => {
+          await target.props.onPress();
+        });
+      };
+      await pressVoiceButton(); // tap: start recording
       await this.settle(50);
-      rtl.fireEvent.press(await rtl.waitFor(btn)); // tap: stop & send → transcribeFile → onTranscript → send
+      await pressVoiceButton(); // tap: stop & send → transcribeFile → onTranscript → send
     },
 
     /** Mount the real ChatScreen (plus the real app.root slot when pro is active, so the TTS EngineBridge
@@ -1354,6 +1409,61 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     /** Save an assistant edit without starting a new generation. */
     saveAssistantResponseEdit() {
       rtl.fireEvent.press(this.view!.getByText('SAVE'));
+    },
+
+    /** Put the open editor through the keyboard and cursor path used by a start-of-message edit. */
+    async focusOpenEditorAtStartWithKeyboardVisible() {
+      const { Keyboard } =
+        require('react-native') as typeof import('react-native');
+      await rtl.act(async () => {
+        const emitter = (
+          Keyboard as unknown as {
+            _emitter: { emit: (event: string, value: unknown) => void };
+          }
+        )._emitter;
+        const event = { endCoordinates: { height: 320 } };
+        emitter.emit('keyboardWillShow', event);
+        emitter.emit('keyboardDidShow', event);
+      });
+      const editor = this.view!.getByPlaceholderText('Enter message...');
+      rtl.fireEvent(editor, 'touchStart');
+      rtl.fireEvent(editor, 'selectionChange', {
+        nativeEvent: { selection: { start: 0, end: 0 } },
+      });
+    },
+
+    /** Save the open user edit and resend it through the visible action. */
+    saveUserEditAndResend(scripted: ChatTextScript) {
+      scriptTextTurn(scripted);
+      rtl.fireEvent.press(this.view!.getByText('SAVE & RESEND'));
+    },
+
+    /** Resend the last user message through its real action menu. */
+    async resendLastUserMessage(
+      scripted: ChatTextScript,
+      via: 'longpress' | 'dots' = 'dots',
+    ) {
+      scriptTextTurn(scripted);
+      await this.openActionMenu('user', via);
+      rtl.fireEvent.press(this.view!.getByTestId('action-retry'));
+    },
+
+    /** Dismiss the visible native alert. */
+    dismissAlert() {
+      rtl.fireEvent.press(this.view!.getByText('OK'));
+    },
+
+    /** Report that the generated image finished loading, as the native image view does. */
+    async markGeneratedImageLoaded() {
+      const image = await rtl.waitFor(() =>
+        this.view!.getByTestId('generated-image-content'),
+      );
+      rtl.fireEvent(image, 'load');
+    },
+
+    /** Stop the active response through the visible stop control. */
+    stopGeneration() {
+      rtl.fireEvent.press(this.view!.getByTestId('stop-button'));
     },
 
     /**

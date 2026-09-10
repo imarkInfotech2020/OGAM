@@ -1296,6 +1296,8 @@ export interface InstallOpts {
   download?: boolean;
   /** Replace the global whisper.rn stub with a driveable STT context (boundary.whisper). */
   whisper?: boolean;
+  /** Grant the native microphone permission required by any voice transcription route. */
+  microphone?: boolean;
 }
 
 export interface NativeBoundary {
@@ -1433,10 +1435,9 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   RN.NativeModules.CoreMLDiffusionModule = diffusion.module;
   if (downloadFake)
     RN.NativeModules.DownloadManagerModule = downloadFake.module;
-  // Mic permission is a device boundary: whisper STT refuses to start recording without RECORD_AUDIO
-  // granted (whisperService.requestPermissions → PermissionsAndroid.request). Grant it when whisper is
-  // installed so the real STT flow runs; the default jest PermissionsAndroid returns undefined (= denied).
-  if (whisperFake && RN.PermissionsAndroid) {
+  // Mic permission is a device boundary shared by local and remote transcription. The default Jest
+  // PermissionsAndroid response is undefined (= denied), so grant it for every voice-mode journey.
+  if (opts.microphone && RN.PermissionsAndroid) {
     RN.PermissionsAndroid.request = jest
       .fn()
       .mockResolvedValue(RN.PermissionsAndroid.RESULTS?.GRANTED ?? 'granted');
