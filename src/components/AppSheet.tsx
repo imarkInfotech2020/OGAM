@@ -308,7 +308,10 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   return (
     <Modal
-      visible={modalVisible}
+      // The controlled prop owns native visibility. If an exit animation is
+      // interrupted, a stale internal flag must not keep an invisible iOS
+      // modal above the chat composer and consume its touches.
+      visible={visible && modalVisible}
       transparent
       animationType="none"
       onRequestClose={dismiss}
