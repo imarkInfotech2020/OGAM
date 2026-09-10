@@ -12,7 +12,6 @@ import {
 } from '@offgrid/application';
 import { AlertState, hideAlert, showAlert } from '../../components';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
-import { generationSession } from '../../services/generationSession';
 import { mobileTextEngineControl } from '../../services/modelServices/textEngineControl';
 import { applicationFacade } from '../../services/applicationFacade';
 import { needsVisionRepair } from '../../utils/visionRepair';
@@ -248,7 +247,6 @@ async function runPersistedChatTurnFn(
   deps: GenerationDeps,
   call: StartGenerationCall,
 ): Promise<void> {
-  generationSession.begin(call.targetConversationId);
   const recordedOperation: GenerationOperation | undefined =
     call.imageMode === 'force'
       ? { type: 'image', prompt: generationMessageText(call.userMessage) }
@@ -272,7 +270,6 @@ async function runPersistedChatTurnFn(
           }),
         ),
     );
-    generationSession.end(turn.status === 'stopped' ? 'stopped' : undefined);
     // An intentional stop can complete with no assistant row. That is the
     // expected terminal state, not a model failure.
     if (turn.status === 'stopped') return;
@@ -295,7 +292,6 @@ async function runPersistedChatTurnFn(
         );
       },
     });
-    generationSession.end('error');
   }
 }
 
@@ -396,9 +392,8 @@ export async function replayPersistedChatTurnFn(
     });
     return;
   }
-  generationSession.begin(conversationId);
   try {
-    const turn = await mobileChatSession.regenerate(
+    await mobileChatSession.regenerate(
       conversationId,
       persistedMessage.turnId,
       {
@@ -406,13 +401,11 @@ export async function replayPersistedChatTurnFn(
         options: mobileCommandOptions(deps),
       },
     );
-    generationSession.end(turn.status === 'stopped' ? 'stopped' : undefined);
   } catch (error) {
     presentGenerationError(deps, conversationId, {
       error,
       retry: () => replayPersistedChatTurnFn(deps, userMessage, operation),
     });
-    generationSession.end('error');
   }
 }
 
@@ -423,20 +416,17 @@ export async function editPersistedChatTurnFn(
   const conversationId = deps.activeConversationId;
   if (!conversationId || !deps.hasActiveModel) return;
   await prepareMobileChatGeneration();
-  generationSession.begin(conversationId);
   try {
-    const turn = await mobileChatSession.edit(
+    await mobileChatSession.edit(
       conversationId,
       message.id,
       message,
     );
-    generationSession.end(turn.status === 'stopped' ? 'stopped' : undefined);
   } catch (error) {
     presentGenerationError(deps, conversationId, {
       error,
       retry: () => editPersistedChatTurnFn(deps, message),
     });
-    generationSession.end('error');
   }
 }
 
@@ -456,7 +446,6 @@ export async function generateImageForPersistedTurnFn(
 export async function handleStopFn(
   deps: Pick<GenerationDeps, 'isGeneratingImage'>,
 ): Promise<void> {
-  generationSession.end('stopped');
   callHook(HOOKS.audioStop);
   if (!mobileChatSession.stop() && deps.isGeneratingImage) {
     try {

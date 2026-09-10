@@ -21,7 +21,6 @@ import {
   useWorkspaceContentProjection,
 } from '../../hooks/useApplicationProjection';
 import { hardwareService } from '../../services';
-import { useGeneratingConversationId } from '../../hooks/useGenerationSession';
 import {
   MediaAttachment,
   DownloadedModel,
@@ -144,8 +143,6 @@ export const useChatScreen = () => {
   const [pendingProjectId, setPendingProjectId] = useState<string | undefined>(
     route.params?.projectId,
   );
-  // Owned by the generationSession service (single owner); observed reactively here.
-  const generatingConversationId = useGeneratingConversationId();
   // Stashed when the model selector opens with no text model; replayed on pick.
   const pendingMessageRef = useRef<{
     text: string;
@@ -154,8 +151,13 @@ export const useChatScreen = () => {
   const modelLoadStartTimeRef = useRef<number | null>(null);
   const genDepsRef = useRef<GenerationDeps | null>(null);
   useChatAudioLifecycle(navigation);
-  const { imageGenState, isCompacting, queueCount, queuedTexts } =
-    useChatRuntimeSubscriptions();
+  const {
+    imageGenState,
+    isCompacting,
+    queueCount,
+    queuedTexts,
+    generatingConversationIds,
+  } = useChatRuntimeSubscriptions();
 
   // One selector per fact. Subscribing to the WHOLE app store re-ran this hook (and rebuilt the
   // screen model) on every unrelated app-store write - a download progress tick, an image model
@@ -305,7 +307,6 @@ export const useChatScreen = () => {
   useChatConversationLifecycle({
     routeConversationId: route.params?.conversationId,
     routeProjectId: route.params?.projectId,
-    activeConversationId,
     setActiveConversation,
     setPendingProjectId,
   });
@@ -315,8 +316,8 @@ export const useChatScreen = () => {
   });
 
   const isGeneratingForThisConversation =
-    generatingConversationId != null &&
-    generatingConversationId === activeConversationId;
+    activeConversationId != null &&
+    generatingConversationIds.includes(activeConversationId);
   // Replies generating on paired devices. Empty unless Pro's chat-stream service is running.
   const remotePreviews = useRemoteChatStreamPreviews(activeConversationId);
   const localDeviceId = useSyncIdentityStore(s => s.localDeviceId);
