@@ -33,8 +33,10 @@ import { ChatScenario, type ChatScenarioOptions } from './chatScenario';
 export {
   CHAT_LOCAL_IMAGE_SCENARIOS,
   CHAT_LOCAL_TEXT_SCENARIOS,
+  CHAT_DOCUMENT_ATTACHMENT_SCENARIOS,
   CHAT_IMAGE_SCENARIOS,
   CHAT_IMAGE_GENERATION_SCENARIOS,
+  CHAT_PHOTO_ATTACHMENT_SCENARIOS,
   CHAT_REMOTE_IMAGE_SCENARIOS,
   CHAT_SCENARIO_MATRIX,
   CHAT_THINKING_DISABLED_SCENARIOS,
@@ -134,6 +136,21 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
 
   const React = require('react');
   const rtl = requireRTL();
+  const { ActionSheetIOS } =
+    require('react-native') as typeof import('react-native');
+  const originalShowActionSheet = ActionSheetIOS.showActionSheetWithOptions;
+  const actionSheetSelections: number[] = [];
+  if (platform === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions = ((_options, select) => {
+      const index = actionSheetSelections.shift();
+      if (index === undefined) {
+        throw new Error(
+          'The iOS action-sheet boundary has no scripted choice.',
+        );
+      }
+      select(index);
+    }) as typeof ActionSheetIOS.showActionSheetWithOptions;
+  }
 
   // BOUNDARY (not a gesture): a downloaded model = a persisted record (@local_llm/downloaded_models) + the
   // file on disk — exactly what a real download leaves. Downloading is native and can't be gestured in jest,
@@ -144,6 +161,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     require('@react-native-async-storage/async-storage');
 
   const docs = boundary.fs!.DocumentDirectoryPath;
+  boundary.fs!.seedTextFile(
+    '/mock/document.txt',
+    'A document selected through the native file picker boundary.',
+  );
   const fileName =
     opts.modelFileName ??
     (opts.engine === 'litert' ? 'gemma.litertlm' : 'ggml-small.gguf');
@@ -406,6 +427,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
       await applicationFixture.dispose();
       global.XMLHttpRequest = originalXHR;
       global.fetch = originalFetch;
+      ActionSheetIOS.showActionSheetWithOptions = originalShowActionSheet;
     };
   }
 
@@ -814,23 +836,25 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
      */
     async attachImageViaUI(source: 'library' | 'camera' = 'library') {
       const view = this.view!;
+      if (platform === 'ios') {
+        actionSheetSelections.push(0, source === 'camera' ? 0 : 1);
+      }
       rtl.fireEvent.press(
         await rtl.waitFor(() => view.getByTestId('attach-button')),
       );
-      rtl.fireEvent.press(
-        await rtl.waitFor(() => view.getByTestId('attach-photo')),
-      );
-      // Android: attach-photo opens a "Choose image source" alert — tap "Photo Library" or "Camera" (both
-      // real gestures), which (after a short delay) launches the faked picker and adds the attachment.
-      // The two sources matter for a MULTI-image turn: the faked library returns one fixed uri every time,
-      // so two library picks are indistinguishable from one image arriving twice. The camera returns a
-      // different uri, which is what makes "both images reached the engine" an assertion rather than a hope.
-      rtl.fireEvent.press(
-        await rtl.waitFor(() =>
-          view.getByText(source === 'camera' ? 'Camera' : 'Photo Library'),
-        ),
-      );
-      await this.settle(400); // the handler defers pickFromLibrary via setTimeout(300)
+      if (platform === 'android') {
+        rtl.fireEvent.press(
+          await rtl.waitFor(() => view.getByTestId('attach-photo')),
+        );
+        // Android renders the source choice in the application alert. iOS uses the native action-sheet
+        // boundary scripted above. Both then run the same real picker and attachment path.
+        rtl.fireEvent.press(
+          await rtl.waitFor(() =>
+            view.getByText(source === 'camera' ? 'Camera' : 'Photo Library'),
+          ),
+        );
+        await this.settle(400); // the Android handler waits for its alert to close before opening native UI.
+      }
       await rtl.waitFor(() => {
         expect(view.queryByTestId('attachments-container')).not.toBeNull();
       });
@@ -839,12 +863,18 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     /** Attach a document through the real attach popover and native picker boundary. */
     async attachDocumentViaUI() {
       const view = this.view!;
+      if (platform === 'ios') {
+        const supportsVision = opts.vision || opts.engine === 'remote';
+        actionSheetSelections.push(supportsVision ? 1 : 0);
+      }
       rtl.fireEvent.press(
         await rtl.waitFor(() => view.getByTestId('attach-button')),
       );
-      rtl.fireEvent.press(
-        await rtl.waitFor(() => view.getByTestId('attach-document')),
-      );
+      if (platform === 'android') {
+        rtl.fireEvent.press(
+          await rtl.waitFor(() => view.getByTestId('attach-document')),
+        );
+      }
       await rtl.waitFor(() => {
         expect(view.queryByText('document.txt')).not.toBeNull();
       });

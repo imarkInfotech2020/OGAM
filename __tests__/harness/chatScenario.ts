@@ -219,6 +219,19 @@ export const CHAT_IMAGE_SCENARIOS = [
   ...CHAT_REMOTE_IMAGE_SCENARIOS,
 ] as const;
 
+export const CHAT_PHOTO_ATTACHMENT_SCENARIOS = [
+  usingRemoteText({ platform: 'ios' }).withPhotoAttachment('camera'),
+  usingRemoteText({ platform: 'ios' }).withPhotoAttachment('gallery'),
+  usingLiteRT({ platform: 'android' }).withPhotoAttachment('camera'),
+  usingLiteRT({ platform: 'android' }).withPhotoAttachment('gallery'),
+  usingRemoteText({ platform: 'android' }).withPhotoAttachment('camera'),
+  usingRemoteText({ platform: 'android' }).withPhotoAttachment('gallery'),
+] as const;
+
+export const CHAT_DOCUMENT_ATTACHMENT_SCENARIOS = CHAT_TEXT_SCENARIOS.map(
+  scenario => scenario.withDocumentAttachment(),
+);
+
 /** The complete rendered image-send matrix. Every row is executed by the image journey test. */
 export const CHAT_IMAGE_GENERATION_SCENARIOS = [
   usingLlama({ platform: 'ios' })
@@ -282,4 +295,6 @@ export const CHAT_SCENARIO_MATRIX = {
   localImage: CHAT_LOCAL_IMAGE_SCENARIOS,
   remoteImage: CHAT_REMOTE_IMAGE_SCENARIOS,
   imageGeneration: CHAT_IMAGE_GENERATION_SCENARIOS,
+  photoAttachment: CHAT_PHOTO_ATTACHMENT_SCENARIOS,
+  documentAttachment: CHAT_DOCUMENT_ATTACHMENT_SCENARIOS,
 } as const;
