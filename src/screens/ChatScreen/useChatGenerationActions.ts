@@ -280,7 +280,21 @@ async function runPersistedChatTurnFn(
   } catch (error) {
     presentGenerationError(deps, call.targetConversationId, {
       error,
-      retry: () => runPersistedChatTurnFn(deps, call),
+      retry: async () => {
+        const persistedMessage = applicationFacade()
+          .workspaceContent.snapshot()
+          .messages.find(
+            message =>
+              message.id === call.userMessageId &&
+              message.conversationId === call.targetConversationId,
+          );
+        if (!persistedMessage) return;
+        await replayPersistedChatTurnFn(
+          deps,
+          toWorkspaceMessage(persistedMessage),
+          recordedOperation,
+        );
+      },
     });
     generationSession.end('error');
   }

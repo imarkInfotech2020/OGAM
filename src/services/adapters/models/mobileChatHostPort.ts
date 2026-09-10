@@ -32,7 +32,6 @@ import {
   mobileWorkspaceGenerationMessage,
 } from './mobileChatTurnRepository';
 import { committedEnabledToolIds } from './committedToolSelection';
-import { generateChatWithModelsFacade } from './modelsFacadeGeneration';
 import { useAppStore } from '../../../stores';
 import type { MediaAttachment, Message } from '../../../types';
 import logger from '../../../utils/logger';
@@ -265,7 +264,7 @@ async function generateForSession(
 ): Promise<GenerationResult> {
   if (request.operation?.type !== 'image') {
     await lifecycleProjectionPort.refreshInventory();
-    return generateChatWithModelsFacade(request, events);
+    return applicationFacade().models.mainQueue.generate(request, events);
   }
   const identity = request.identity;
   if (!identity?.conversationId)
