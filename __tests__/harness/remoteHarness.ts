@@ -10,7 +10,9 @@
 /** Behavior-faithful fake of the streaming XMLHttpRequest transport. Replays `sseBody` incrementally via
  *  onprogress (as chunked SSE arrives on device), then completes 200 — exactly what createStreamingRequest
  *  consumes (reads xhr.responseText in onprogress, finalises on readyState 4). Install before a remote send. */
-export function installRemoteStream(sseBody: string | string[]): { release: () => void } {
+export function installRemoteStream(
+  sseBody: string | string[] | ((requestBody: string) => string),
+): { release: () => void } {
   // Accept a QUEUE of per-request bodies so a multi-turn remote flow (a tool loop: request 1 returns
   // tool_calls, request 2 — sent WITH the tool results — returns the final reply) replays the right body per
   // XHR. A single string keeps the old behavior; with an array each send() shifts the next body, the last
@@ -19,7 +21,12 @@ export function installRemoteStream(sseBody: string | string[]): { release: () =
   // A body line that is exactly `__PAUSE__` HALTS the pump there (the deltas before it are delivered, the
   // stream is NOT completed) until the returned release() is called — so a test can observe the mid-stream
   // rendered state (e.g. the thinking-box header WHILE reasoning is still streaming). No pause line = no-op.
-  const bodies = Array.isArray(sseBody) ? [...sseBody] : [sseBody];
+  const bodyFactory = typeof sseBody === 'function' ? sseBody : null;
+  const bodies: string[] = bodyFactory
+    ? []
+    : Array.isArray(sseBody)
+      ? [...sseBody]
+      : [sseBody as string];
   let releaseFn: (() => void) | null = null;
   class FakeXHR {
     responseText = '';
@@ -32,10 +39,12 @@ export function installRemoteStream(sseBody: string | string[]): { release: () =
     open(): void { this.readyState = 1; }
     setRequestHeader(): void { /* headers irrelevant to the fake */ }
     abort(): void { /* no-op */ }
-    send(): void {
+    send(requestBody?: string): void {
       // Emit the captured body line-by-line, one per macrotask, so the REAL incremental parser runs like it
       // does on device — works for both OpenAI SSE (`data: {…}\n\n`) and Ollama NDJSON (`{…}\n`).
-      const body = bodies.length > 1 ? bodies.shift()! : bodies[0];
+      const body = bodyFactory
+        ? bodyFactory(requestBody ?? '')
+        : bodies.length > 1 ? bodies.shift()! : bodies[0];
       this.responseText = '';
       const chunks = body.match(/[^\n]*\n/g) ?? [body];
       let i = 0;

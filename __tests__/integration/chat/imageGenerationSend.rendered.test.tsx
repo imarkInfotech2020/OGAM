@@ -1,11 +1,11 @@
 import { Modal } from 'react-native';
 
 import {
-  CHAT_PLATFORM_ENGINE_CASES,
+  CHAT_LOCAL_PLATFORM_ENGINE_CASES,
   setupChatScreen,
 } from '../../harness/chatHarness';
 
-describe.each(CHAT_PLATFORM_ENGINE_CASES)(
+describe.each(CHAT_LOCAL_PLATFORM_ENGINE_CASES)(
   'Mobile image generation send journey on $label',
   ({ platform, engine }) => {
     it('keeps the enhanced prompt before the image in one response bubble', async () => {

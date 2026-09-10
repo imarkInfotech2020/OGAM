@@ -34,7 +34,7 @@ import {doMockRealSqlite} from './sqliteFake';
 export const routeHolder: { params: Record<string, unknown> } = { params: {} };
 
 export interface ChatHarnessOptions {
-  engine: 'llama' | 'litert';
+  engine: 'llama' | 'litert' | 'remote';
   /** 'ios' surfaces the Metal accelerator path for llama; default 'android'. */
   platform?: 'ios' | 'android';
   ram?: RamProfile;
@@ -68,10 +68,17 @@ export interface ChatHarnessOptions {
   chatTemplate?: string;
 }
 
-export const CHAT_PLATFORM_ENGINE_CASES = [
+export const CHAT_LOCAL_PLATFORM_ENGINE_CASES = [
   { label: 'ios/llama', platform: 'ios', engine: 'llama' },
   { label: 'android/llama', platform: 'android', engine: 'llama' },
   { label: 'android/litert', platform: 'android', engine: 'litert' },
+] as const satisfies readonly (ChatHarnessOptions & { label: string })[];
+
+export const CHAT_PLATFORM_ENGINE_CASES = [
+  CHAT_LOCAL_PLATFORM_ENGINE_CASES[0],
+  { label: 'ios/remote', platform: 'ios', engine: 'remote' },
+  ...CHAT_LOCAL_PLATFORM_ENGINE_CASES.slice(1),
+  { label: 'android/remote', platform: 'android', engine: 'remote' },
 ] as const satisfies readonly (ChatHarnessOptions & { label: string })[];
 
 type ChatTextScript = {
@@ -100,6 +107,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     whisper: opts.whisper,
     download: opts.download,
   });
+  const originalXHR = global.XMLHttpRequest;
   // The application root now starts Workspace Content and the generated-image gallery before Home
   // renders. Give both real repositories a real SQLite boundary; the global empty-row stub cannot
   // report schema columns and therefore cannot represent their additive migrations.
@@ -130,16 +138,15 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   const docs = boundary.fs!.DocumentDirectoryPath;
   const fileName =
     opts.modelFileName ??
-    (opts.engine === 'llama' ? 'ggml-small.gguf' : 'gemma.litertlm');
+    (opts.engine === 'litert' ? 'gemma.litertlm' : 'ggml-small.gguf');
   const modelPath = `${docs}/models/${fileName}`;
-  boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
   // fileSize drives the residency budget. The factory default is 4GB, which under the GPU-aware text
   // overhead (2.2× on a non-CPU backend, e.g. iOS METAL) needs ~8.8GB and no longer fits the default
   // 8GB-avail profile — so a chat-flow test (not a memory test) would spuriously hit the fit refusal.
   // A realistic small model (2GB) is device-faithful and loads under the budget; memory/OOM tests set
   // their own explicit sizes + RAM profiles and are unaffected.
   const fileSize = opts.modelFileSizeBytes ?? 2 * 1024 * 1024 * 1024;
-  const model = createDownloadedModel({
+  const model = opts.engine === 'remote' ? null : createDownloadedModel({
     id: 'm',
     name: opts.modelName ?? 'Test Model',
     engine: opts.engine,
@@ -149,10 +156,8 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     liteRTVision: opts.vision,
     liteRTAudio: opts.audio,
   });
-  await AsyncStorage.setItem(
-    '@local_llm/downloaded_models',
-    JSON.stringify([model]),
-  );
+  if (model) boundary.fs!.seedFile(modelPath, 500 * 1024 * 1024);
+  await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify(model ? [model] : []));
   await AsyncStorage.setItem(
     'local-llm-app-storage',
     JSON.stringify({
@@ -184,6 +189,14 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   const applicationFixture = await startMobileApplicationFixture({pro: opts.pro});
   const {HomeScreen} = require('../../src/screens/HomeScreen');
 
+  if (opts.engine === 'remote') {
+    const {installRemoteModel} = require('./remoteHarness') as typeof import('./remoteHarness');
+    await installRemoteModel({
+      caps: {supportsVision: true, supportsToolCalling: true, supportsThinking: true},
+    });
+    await applicationFixture.refreshModels();
+  }
+
   // GESTURE: mount the real Home screen — its REAL hydration loads the record — then open the picker and TAP
   // the model row. The real handleSelectTextModel sets it active (no setState activeModelId shortcut).
   const home = rtl.render(
@@ -196,35 +209,39 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       },
     }),
   );
-  await rtl.waitFor(
-    () => {
-      expect(useAppStore.getState().downloadedModels.length).toBeGreaterThan(0);
-    },
-    { timeout: 4000 },
-  );
-  rtl.fireEvent.press(
-    await rtl.waitFor(() => home.getByTestId('browse-models-button')),
-  );
-  const rows = await rtl.waitFor(
-    () => {
-      const r = home.queryAllByTestId(/^text-model-row-/);
-      expect(r.length).toBeGreaterThan(0);
-      return r;
-    },
-    { timeout: 4000 },
-  );
-  rtl.fireEvent.press(rows[0]);
+  if (opts.engine !== 'remote') {
+    await rtl.waitFor(
+      () => {
+        expect(useAppStore.getState().downloadedModels.length).toBeGreaterThan(0);
+      },
+      { timeout: 4000 },
+    );
+    rtl.fireEvent.press(
+      await rtl.waitFor(() => home.getByTestId('browse-models-button')),
+    );
+    const rows = await rtl.waitFor(
+      () => {
+        const r = home.queryAllByTestId(/^text-model-row-/);
+        expect(r.length).toBeGreaterThan(0);
+        return r;
+      },
+      { timeout: 4000 },
+    );
+    rtl.fireEvent.press(rows[0]);
+  }
   await rtl.waitFor(
     () => {
       // The selection is the shared active route; the store carries no selection field any more.
-      expect(applicationFixture.application.models.snapshot().active.text?.model?.id).toBe('m');
+      expect(applicationFixture.application.models.snapshot().active.text?.model?.id ?? null).toBe(
+        opts.engine === 'remote' ? 'remote-model' : 'm',
+      );
     },
     { timeout: 4000 },
   );
   await rtl.waitFor(
     () => {
       // The user cannot start the next action until the picker has finished closing.
-      expect(home.queryAllByTestId(/^text-model-row-/)).toHaveLength(0);
+      if (opts.engine !== 'remote') expect(home.queryAllByTestId(/^text-model-row-/)).toHaveLength(0);
     },
     { timeout: 4000 },
   );
@@ -240,7 +257,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
   // readiness gate passes deterministically). This is the real native-faked load, not a state shortcut.
   // deferInitialLoad leaves the model selected-but-not-loaded (the real lazy-on-select state) so a test
   // can assert nothing is eager-warmed; the first send then triggers the real lazy load.
-  if (!opts.deferInitialLoad) {
+  if (!opts.deferInitialLoad && opts.engine !== 'remote') {
     const {modelsFailureMessage} = require('@offgrid/application') as typeof import('@offgrid/application');
     const outcome = await applicationFixture.application.models.load({
       modality: 'text',
@@ -267,14 +284,53 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     ).__GEN_CLEANUP__ = async () => {
       mobileChatSession.stop();
       await applicationFixture.dispose();
+      global.XMLHttpRequest = originalXHR;
     };
   }
 
   routeHolder.params = {}; // new chat — the first send() creates the conversation
 
+  let releaseRemoteStream: (() => void) | null = null;
+  const remoteSse = (content: string, reasoning?: string) =>
+    `${reasoning ? `data: ${JSON.stringify({choices: [{delta: {reasoning_content: reasoning}}]})}\n\n` : ''}` +
+    `data: ${JSON.stringify({choices: [{delta: {content}}]})}\n\n` +
+    'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
+    'data: [DONE]\n\n';
   const scriptTextTurn = (scripted: ChatTextScript) => {
     if (opts.engine === 'llama') {
       boundary.llama!.scriptCompletion(scripted);
+      return;
+    }
+    if (opts.engine === 'remote') {
+      const {installRemoteStream} = require('./remoteHarness') as typeof import('./remoteHarness');
+      const content = scripted.content ?? scripted.text ?? '';
+      let body: string;
+      if (scripted.throwMessage) {
+        body = `data: ${JSON.stringify({error: {message: scripted.throwMessage}})}\n\n`;
+      } else if (scripted.holdBeforeStream) {
+        body = `__PAUSE__\n${remoteSse(content, scripted.reasoning)}`;
+      } else if (scripted.pauseAfter !== undefined) {
+        const split = content.indexOf(scripted.pauseAfter);
+        const partialEnd = split < 0 ? content.length : split + scripted.pauseAfter.length;
+        body = remoteSse(content.slice(0, partialEnd)).replace(
+          'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
+          `__PAUSE__\ndata: ${JSON.stringify({choices: [{delta: {content: content.slice(partialEnd)}}]})}\n\n`,
+        );
+      } else {
+        body = remoteSse(content, scripted.reasoning);
+      }
+      releaseRemoteStream = installRemoteStream(requestBody => {
+        if (!scripted.thinkingText) return body;
+        let thinkingRequested = false;
+        try {
+          const request = JSON.parse(requestBody) as {
+            chat_template_kwargs?: {enable_thinking?: boolean};
+            think?: boolean;
+          };
+          thinkingRequested = request.chat_template_kwargs?.enable_thinking === true || request.think === true;
+        } catch { /* malformed input stays on the clean scripted path */ }
+        return thinkingRequested ? remoteSse(scripted.thinkingText) : body;
+      }).release;
       return;
     }
     if (scripted.throwMessage) {
@@ -313,7 +369,8 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     scriptTextTurn,
     releaseTextStream() {
       if (opts.engine === 'llama') boundary.llama!.releaseStream();
-      else boundary.litert.releaseStream();
+      else if (opts.engine === 'litert') boundary.litert.releaseStream();
+      else if (opts.engine === 'remote') releaseRemoteStream?.();
     },
     /** The active conversation id — a NEW chat has none until the first send() creates it. */
     get conversationId(): string | null {
