@@ -30,6 +30,13 @@ export interface ChatAssertions {
   isComposerEnabled(): boolean;
   isActionMenuVisible(): boolean;
   isChatErrorVisible(title: TextMatcher): boolean;
+  isSendLoadingVisible(): boolean;
+  isSendControlVisible(): boolean;
+  isStopControlVisible(): boolean;
+  isEditorTextVisible(text: string): boolean;
+  isNewChatTitleVisible(): boolean;
+  isFirstMessageUsedAsTitle(text: string): boolean;
+  isDocumentNameVisible(name: TextMatcher): boolean;
   isAttachedPhotoClickable(): Promise<boolean>;
   isAttachedDocumentClickable(): Promise<boolean>;
   isToolCallClickable(
@@ -43,7 +50,14 @@ async function pressAndObserve(
   target: ReactTestInstance,
   visibleOutcome: () => ReactTestInstance | null,
 ): Promise<boolean> {
-  rtl.fireEvent.press(target);
+  let pressable: ReactTestInstance | null = target;
+  while (pressable && typeof pressable.props.onPress !== 'function') {
+    pressable = pressable.parent;
+  }
+  if (!pressable) return false;
+  await rtl.act(async () => {
+    await pressable.props.onPress();
+  });
   try {
     await rtl.waitFor(() => {
       expect(visibleOutcome()).not.toBeNull();
@@ -74,9 +88,9 @@ export function createChatAssertions(
 ): ChatAssertions {
   return {
     isUserMessageVisible(text) {
-      return view.queryAllByTestId('user-message').some(message =>
-        isVisible(rtl.within(message).queryByText(text)),
-      );
+      const messages = view.queryAllByTestId('user-message');
+      if (!messages[0]) return false;
+      return isVisible(rtl.within(messages[0]).queryByText(text));
     },
 
     isResponseVisible(text) {
@@ -88,7 +102,7 @@ export function createChatAssertions(
     },
 
     isGeneratedImageVisible() {
-      return isVisible(view.queryByTestId('generated-image-content'));
+      return view.queryByLabelText('Generated image loaded') !== null;
     },
 
     isGeneratedImageLoaded() {
@@ -117,7 +131,8 @@ export function createChatAssertions(
       const renderedNodes = bubble.findAll(() => true);
       return (
         renderedNodes.indexOf(prompt) < renderedNodes.indexOf(captionNode) &&
-        renderedNodes.indexOf(captionNode) < renderedNodes.indexOf(generatedImage)
+        renderedNodes.indexOf(captionNode) <
+          renderedNodes.indexOf(generatedImage)
       );
     },
 
@@ -168,7 +183,14 @@ export function createChatAssertions(
       const scoped = rtl.within(bubble);
       const hide = scoped.queryByText('Hide transcript');
       if (hide) {
-        rtl.fireEvent.press(hide);
+        let pressable: ReactTestInstance | null = hide;
+        while (pressable && typeof pressable.props.onPress !== 'function') {
+          pressable = pressable.parent;
+        }
+        if (!pressable) return false;
+        await rtl.act(async () => {
+          await pressable.props.onPress();
+        });
         await rtl.waitFor(() => expect(scoped.queryByText(text)).toBeNull());
       }
       const show = scoped.queryByText('Show transcript');
@@ -221,13 +243,45 @@ export function createChatAssertions(
       return isVisible(view.queryByText(title));
     },
 
+    isSendLoadingVisible() {
+      return isVisible(view.queryByTestId('send-loading-dots'));
+    },
+
+    isSendControlVisible() {
+      return isVisible(view.queryByTestId('send-button'));
+    },
+
+    isStopControlVisible() {
+      return isVisible(view.queryByTestId('stop-button'));
+    },
+
+    isEditorTextVisible(text) {
+      const editor = view.queryByPlaceholderText('Enter message...');
+      return editor?.props.value === text;
+    },
+
+    isNewChatTitleVisible() {
+      return isVisible(view.queryByText('New Chat'));
+    },
+
+    isFirstMessageUsedAsTitle(text) {
+      const copies = view.queryAllByText(text);
+      return (
+        copies.length === 2 &&
+        copies.every(copy => isVisible(copy)) &&
+        view.queryByText('New Conversation') === null
+      );
+    },
+
+    isDocumentNameVisible(name) {
+      return isVisible(view.queryByText(name));
+    },
+
     async isAttachedPhotoClickable() {
       const photo = view.queryByTestId(/^attachment-image-/);
       if (!photo || view.queryByText('Close')) return false;
-      const opened = await pressAndObserve(
-        rtl,
-        photo,
-        () => view.queryByText('Close'),
+      const opened = await pressAndObserve(rtl, photo, () =>
+        view.queryByText('Close'),
       );
       if (opened) rtl.fireEvent.press(view.getByText('Close'));
       return opened;
@@ -236,10 +290,8 @@ export function createChatAssertions(
     async isAttachedDocumentClickable() {
       const document = view.queryByTestId(/^document-preview-/);
       if (!document || view.queryByText('Close')) return false;
-      const opened = await pressAndObserve(
-        rtl,
-        document,
-        () => view.queryByText('Close'),
+      const opened = await pressAndObserve(rtl, document, () =>
+        view.queryByText('Close'),
       );
       if (opened) rtl.fireEvent.press(view.getByText('Close'));
       return opened;
@@ -250,10 +302,8 @@ export function createChatAssertions(
         view.queryByTestId(`tool-result-label-${toolName}`) ??
         view.queryByTestId(`tool-result-accordion-${toolName}`);
       if (!tool || view.queryByText(visibleDetail)) return false;
-      const expanded = await pressAndObserve(
-        rtl,
-        tool,
-        () => view.queryByText(visibleDetail),
+      const expanded = await pressAndObserve(rtl, tool, () =>
+        view.queryByText(visibleDetail),
       );
       if (expanded) rtl.fireEvent.press(tool);
       return expanded;
