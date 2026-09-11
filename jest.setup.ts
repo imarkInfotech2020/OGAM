@@ -225,22 +225,33 @@ jest.mock('react-native/jest/mockNativeComponent', () => {
 
 // react-native-audio-api mock
 jest.mock('react-native-audio-api', () => ({
-  AudioContext: jest.fn().mockImplementation(() => ({
-    createBuffer: jest.fn().mockReturnValue({ copyToChannel: jest.fn() }),
-    createBufferSource: jest.fn().mockReturnValue({
+  AudioContext: jest.fn().mockImplementation(() => {
+    const source = {
       connect: jest.fn(),
       start: jest.fn(),
       stop: jest.fn(),
       playbackRate: { value: 1.0 },
-      onEnded: null,
+      onEnded: null as null | (() => void),
       buffer: null,
-    }),
-    destination: {},
-    state: 'suspended',
-    resume: jest.fn().mockResolvedValue(undefined),
-    suspend: jest.fn().mockResolvedValue(undefined),
-    close: jest.fn().mockResolvedValue(undefined),
-  })),
+    };
+    source.start.mockImplementation(() => {
+      Promise.resolve().then(() => source.onEnded?.());
+    });
+    return {
+      createBuffer: jest.fn().mockReturnValue({ copyToChannel: jest.fn() }),
+      createBufferSource: jest.fn().mockReturnValue(source),
+      decodeAudioData: jest.fn().mockResolvedValue({
+        duration: 1,
+        getChannelData: jest.fn().mockReturnValue(new Float32Array([0])),
+      }),
+      currentTime: 0,
+      destination: {},
+      state: 'suspended',
+      resume: jest.fn().mockResolvedValue(undefined),
+      suspend: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+  }),
   AudioManager: {
     setAudioSessionOptions: jest.fn(),
     setAudioSessionActivity: jest.fn().mockResolvedValue(true),

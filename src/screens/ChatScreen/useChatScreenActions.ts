@@ -2,15 +2,15 @@ import { Dispatch, MutableRefObject, SetStateAction, useCallback } from 'react';
 import { AlertState } from '../../components';
 import type { ModelSettingsRecord } from '@offgrid/application';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
-import { useChatStore } from '../../stores';
 import {
+  Conversation,
   DebugInfo,
   DownloadedModel,
   MediaAttachment,
+  Message,
   Project,
 } from '../../types';
 import type { ActiveTextModelResult } from '../../hooks/useActiveTextModel';
-import { useEnabledToolsSetting } from '../../hooks/useEnabledToolsSetting';
 import type { AppSettings } from '../../stores/appStore';
 import { saveImageToGallery } from './useSaveImage';
 import { computePendingSettings } from './pendingSettings';
@@ -33,15 +33,12 @@ import {
 } from './useChatMessageHandlers';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
-type ChatStoreState = ReturnType<typeof useChatStore.getState>;
-
 const VIEWER_FADE_OUT_MS = 350;
 
 interface ChatScreenActionsArgs {
   generationDeps: GenerationDeps;
   modelDeps: Parameters<typeof handleModelSelectFn>[0];
   activeModelInfo: ActiveTextModelResult;
-  supportsToolCalling: boolean;
   activeModel?: DownloadedModel;
   settings: ModelSettingsRecord;
   loadedSettings: Partial<AppSettings> | null;
@@ -52,8 +49,7 @@ interface ChatScreenActionsArgs {
   setDebugInfo: SetState<DebugInfo | null>;
   setAlertState: SetState<AlertState>;
   activeConversationId: string | null;
-  activeConversation: ChatStoreState['conversations'][number] | undefined;
-  hasActiveModel: boolean;
+  activeConversation: Conversation | undefined;
   setPendingProjectId: (projectId?: string) => void;
   setShowProjectSelector: SetState<boolean>;
   activeImageModel: GenerationDeps['activeImageModel'];
@@ -65,7 +61,6 @@ export function useChatScreenActions({
   generationDeps,
   modelDeps,
   activeModelInfo,
-  supportsToolCalling,
   activeModel,
   settings,
   loadedSettings,
@@ -74,7 +69,6 @@ export function useChatScreenActions({
   setAlertState,
   activeConversationId,
   activeConversation,
-  hasActiveModel,
   setPendingProjectId,
   setShowProjectSelector,
   activeImageModel,
@@ -120,16 +114,10 @@ export function useChatScreenActions({
     }
   };
 
-  // The Shared committed projection is the read owner. This hook only READS the enabled tools:
-  // the pickers (ToolsScreen, McpServersScreen) own the toggle through the same seam, so no
-  // second writer of `enabledTools` lives on the chat path.
-  const { enabledTools: committedTools } = useEnabledToolsSetting();
-  const enabledTools = supportsToolCalling ? committedTools : [];
   const canReloadTextModel =
     Boolean(activeModelInfo.modelId) && !activeModelInfo.isRemote;
 
   return {
-    enabledTools,
     hasPendingSettings:
       canReloadTextModel &&
       computePendingSettings(activeModel?.engine, settings, loadedSettings),
@@ -148,22 +136,20 @@ export function useChatScreenActions({
       callHook(HOOKS.clipboardRecordLocalText, content, Date.now());
     },
     handleRetryMessage: (
-      message: ChatStoreState['conversations'][number]['messages'][number],
+      message: Message,
     ) =>
       handleRetryMessageFn(message, generationDeps, {
         activeConversationId,
-        hasActiveModel,
         setDebugInfo,
       }),
     handleEditMessage: (
-      message: ChatStoreState['conversations'][number]['messages'][number],
+      message: Message,
       newContent: string,
     ) =>
       handleEditMessageFn(generationDeps, {
         message,
         newContent,
         activeConversationId,
-        hasActiveModel,
         setDebugInfo,
       }),
     handleSelectProject: (project: Project | null) => {

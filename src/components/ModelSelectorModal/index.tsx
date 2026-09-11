@@ -145,13 +145,16 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   const pendingImage = usePendingModelCommand('image');
   const pendingRemoteTextModelId =
     pendingText?.source === 'remote' ? pendingText.modelId : null;
+  const pendingLocalTextModelId =
+    pendingText?.source === 'local' ? pendingText.modelId : null;
   const pendingRemoteImageModelId =
     pendingImage?.source === 'remote' ? pendingImage.modelId : null;
-  const effectiveLoadingTextModelId = loadingTextRowId(
-    modelStatus,
-    isLoading,
-    activeModelId,
-  );
+  const effectiveLoadingTextModelId = loadingTextRowId({
+    status: modelStatus,
+    parentIsLoading: isLoading,
+    selectedId: activeModelId,
+    pendingSelectionId: pendingLocalTextModelId,
+  });
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   const filteredDownloadedModels = useMemo(

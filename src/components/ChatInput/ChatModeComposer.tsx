@@ -10,6 +10,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import type { ThemeColors } from '../../theme';
 import type { MediaAttachment } from '../../types';
 import { CustomAlert, hideAlert, type AlertState } from '../CustomAlert';
+import logger from '../../utils/logger';
 import {
   VoiceRecordButton,
   type VoiceRecordInteractionMode,
@@ -22,6 +23,7 @@ import type { createStyles } from './styles';
 import { QueueRow } from './Toolbar';
 import type { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 import type { VoiceProcessingState } from './voiceProcessingState';
+import { LoadingDots } from '../LoadingDots';
 
 type Styles = ReturnType<typeof createStyles>;
 type Popover = ReturnType<typeof useKeyboardAwarePopover>;
@@ -52,6 +54,7 @@ interface ChatModeComposerProps {
   showSettingsDot: boolean;
   canSend: boolean;
   handleSend: () => void;
+  isSubmitting: boolean;
   isGenerating?: boolean;
   onStop?: () => void;
   handleStop: () => void;
@@ -83,14 +86,13 @@ interface ChatModeComposerProps {
 
 /** Chat-mode presentation. State and Shared Speech commands stay in ChatInput. */
 export const ChatModeComposer: React.FC<ChatModeComposerProps> = props => {
-  const actionButton = props.canSend ? (
-    <TouchableOpacity
-      testID="send-button"
-      style={props.styles.circleButton}
-      onPress={props.handleSend}
-    >
-      <Icon name="send" size={18} color={props.colors.background} />
-    </TouchableOpacity>
+  const actionButton = props.isSubmitting ? (
+    <View testID="send-loading-button" style={props.styles.circleButton}>
+      <LoadingDots
+        testID="send-loading-dots"
+        color={props.colors.background}
+      />
+    </View>
   ) : props.isGenerating && props.onStop ? (
     <TouchableOpacity
       testID="stop-button"
@@ -98,6 +100,14 @@ export const ChatModeComposer: React.FC<ChatModeComposerProps> = props => {
       onPress={props.handleStop}
     >
       <Icon name="square" size={18} color={props.colors.background} />
+    </TouchableOpacity>
+  ) : props.canSend ? (
+    <TouchableOpacity
+      testID="send-button"
+      style={props.styles.circleButton}
+      onPress={props.handleSend}
+    >
+      <Icon name="send" size={18} color={props.colors.background} />
     </TouchableOpacity>
   ) : (
     <VoiceRecordButton
@@ -149,6 +159,21 @@ export const ChatModeComposer: React.FC<ChatModeComposerProps> = props => {
                 multiline
                 scrollEnabled
                 editable={!props.disabled}
+                onPressIn={() =>
+                  logger.log(
+                    `[COMPOSER-SM] input press disabled=${Boolean(
+                      props.disabled,
+                    )} voiceStatus=${props.showVoiceStatus}`,
+                  )
+                }
+                onFocus={() =>
+                  logger.log(
+                    `[COMPOSER-SM] input focus disabled=${Boolean(
+                      props.disabled,
+                    )} voiceStatus=${props.showVoiceStatus}`,
+                  )
+                }
+                onBlur={() => logger.log('[COMPOSER-SM] input blur')}
                 blurOnSubmit={false}
                 returnKeyType="default"
               />

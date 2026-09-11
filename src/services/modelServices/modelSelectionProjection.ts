@@ -15,6 +15,7 @@ import { useAppStore } from '../../stores/appStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { useModelSelectionStore, type PersistedSelectionEntry } from '../../stores/modelSelectionStore';
+import type { ZustandPersistApi } from '../adapters/persistence/zustandHydration';
 import { mobileRouteId } from './mobileRoute';
 import {
   selectMobileLocalVoiceRoute,
@@ -252,6 +253,14 @@ function entryFor(modality: ModelModality): PersistedSelectionEntry | null {
   const store = useModelSelectionStore.getState();
   const entry = store.entries[modality];
   if (entry) return entry;
+  const persist = (
+    useModelSelectionStore as typeof useModelSelectionStore & {
+      persist?: ZustandPersistApi;
+    }
+  ).persist;
+  // Do not run the one-time migration against the empty pre-hydration snapshot. That write can
+  // replace a saved remote voice or transcription route before AsyncStorage finishes loading it.
+  if (persist?.hasHydrated?.() === false) return null;
   const migrated = legacyEntry(modality);
   if (migrated) store.setEntry(modality, migrated);
   return migrated;

@@ -33,6 +33,11 @@ interface RemoteServerState {
 
   /** The ONE write for what discovery learned about a server: its text catalog. */
   setDiscoveredModels: (serverId: string, models: RemoteModel[]) => void;
+  setRemoteModelVoices: (
+    serverId: string,
+    modelId: string,
+    voices: string[],
+  ) => void;
   updateServerHealth: (serverId: string, isHealthy: boolean) => void;
 
   // Utility
@@ -83,6 +88,25 @@ export const useRemoteServerStore = create<RemoteServerState>()(
                 },
               }
             : server),
+        }));
+      },
+
+      setRemoteModelVoices: (serverId, modelId, voices) => {
+        set(state => ({
+          servers: state.servers.map(server => {
+            if (server.id !== serverId) return server;
+            return {
+              ...server,
+              catalog: {
+                ...server.catalog,
+                voice: (server.catalog?.voice ?? []).map(model =>
+                  model.id === modelId || model.activeAliases?.includes(modelId)
+                    ? { ...model, voices: [...voices] }
+                    : model,
+                ),
+              },
+            };
+          }),
         }));
       },
 

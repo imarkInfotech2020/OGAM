@@ -269,6 +269,11 @@ const createThinkingStyles = (colors: ThemeColors) => ({
     padding: 8,
     gap: 6,
   },
+  // A collapsed row is a control, not a label. One token step on each edge makes its
+  // minimum content height 44px (20px icon + 12px top + 12px bottom) without a magic number.
+  thinkingHeaderCollapsed: {
+    paddingVertical: SPACING.md,
+  },
   thinkingHeaderIconBox: {
     width: 20,
     height: 20,
@@ -381,28 +386,6 @@ const createActionStyles = (colors: ThemeColors) => ({
   editSheetContent: {
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.xl,
-  },
-  selectTextContent: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.xl,
-  },
-  selectTextHint: {
-    ...TYPOGRAPHY.meta,
-    color: colors.textMuted,
-    marginBottom: SPACING.sm,
-  },
-  selectTextScroll: {
-    maxHeight: 360,
-    backgroundColor: colors.surface,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: SPACING.md,
-  },
-  selectTextBody: {
-    ...TYPOGRAPHY.body,
-    fontFamily: FONTS.mono,
-    color: colors.text,
   },
   editInput: {
     ...TYPOGRAPHY.body,

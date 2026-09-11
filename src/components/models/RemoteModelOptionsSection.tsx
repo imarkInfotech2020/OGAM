@@ -8,7 +8,7 @@ import { applicationFacade } from '../../services/applicationFacade';
 import { useModelsProjection } from '../../hooks/useApplicationProjection';
 import { useActiveMobileModel } from '../../hooks/useActiveMobileModel';
 import { useTheme, useThemedStyles } from '../../theme';
-import type { ThemeColors } from '../../theme';
+import type { ThemeColors, ThemeShadows } from '../../theme';
 import type { RemoteModelCategory } from '../../types';
 
 interface Props {
@@ -120,7 +120,7 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
   );
 };
 
-const createStyles = (colors: ThemeColors) => ({
+const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   section: { gap: SPACING.sm as number },
   sectionLabel: {
     ...TYPOGRAPHY.label,
@@ -129,6 +129,7 @@ const createStyles = (colors: ThemeColors) => ({
     letterSpacing: 0.3,
   },
   row: {
+    ...shadows.small,
     minHeight: 44,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

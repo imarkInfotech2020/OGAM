@@ -1,6 +1,10 @@
 import { useSyncExternalStore } from 'react';
-import { WorkspaceContentChatSessionAdapterError } from '@offgrid/application';
+import {
+  projectChatModelAccess,
+  WorkspaceContentChatSessionAdapterError,
+} from '@offgrid/application';
 import type {
+  ChatModelAccessProjection,
   ModelsSnapshot,
   RagSnapshot,
   SpeechSnapshot,
@@ -24,6 +28,15 @@ export function useModelsProjection(): MobileModelsSnapshot {
     models.snapshot,
     models.snapshot,
   ) as MobileModelsSnapshot;
+}
+
+/** One Shared-owned answer for whether Chat can start and which routes it can use. */
+export function useChatModelAccess(): ChatModelAccessProjection {
+  const models = useModelsProjection();
+  return projectChatModelAccess({
+    active: models.active,
+    inventory: models.inventory,
+  });
 }
 
 /** Reactive committed image execution settings, resolved by the Mobile image application adapter. */

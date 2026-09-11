@@ -28,6 +28,7 @@
  * this owner exists precisely so one truth drives every surface.
  */
 import { voiceSession } from './voiceSession';
+import { logVoiceDiagnostic } from '../utils/voiceDiagnostics';
 
 export type RecordPhase = 'idle' | 'listening' | 'recording' | 'transcribing';
 
@@ -81,14 +82,25 @@ class RecordingController {
 
   /** Ask Shared Speech to begin through the registered platform binding. */
   start(): void {
-    if (this.getPhase() !== 'idle' || !this.handlers) return;
+    const phase = this.getPhase();
+    logVoiceDiagnostic('recording_intent_start', {
+      phase,
+      handlerReady: Boolean(this.handlers),
+    });
+    if (phase !== 'idle' || !this.handlers) return;
     this.handlers.start();
   }
 
   /** Stop the in-flight recording. Listening counts: the mic is open, so stop must reach it -
    *  toggle() offered to stop a listening turn and this refused it. */
   stop(): void {
-    if (!this.isRecording() || !this.handlers) return;
+    const recording = this.isRecording();
+    logVoiceDiagnostic('recording_intent_stop', {
+      phase: this.getPhase(),
+      recording,
+      handlerReady: Boolean(this.handlers),
+    });
+    if (!recording || !this.handlers) return;
     this.handlers.stop();
   }
 
@@ -102,6 +114,10 @@ class RecordingController {
   }
 
   cancel(): void {
+    logVoiceDiagnostic('recording_intent_cancel', {
+      phase: this.getPhase(),
+      handlerReady: Boolean(this.handlers),
+    });
     if (!this.handlers) return;
     this.handlers.cancel();
   }

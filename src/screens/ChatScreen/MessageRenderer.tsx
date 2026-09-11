@@ -8,8 +8,6 @@ import { Message } from '../../types';
 import { useSpeechProjection } from '../../hooks/useApplicationProjection';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { ChatMessageItem } from './useChatScreen';
-import { STREAMING_MESSAGE_ID } from './types';
-import { useActiveStreamText } from './useActiveStreamText';
 
 type MessageRendererProps = {
   item: Message | ChatMessageItem;
@@ -139,8 +137,8 @@ const styles = StyleSheet.create({
  * returns [...allMessages, syntheticItem], so the historical message objects keep stable refs
  * across renders and every committed row skips.
  *
- * A token no longer produces a new item at all: the 'streaming' row is token-free and stable for
- * the turn, and its text is read inside LiveStreamMessageRenderer below.
+ * A token produces a new streaming item. Historical message objects keep stable references, so
+ * only the live row renders again while the committed transcript remains cached.
  *
  * The on* callbacks are recreated every parent render (defined inline in useChatScreen)
  * and are deliberately NOT compared: within a conversation they are behaviorally stable,
@@ -168,34 +166,4 @@ const CommittedMessageRenderer = React.memo(
   messageRendererPropsEqual,
 );
 
-/**
- * The in-progress reply - the ONLY component in the chat that re-renders per token.
- *
- * The screen model hands down a token-free 'streaming' row (stable object identity for the whole
- * turn), and the live text is read here from its own narrow projection. So a flush re-renders this
- * one leaf; the committed rows above it are not even compared.
- */
-const LiveStreamMessageRenderer: React.FC<MessageRendererProps> = props => {
-  const live = useActiveStreamText();
-  const item = React.useMemo(
-    () => ({
-      ...props.item,
-      content: live.content,
-      reasoningContent: live.reasoningContent,
-    }),
-    [props.item, live],
-  );
-  return <CommittedMessageRenderer {...props} item={item} />;
-};
-
-const MessageRendererDispatch: React.FC<MessageRendererProps> = props =>
-  props.item.id === STREAMING_MESSAGE_ID ? (
-    <LiveStreamMessageRenderer {...props} />
-  ) : (
-    <CommittedMessageRenderer {...props} />
-  );
-
-export const MessageRenderer = React.memo(
-  MessageRendererDispatch,
-  messageRendererPropsEqual,
-);
+export const MessageRenderer = CommittedMessageRenderer;

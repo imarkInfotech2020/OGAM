@@ -5,8 +5,8 @@ import { AdvancedToggle, Card } from '../../components';
 import { SliderSetting } from '../../components/SliderSetting';
 import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
-import { useAppStore } from '../../stores';
 import { useModelsProjection } from '../../hooks/useApplicationProjection';
+import { useActiveTextModel } from '../../hooks/useActiveTextModel';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
 import {
   defaultImageSteps,
@@ -56,10 +56,7 @@ const EnhanceImageToggle: React.FC<SaveState> = ({ save, pending }) => {
   const styles = useThemedStyles(createStyles);
   const enhanceImagePrompts = useModelsProjection().settings.enhanceImagePrompts;
   const trackColor = { false: colors.surfaceLight, true: `${colors.primary}80` };
-  // Enhancement runs the prompt through a text model, so it needs one available. Only the
-  // BOOLEAN matters, and it is computed in the selector, so downloading a second model does not
-  // wake this row - it wakes only when the count crosses zero.
-  const hasTextModel = useAppStore(s => s.downloadedModels.length > 0);
+  const hasTextModel = useActiveTextModel().modelId !== null;
   const enabled = (enhanceImagePrompts ?? false) && hasTextModel;
 
   let description: string;

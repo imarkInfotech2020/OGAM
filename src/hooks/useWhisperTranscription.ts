@@ -10,6 +10,12 @@ import {
 import logger from '../utils/logger';
 import { applicationFacade } from '../services/applicationFacade';
 import { useTranscriptionModelsProjection } from './useTranscriptionModelsProjection';
+import {
+  logVoiceDiagnostic,
+  voiceDiagnosticError,
+} from '../utils/voiceDiagnostics';
+
+let recordingStartAttempt = 0;
 
 export interface UseWhisperTranscriptionParams {
   mode?: VoiceTurnMode;
@@ -91,10 +97,23 @@ export const useWhisperTranscription = ({
   );
 
   const startRecording = useCallback(async () => {
+    const attempt = ++recordingStartAttempt;
+    const before = speech.snapshot();
+    logVoiceDiagnostic('recording_start_requested', {
+      attempt,
+      mode,
+      transcriptionStatus: before.transcription.status,
+      sessionState: before.voice.state,
+      sessionPhase: before.voice.phase,
+    });
     setCommandError(null);
     setFinalResult('');
     setFinalRecording(null);
     const ready = await applicationFacade().workflows.prepareTranscription();
+    logVoiceDiagnostic('transcription_prepare_finished', {
+      attempt,
+      outcome: ready.ok ? 'ready' : ready.failure.kind,
+    });
     if (!ready.ok) {
       setCommandError(
         ready.failure.kind === 'models'
@@ -103,9 +122,30 @@ export const useWhisperTranscription = ({
       );
       return;
     }
-    const outcome = await speech.startRealtime({
-      mode,
-      language: transcriptionLanguage,
+    let outcome: Awaited<ReturnType<typeof speech.startRealtime>>;
+    try {
+      outcome = await speech.startRealtime({
+        mode,
+        language: transcriptionLanguage,
+      });
+    } catch (error) {
+      logVoiceDiagnostic('realtime_start_threw', {
+        attempt,
+        error: voiceDiagnosticError(error),
+      });
+      throw error;
+    }
+    const after = speech.snapshot();
+    logVoiceDiagnostic('realtime_start_finished', {
+      attempt,
+      outcome: outcome.ok ? 'listening' : outcome.failure.kind,
+      failure:
+        outcome.ok || outcome.failure.kind !== 'runtime'
+          ? undefined
+          : outcome.failure.message,
+      transcriptionStatus: after.transcription.status,
+      sessionState: after.voice.state,
+      sessionPhase: after.voice.phase,
     });
     if (!outcome.ok) {
       setCommandError(speechFailureMessage(outcome.failure));
@@ -116,14 +156,12 @@ export const useWhisperTranscription = ({
 
   const stopRecording = useCallback(async () => {
     const outcome = await speech.stopRealtime();
-    if (!outcome.ok) {
-      if (outcome.failure.kind !== 'cancelled') {
-        setCommandError(speechFailureMessage(outcome.failure));
-      }
-      return;
+    if (!outcome.ok && outcome.failure.kind !== 'cancelled') {
+      setCommandError(speechFailureMessage(outcome.failure));
     }
-    setFinalResult(outcome.value.text);
-    setFinalRecording(outcome.value.recording ?? null);
+    // Shared Speech publishes the one authoritative `transcription_final` event. Writing the
+    // returned value here as well delivered the same capture twice: the event effect delivered and
+    // cleared it first, then this command continuation restored it for a second send.
   }, [speech]);
 
   const clearResult = useCallback(() => {

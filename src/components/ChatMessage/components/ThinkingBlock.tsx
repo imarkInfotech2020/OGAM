@@ -23,8 +23,13 @@ export function ThinkingBlock({
     <View testID="thinking-block" style={styles.thinkingBlock}>
       <TouchableOpacity
         testID="thinking-block-toggle"
-        style={styles.thinkingHeader}
+        style={[
+          styles.thinkingHeader,
+          !showThinking && styles.thinkingHeaderCollapsed,
+        ]}
         onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: showThinking }}
       >
         <View style={styles.thinkingHeaderIconBox}>
           <Text style={styles.thinkingHeaderIconText}>

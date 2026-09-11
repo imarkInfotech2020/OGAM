@@ -215,6 +215,18 @@ export function stopMobileModelServices(): void {
   if (!started) return;
   started = false;
   for (const cleanup of cleanups.splice(0)) cleanup();
+  // Each unregister belongs to the application instance that created it. Keeping these entries
+  // across an app restart makes the next instance skip adapter registration, so a selected model
+  // remains visible but generation reports that its adapter is unavailable.
+  for (const registrations of [
+    generationAdapterRegistrations,
+    transcriptionAdapterRegistrations,
+    voiceAdapterRegistrations,
+    sidecarAdapterRegistrations,
+  ]) {
+    for (const unregister of registrations.values()) unregister();
+    registrations.clear();
+  }
 }
 
 /** Presentation adapter: recover the rich Mobile record after shared routing selected it. */

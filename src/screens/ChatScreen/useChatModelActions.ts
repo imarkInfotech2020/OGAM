@@ -42,21 +42,10 @@ type ModelActionDeps = {
   isStreaming: boolean;
   settings: ModelSettingsRecord;
   clearStreamingMessage: () => void;
-  setIsModelLoading: (loading: boolean) => void;
-  setLoadingModel: (model: DownloadedModel | null) => void;
   setShowModelSelector: SetState<boolean>;
   setAlertState: SetState<AlertState>;
   modelLoadStartTimeRef: React.MutableRefObject<number | null>;
 };
-
-import { InteractionManager } from 'react-native';
-
-/** Wait for loading UI to render before blocking the JS bridge with native calls. */
-function waitForRenderFrame(): Promise<void> {
-  return new Promise<void>(resolve => {
-    InteractionManager.runAfterInteractions(() => setTimeout(resolve, 350));
-  });
-}
 
 function addSystemMsg(
   deps: Pick<ModelActionDeps, 'activeConversationId' | 'settings'>,
@@ -119,12 +108,9 @@ export async function initiateModelLoad(
       remote: !!deps.activeModelInfo?.isRemote,
       beforeLoad: alreadyLoading
         ? undefined
-        : async () => {
+        : () => {
             started = true;
-            deps.setIsModelLoading(true);
-            deps.setLoadingModel(activeModel);
             deps.modelLoadStartTimeRef.current = Date.now();
-            await waitForRenderFrame();
           },
     });
     const outcome = force
@@ -145,11 +131,7 @@ export async function initiateModelLoad(
     addBackendFallbackMsg(deps);
     return outcome;
   } finally {
-    if (started) {
-      deps.setIsModelLoading(false);
-      deps.setLoadingModel(null);
-      deps.modelLoadStartTimeRef.current = null;
-    }
+    if (started) deps.modelLoadStartTimeRef.current = null;
   }
 }
 
@@ -160,8 +142,6 @@ export async function initiateModelLoad(
  */
 export async function ensureTextModelForChatFn(deps: {
   setShowModelSelector: (v: boolean) => void;
-  setLoadingModel: (m: DownloadedModel | null) => void;
-  setIsModelLoading: (v: boolean) => void;
 }): Promise<boolean> {
   // The shared selection is the one owner of the text route. A remote route needs no local
   // load; a local one is loaded by id. The old local-only id lagged behind a remote switch and
@@ -171,29 +151,16 @@ export async function ensureTextModelForChatFn(deps: {
   const modelId = active?.source === 'local' ? active.id : null;
   const model =
     useAppStore.getState().downloadedModels.find(m => m.id === modelId) ?? null;
-  let started = false;
   const service = mobileChatModelReadiness({
     activeModel: model,
     activeModelId: modelId,
     remote,
-    beforeLoad: () => {
-      started = true;
-      deps.setLoadingModel(model);
-      deps.setIsModelLoading(true);
-    },
   });
-  try {
-    const outcome = await service.ensureReady();
-    if (!outcome.ok && outcome.reason === 'no-model-selected') {
-      deps.setShowModelSelector(true);
-    }
-    return outcome.ok;
-  } finally {
-    if (started) {
-      deps.setIsModelLoading(false);
-      deps.setLoadingModel(null);
-    }
+  const outcome = await service.ensureReady();
+  if (!outcome.ok && outcome.reason === 'no-model-selected') {
+    deps.setShowModelSelector(true);
   }
+  return outcome.ok;
 }
 
 export async function ensureModelLoadedFn(
@@ -240,8 +207,6 @@ export async function handleUnloadModelFn(
     clearStreamingMessage();
   }
   const modelName = activeModel?.name;
-  deps.setIsModelLoading(true);
-  deps.setLoadingModel(activeModel ?? null);
   try {
     await unloadAndClearModel('text');
     if (deps.settings.showGenerationDetails === true && modelName) {
@@ -252,8 +217,6 @@ export async function handleUnloadModelFn(
       showAlert('Error', `Failed to unload model: ${(error as Error).message}`),
     );
   } finally {
-    deps.setIsModelLoading(false);
-    deps.setLoadingModel(null);
     deps.setShowModelSelector(false);
   }
 }

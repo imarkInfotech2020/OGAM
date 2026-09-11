@@ -1,7 +1,7 @@
 import {
+  CHAT_GENERATION_RECLAIM_POLICY,
   DEFAULT_IMAGE_MIME,
   generationMessageText,
-  isMemoryToolAllowed,
   runtimeModelRouteId,
   type ChatContextApplicationPorts,
   type ChatGenerationPort,
@@ -31,8 +31,6 @@ import {
   generationMessage,
   mobileWorkspaceGenerationMessage,
 } from './mobileChatTurnRepository';
-import { committedEnabledToolIds } from './committedToolSelection';
-import { generateChatWithModelsFacade } from './modelsFacadeGeneration';
 import { useAppStore } from '../../../stores';
 import type { MediaAttachment, Message } from '../../../types';
 import logger from '../../../utils/logger';
@@ -57,14 +55,13 @@ import {
   optionalNumberSetting,
 } from './mobileChatSettingsProjection';
 import {projectWorkspaceMessage} from '../workspaceContent/projectWorkspaceMessage';
+import {buildEnhancementReasoningContent} from '../../imageGenerationHelpers';
 
 export { mobileChatRequestDefaults } from './mobileChatSettingsProjection';
 
 export interface MobileChatCommandOptions {
   imageMode?: 'auto' | 'force' | 'disabled';
   onClassifying?: (active: boolean) => void;
-  onClassifierStatus?: (status: string | null) => void;
-  onClassifierTextFallback?: () => void;
   ensureTextRoute?: () => Promise<boolean>;
 }
 
@@ -187,8 +184,6 @@ export function mobileChatOperationCommand(input: {
     requestedOperation: input.requestedOperation,
     imageMode: options?.imageMode,
     onClassifying: options?.onClassifying,
-    onClassifierStatus: options?.onClassifierStatus,
-    onClassifierTextFallback: options?.onClassifierTextFallback,
     ensureTextRoute: options?.ensureTextRoute,
   };
 }
@@ -263,9 +258,14 @@ async function generateForSession(
   request: GenerationRequest,
   events: GenerationEvents = {},
 ): Promise<GenerationResult> {
+  const reclaim = await applicationFacade().models.reclaim(
+    CHAT_GENERATION_RECLAIM_POLICY,
+  );
+  if (!reclaim.ok) throw reclaim.failure;
+
   if (request.operation?.type !== 'image') {
     await lifecycleProjectionPort.refreshInventory();
-    return generateChatWithModelsFacade(request, events);
+    return applicationFacade().models.mainQueue.generate(request, events);
   }
   const identity = request.identity;
   if (!identity?.conversationId)
@@ -309,6 +309,12 @@ async function generateForSession(
     const localImageModel = useAppStore
       .getState()
       .downloadedImageModels.find(candidate => candidate.id === model.id);
+    const enhancedPrompt =
+      settings.enhanceImagePrompts === true &&
+      model.source === 'local' &&
+      generated.prompt.trim() !== request.operation.prompt.trim()
+        ? buildEnhancementReasoningContent(generated.prompt)
+        : '';
     return {
       model,
       output: {
@@ -343,7 +349,7 @@ async function generateForSession(
         ],
       },
       content: '',
-      reasoning: '',
+      reasoning: enhancedPrompt,
       toolCalls: [],
       finishReason: 'stop',
       attemptedModelIds: [model.id],
@@ -365,30 +371,22 @@ export function mobileChatSessionPorts(
       rag,
       tools: {
         resolve: async ({ identity }) => {
-          // The committed tool selection has one owner: the Shared Models settings record. The chat
-          // path must resolve tools from the same value the Tools screen commits, never from a store
-          // mirror that a sync-applied or remote patch has not reached yet.
-          const enabledToolIds = committedEnabledToolIds();
           const workspaceContent =
             applicationFacade().workspaceContent.snapshot();
-          const admittedToolIds = enabledToolIds.filter(toolId =>
-            isMemoryToolAllowed(toolId, {
-              projectActive:
-                !!identity.projectId &&
-                workspaceContent.projects.some(
-                  project => project.id === identity.projectId,
-                ),
-              allMemory: true,
-            }),
-          );
-          if (!admittedToolIds.length) return {};
           const messages = workspaceContent.messages
             .filter(
               message => message.conversationId === identity.conversationId,
             )
             .map(workspaceMessage)
             .filter(message => !message.isSystemInfo);
-          const tools = await mobileToolDefinitions(admittedToolIds, messages);
+          const tools = await mobileToolDefinitions(messages, {
+            projectActive:
+              !!identity.projectId &&
+              workspaceContent.projects.some(
+                project => project.id === identity.projectId,
+              ),
+            allMemory: true,
+          });
           return tools.length ? { tools, toolChoice: 'auto' } : {};
         },
       },

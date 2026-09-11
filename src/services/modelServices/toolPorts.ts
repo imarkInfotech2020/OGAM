@@ -1,36 +1,28 @@
 import {
   type GenerationToolDefinition,
   MOBILE_TEXT_SETTINGS_DEFAULTS,
-  openAIToolToDefinition,
   toolSchemaTokenBudget,
 } from '@offgrid/models';
 import type { ToolRoutingService } from '@offgrid/models';
 import { toolRouting } from '../composition/tools';
 import logger from '../../utils/logger';
-import { getToolsAsOpenAISchema } from '../tools';
-import { getToolExtensions } from '../tools/extensions';
 import { mobileTextEngineControl } from './textEngineControl';
 import { isMcpEnabled } from '../mcpContextBoost';
 import { applicationFacade } from '../applicationFacade';
+import { effectiveChatTools } from '../composition/effectiveToolProjection';
 
 const toolRoutingService = (): ToolRoutingService => toolRouting();
 
 /** Build one shared schema projection from Mobile's raw tool registries. */
 export async function mobileToolDefinitions(
-  enabledToolIds: string[],
   messages: import('../../types').Message[],
+  memoryScope: { projectActive: boolean; allMemory: boolean },
 ): Promise<GenerationToolDefinition[]> {
-  const builtInTools = getToolsAsOpenAISchema(enabledToolIds)
-    .flatMap(schema => {
-      const definition = openAIToolToDefinition(schema);
-      return definition ? [definition] : [];
-    });
-  const externalTools = getToolExtensions()
-    .flatMap(extension => extension.getOpenAISchemas?.() ?? [])
-    .flatMap(schema => {
-      const definition = openAIToolToDefinition(schema);
-      return definition ? [definition] : [];
-    });
+  const effective = effectiveChatTools().forTurn({
+    memoryScope,
+    imageAvailable: true,
+    proposalDeckAvailable: true,
+  });
   const contextLengthValue =
     applicationFacade().models.settings.current().contextLength;
   const contextLength =
@@ -44,8 +36,8 @@ export async function mobileToolDefinitions(
       role: message.role,
       content: message.content,
     })),
-    builtInTools,
-    externalTools,
+    builtInTools: effective.builtInTools,
+    externalTools: effective.externalTools,
     remoteModel: mobileTextEngineControl.isRemoteActive(),
     embeddingRouting: isMcpEnabled(),
     modelRouting: true,

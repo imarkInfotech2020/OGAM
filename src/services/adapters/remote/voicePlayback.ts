@@ -20,7 +20,8 @@ function arrayBufferToBase64(value: ArrayBuffer): string {
 
 export function activeRemoteVoiceServer(): RemoteServer | null {
   // The remote voice server is the voice route's server; the route is the one selection fact.
-  const serverId = activeMobileRoute('voice').model?.serverId;
+  const active = activeMobileRoute('voice');
+  const serverId = active.ready ? active.model?.serverId : undefined;
   const server = serverId
     ? useRemoteServerStore.getState().servers.find(item => item.id === serverId) ?? null
     : null;

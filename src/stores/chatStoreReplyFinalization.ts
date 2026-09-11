@@ -28,6 +28,4 @@ export interface StreamingSnapshot {
   reasoningContent: string;
   isStreaming: boolean;
   isThinking: boolean;
-  isModelLoading: boolean;
-  loadingModelName: string | null;
 }

@@ -113,3 +113,8 @@ export function buildEnhancementCardContent(raw: string): string {
   const body = (answer || reasoning || '').trim();
   return `<think>__LABEL:${PROMPT_ENHANCEMENT_REASONING_LABEL}__\n${body}</think>`;
 }
+
+/** Store the completed rewrite as labelled supporting context on the image response itself. */
+export function buildEnhancementReasoningContent(prompt: string): string {
+  return `__LABEL:${PROMPT_ENHANCEMENT_REASONING_LABEL}__\n${prompt.trim()}`;
+}

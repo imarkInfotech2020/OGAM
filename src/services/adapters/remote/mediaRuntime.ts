@@ -7,13 +7,17 @@ import {
   remoteErrorBodyMessage,
   remoteImageRequest,
   remoteMediaEndpoint,
+  remoteSupportedVoicesFromError,
   remoteTranscriptionUpload,
   remoteVoicePayload,
   resolveRemoteRoute,
 } from '@offgrid/models';
 import type { RemoteMediaModality } from '@offgrid/models';
 import { getApiKeyImpl } from './serverRuntime';
+import { useRemoteServerStore } from '../../../stores/remoteServerStore';
+import { logVoiceDiagnostic, voiceDiagnosticError } from '../../../utils/voiceDiagnostics';
 
+const negotiatedRemoteVoices = new Map<string, string>();
 
 export interface RemoteImageResult {
   base64?: string;
@@ -127,8 +131,17 @@ export const remoteMediaRuntime = {
     input: { fileUri: string; language?: string; model?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<string> {
+    const model = input.model ?? requiredModel(server, 'transcription');
+    const schemeSeparator = input.fileUri.indexOf(':');
+    logVoiceDiagnostic('remote_transcription_requested', {
+      serverId: server.id,
+      provider: server.provider,
+      modelId: model,
+      language: input.language,
+      fileScheme: schemeSeparator > 0 ? input.fileUri.slice(0, schemeSeparator) : 'path',
+    });
     const upload = remoteTranscriptionUpload({
-      model: input.model ?? requiredModel(server, 'transcription'),
+      model,
       language: input.language,
     });
     const body = new FormData();
@@ -138,16 +151,32 @@ export const remoteMediaRuntime = {
       name: upload.file.name,
       type: upload.file.type,
     } as unknown as Blob);
-    const payload = await request({
-      server,
-      modality: 'transcription',
-      init: { method: 'POST', body },
-      signal: options.signal,
-    }, response => response.json() as Promise<{ text?: unknown }>);
+    let payload: { text?: unknown };
+    try {
+      payload = await request({
+        server,
+        modality: 'transcription',
+        init: { method: 'POST', body },
+        signal: options.signal,
+      }, response => response.json() as Promise<{ text?: unknown }>);
+    } catch (error) {
+      logVoiceDiagnostic('remote_transcription_failed', {
+        serverId: server.id,
+        modelId: model,
+        error: voiceDiagnosticError(error),
+      });
+      throw error;
+    }
     if (typeof payload.text !== 'string') {
       throw new TypeError('Remote server returned no transcript');
     }
-    return payload.text.trim();
+    const text = payload.text.trim();
+    logVoiceDiagnostic('remote_transcription_finished', {
+      serverId: server.id,
+      modelId: model,
+      characterCount: text.length,
+    });
+    return text;
   },
 
   async synthesizeVoice(
@@ -155,22 +184,67 @@ export const remoteMediaRuntime = {
     input: { text: string; voice?: string; model?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteVoiceResult> {
-    return request({
-      server,
-      modality: 'voice',
-      init: {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(remoteVoicePayload({
-          model: input.model ?? requiredModel(server, 'voice'),
-          text: input.text,
-          voice: input.voice,
-        })),
-      },
-      signal: options.signal,
-    }, async response => ({
-      audio: await response.arrayBuffer(),
-      contentType: response.headers.get('content-type') ?? DEFAULT_REMOTE_SPEECH_MIME,
-    }));
+    const model = input.model ?? requiredModel(server, 'voice');
+    logVoiceDiagnostic('remote_voice_requested', {
+      serverId: server.id,
+      provider: server.provider,
+      modelId: model,
+      characterCount: input.text.length,
+    });
+    const voiceKey = `${server.id}\u0000${model}`;
+    const synthesize = (voice?: string) => request({
+        server,
+        modality: 'voice',
+        init: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(remoteVoicePayload({
+            model,
+            text: input.text,
+            voice,
+          })),
+        },
+        signal: options.signal,
+      }, async response => ({
+        audio: await response.arrayBuffer(),
+        contentType: response.headers.get('content-type') ?? DEFAULT_REMOTE_SPEECH_MIME,
+      }));
+    try {
+      let result: RemoteVoiceResult;
+      try {
+        result = await synthesize(
+          input.voice ?? negotiatedRemoteVoices.get(voiceKey),
+        );
+      } catch (error) {
+        const supported = remoteSupportedVoicesFromError(error);
+        if (!supported.length) throw error;
+        const voice = supported[0];
+        negotiatedRemoteVoices.set(voiceKey, voice);
+        useRemoteServerStore
+          .getState()
+          .setRemoteModelVoices(server.id, model, supported);
+        logVoiceDiagnostic('remote_voice_negotiated', {
+          serverId: server.id,
+          modelId: model,
+          voice,
+          supportedVoiceCount: supported.length,
+        });
+        result = await synthesize(voice);
+      }
+      logVoiceDiagnostic('remote_voice_finished', {
+        serverId: server.id,
+        modelId: model,
+        byteCount: result.audio.byteLength,
+        contentType: result.contentType,
+      });
+      return result;
+    } catch (error) {
+      logVoiceDiagnostic('remote_voice_failed', {
+        serverId: server.id,
+        modelId: model,
+        error: voiceDiagnosticError(error),
+      });
+      throw error;
+    }
   },
 };

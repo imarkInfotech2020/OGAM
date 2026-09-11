@@ -1,5 +1,4 @@
 import {
-  CHAT_GENERATION_RECLAIM_POLICY,
   ModelsFailureError,
   WorkspaceContentChatSessionAdapterError,
   generationMessageText,
@@ -28,14 +27,6 @@ registerMobileChatSessionControl({
   stopConversation: conversationId =>
     applicationFacade().models.chat.stopConversation(conversationId),
 });
-
-/** Application lifecycle step. Shared owns the reclaim rule; Mobile supplies the runtime port. */
-export async function prepareMobileChatGeneration(): Promise<void> {
-  const outcome = await applicationFacade().models.reclaim(
-    CHAT_GENERATION_RECLAIM_POLICY,
-  );
-  if (!outcome.ok) throw outcome.failure;
-}
 
 function requireChatTurn(outcome: Outcome<ChatTurn, ModelsFailure>): ChatTurn {
   if (!outcome.ok) throw new ModelsFailureError(outcome.failure);
@@ -136,19 +127,25 @@ export const mobileChatSession = {
     conversationId: string,
     turnId: string,
     message: Message,
+    options: MobileChatCommandOptions = {},
   ): Promise<ChatTurn> {
     applicationFacade().models.chat.invalidate(conversationId);
-    return requireChatTurn(
-      await applicationFacade().models.chat.edit({
-        conversationId,
-        turnId,
-        userMessage: mobileGenerationMessage(message),
-        request: mobileChatRequestDefaults(),
-      }),
+    return withMobileChatCommandOptions(turnId, options, async () =>
+      requireChatTurn(
+        await applicationFacade().models.chat.edit({
+          conversationId,
+          turnId,
+          userMessage: mobileGenerationMessage(message),
+          request: mobileChatRequestDefaults(),
+        }),
+      ),
     );
   },
 
   stop: (): boolean => applicationFacade().models.chat.stop(),
+
+  snapshot: (): ChatQueueProjection =>
+    applicationFacade().models.chat.snapshot(),
 
   stopConversation: (conversationId: string): number =>
     applicationFacade().models.chat.stopConversation(conversationId),

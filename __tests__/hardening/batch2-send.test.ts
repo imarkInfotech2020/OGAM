@@ -11,7 +11,7 @@ describe('send UI boundary', () => {
     const setAlertState = jest.fn();
     const createConversation = jest.fn();
     await handleSendFn({
-      hasActiveModel: false,
+      conversationModelId: null,
       setAlertState,
       createConversation,
     } as any, {

@@ -53,16 +53,6 @@ async function updateEnhancementCard(
   if (!portable.ok) throw new EnhancementCardCommandError(portable.failure);
 }
 
-async function completeEnhancementCard(messageId: string, content: string): Promise<void> {
-  await updateEnhancementCard(messageId, content);
-  const local = await applicationFacade().workspaceContent.execute({
-    type: 'patch_message_local',
-    messageId,
-    patch: { isThinking: false },
-  });
-  if (!local.ok) throw new EnhancementCardCommandError(local.failure);
-}
-
 async function discardEnhancementCard(messageId: string): Promise<void> {
   const outcome = await applicationFacade().workspaceContent.execute({
     type: 'delete_message',
@@ -143,11 +133,12 @@ function mobileImagePromptEnhancementPorts(
       enqueue('update enhancement card', () =>
         updateEnhancementCard(messageId, buildEnhancementCardContent(text)));
     },
-    onCompleted(prompt) {
+    onCompleted() {
       if (!temporaryMessageId) return;
       const messageId = temporaryMessageId;
-      queueTerminal(() =>
-        completeEnhancementCard(messageId, buildEnhancementCardContent(prompt)));
+      // The completed prompt belongs to the final generated-image message. Remove this
+      // temporary streaming row so retries cannot leave detached prompt cards behind.
+      queueTerminal(() => discardEnhancementCard(messageId));
     },
     onDiscarded() {
       if (!temporaryMessageId) return;

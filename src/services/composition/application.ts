@@ -499,6 +499,7 @@ export function getMobileApplication(): OffGridApplication {
 }
 
 let starting: ReturnType<OffGridApplication['start']> | null = null;
+let stopping: Promise<void> | null = null;
 
 function mobileModelServices(): Pick<
   typeof import('../modelServices'),
@@ -566,6 +567,13 @@ function recoverDownloadJournal(current: OffGridApplication): void {
 export function startMobileApplication(): ReturnType<
   OffGridApplication['start']
 > {
+  // A React reload can request the next start before the previous root has finished stopping.
+  // Wait for that terminal lifecycle before resolving or creating the next root. Reusing the
+  // previous resolved `starting` promise here would report success for an application that stop()
+  // is about to discard, leaving the replacement root composed but never started.
+  if (stopping) {
+    return stopping.then(() => startMobileApplication());
+  }
   const current = getMobileApplication();
   starting ??= (async () => {
     const modelServices = mobileModelServices();
@@ -596,24 +604,34 @@ export function startMobileApplication(): ReturnType<
   return starting;
 }
 
-export async function stopMobileApplication(): Promise<void> {
-  try {
-    await callHook<Promise<void>>(HOOKS.applicationStopping);
-    await getMobileWorkspaceContentRepository().localResourceReleases.stop();
-    mobileModelServices().stopMobileModelServices();
-    await application?.stop();
-  } finally {
-    // Releasing the subscription drops the amplification cap with it, so a new session starts
-    // counting from zero without this file owning a reset.
-    releaseFailureObserver?.();
-    releaseFailureObserver = null;
-    starting = null;
-    // The memo must never outlive the application it holds. `stop()` is terminal - a stopped
-    // download coordinator refuses every later call - so keeping the instance here handed the next
-    // `getMobileApplication()` a dead root that no `start()` could revive. Dropping it restores the
-    // module invariant: the memo either holds a live application or holds nothing.
-    application = null;
-  }
+export function stopMobileApplication(): Promise<void> {
+  if (stopping) return stopping;
+  const current = application;
+  const activeStart = starting;
+  stopping = (async () => {
+    try {
+      // Startup and shutdown are one serialized lifecycle. Do not stop persistence while its start
+      // sequence is still admitting the required repositories.
+      await activeStart?.catch(() => undefined);
+      await callHook<Promise<void>>(HOOKS.applicationStopping);
+      await getMobileWorkspaceContentRepository().localResourceReleases.stop();
+      mobileModelServices().stopMobileModelServices();
+      await current?.stop();
+    } finally {
+      // Releasing the subscription drops the amplification cap with it, so a new session starts
+      // counting from zero without this file owning a reset.
+      releaseFailureObserver?.();
+      releaseFailureObserver = null;
+      starting = null;
+      // The memo must never outlive the application it holds. `stop()` is terminal - a stopped
+      // download coordinator refuses every later call - so keeping the instance here handed the next
+      // `getMobileApplication()` a dead root that no `start()` could revive. Dropping it restores the
+      // module invariant: the memo either holds a live application or holds nothing.
+      application = null;
+      stopping = null;
+    }
+  })();
+  return stopping;
 }
 
 /**

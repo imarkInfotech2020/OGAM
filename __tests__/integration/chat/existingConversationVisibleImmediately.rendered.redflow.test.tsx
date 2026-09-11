@@ -1,4 +1,4 @@
-import { setupChatScreen } from '../../harness/chatHarness';
+import {setupChatScreen, usingLlama} from '../../harness/chatHarness';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
@@ -14,7 +14,7 @@ jest.mock('@react-navigation/native', () => ({
 
 describe('opening an existing Mobile chat', () => {
   it('renders canonical project chat content after an application restart', async () => {
-    const h = await setupChatScreen({ engine: 'llama', platform: 'ios' });
+    const h = await setupChatScreen(usingLlama({platform: 'ios'}));
     const {currentMobileApplicationFixture} = require('../../harness/mobileApplicationFixture') as typeof import('../../harness/mobileApplicationFixture');
     const fixture = currentMobileApplicationFixture();
     if (!fixture) throw new Error('Mobile application fixture was not started.');

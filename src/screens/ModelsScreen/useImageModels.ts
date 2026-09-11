@@ -150,11 +150,6 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
   // keystroke paints before the whole catalogue is re-filtered and re-rendered.
   const deferredImageSearchQuery = useDeferredValue(imageSearchQuery);
 
-  const downloadedImageModelIds = useMemo(
-    () => new Set(downloadedImageModels.map(model => model.id)),
-    [downloadedImageModels],
-  );
-
   const filteredHFModels = useMemo(() => {
     return filterImageCatalog({
       models: availableHFModels,
@@ -164,14 +159,12 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
       query: deferredImageSearchQuery,
       recommendedOnly: showRecommendedOnly,
       recommendation: imageRec,
-      downloadedIds: downloadedImageModelIds,
     });
   }, [
     availableHFModels,
     backendFilter,
     styleFilter,
     sdVersionFilter,
-    downloadedImageModelIds,
     deferredImageSearchQuery,
     imageRec,
     showRecommendedOnly,

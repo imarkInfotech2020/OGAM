@@ -141,18 +141,8 @@ export type RemoteStreamItem = ChatStreamPreviewRow;
 export const STREAMING_MESSAGE_ID = 'streaming';
 
 export type StreamingState = {
-  isThinking: boolean;
   streamingMessage: string;
   streamingReasoningContent: string;
-  /**
-   * The live reply has produced text, even though `streamingMessage` above is empty.
-   *
-   * The screen model passes this instead of the text so a token never reaches it: the row it asks
-   * for is drawn by one leaf that reads the text itself (`useActiveStreamText`). A caller that
-   * already holds the text (a test, a projection over a finished turn) can keep passing it and this
-   * stays undefined.
-   */
-  hasStreamingText?: boolean;
   isStreamingForThisConversation: boolean;
   isModelLoading?: boolean;
   loadingModelName?: string;
@@ -271,7 +261,6 @@ function localDisplayMessages(
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {
   const {
-    isThinking,
     streamingMessage,
     streamingReasoningContent,
     isStreamingForThisConversation,
@@ -286,7 +275,7 @@ function localDisplayMessages(
     return [
       ...allMessages,
       {
-        id: 'thinking',
+        id: STREAMING_MESSAGE_ID,
         role: 'assistant' as const,
         content: streaming.loadingModelName
           ? `Loading ${streaming.loadingModelName}...`
@@ -296,14 +285,18 @@ function localDisplayMessages(
       },
     ];
   }
-  if (isThinking && isStreamingForThisConversation) {
+  if (
+    !streamingMessage &&
+    !streamingReasoningContent &&
+    isStreamingForThisConversation
+  ) {
     if (_lastDisplayBranch !== 'thinking') {
       _lastDisplayBranch = 'thinking';
     }
     return [
       ...allMessages,
       {
-        id: 'thinking',
+        id: STREAMING_MESSAGE_ID,
         role: 'assistant' as const,
         content: '',
         timestamp: Date.now(),
@@ -312,7 +305,7 @@ function localDisplayMessages(
     ];
   }
   if (
-    (streamingMessage || streamingReasoningContent || streaming.hasStreamingText) &&
+    (streamingMessage || streamingReasoningContent) &&
     isStreamingForThisConversation
   ) {
     if (_lastDisplayBranch !== 'streaming') {

@@ -1,7 +1,6 @@
 import type { WorkspaceContentChange } from '@offgrid/application';
 import { applicationFacade } from '../../services/applicationFacade';
 import { generateId } from '../../utils/generateId';
-import type { MediaAttachment } from '../../types';
 
 function isConversationPut(
   change: WorkspaceContentChange,
@@ -14,13 +13,18 @@ function isConversationPut(
 
 export async function createWorkspaceConversation(
   input: { readonly pendingProjectId?: string },
-  modelId: string,
-  projectId?: string,
+  options: {
+    readonly modelId: string;
+    readonly projectId?: string;
+    readonly title?: string;
+  },
 ): Promise<string> {
+  const title = options.title?.trim();
   const outcome = await applicationFacade().workspaceContent.execute({
     type: 'create_conversation',
-    modelId,
-    projectId: projectId ?? input.pendingProjectId,
+    modelId: options.modelId,
+    projectId: options.projectId ?? input.pendingProjectId,
+    ...(title ? { title } : {}),
   });
   if (!outcome.ok) throw new Error(outcome.failure.message);
   const created = outcome.value.changes.find(isConversationPut);
@@ -30,24 +34,6 @@ export async function createWorkspaceConversation(
     );
   }
   return created.record.id;
-}
-
-export async function appendWorkspaceUserMessage(input: {
-  conversationId: string;
-  messageId: string;
-  text: string;
-  attachments: MediaAttachment[] | undefined;
-}): Promise<void> {
-  const outcome = await applicationFacade().workspaceContent.execute({
-    type: 'append_message',
-    conversationId: input.conversationId,
-    messageId: input.messageId,
-    portable: { role: 'user', content: input.text },
-    ...(input.attachments?.length
-      ? { local: { attachments: input.attachments } }
-      : {}),
-  });
-  if (!outcome.ok) throw new Error(outcome.failure.message);
 }
 
 /** Write one runtime-authored assistant row through the canonical content owner. */

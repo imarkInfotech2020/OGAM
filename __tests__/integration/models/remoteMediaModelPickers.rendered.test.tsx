@@ -149,19 +149,26 @@ describe('remote media model pickers', () => {
     ui.unmount();
   });
 
-  it('shows an active remote speech route without listing remote choices', async () => {
+  it('shows an active remote speech route in the voice model list', async () => {
     const h = await setup();
     const serverId = await addGateway(h.remoteServerManager);
-    const { selectRemoteMobileModel } = require('../../../src/services/modelServices');
-    const { VoiceModelsPanel } = require('../../../pro/audio/ui/VoiceModelsPanel');
+    const {
+      selectRemoteMobileModel,
+    } = require('../../../src/services/modelServices');
+    const {
+      VoiceModelsPanel,
+    } = require('../../../pro/audio/ui/VoiceModelsPanel');
     await selectRemoteMobileModel(serverId, 'voice', '/models/kokoro.pte');
 
     const ui = h.rtl.render(h.React.createElement(VoiceModelsPanel));
 
     await h.rtl.waitFor(() => {
-      expect(ui.getByText('Kokoro runs on your active remote server')).toBeTruthy();
+      expect(ui.getByTestId('remote-voice-models')).toBeTruthy();
+      expect(ui.getByText('Kokoro')).toBeTruthy();
+      expect(ui.getByText('Orpheus')).toBeTruthy();
     });
-    expect(ui.queryByTestId('remote-voice-models')).toBeNull();
+    expect(ui.queryByText('Heart')).toBeNull();
+    expect(ui.queryByTestId('models-tts-language')).toBeNull();
     ui.unmount();
   });
 

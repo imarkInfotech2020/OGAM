@@ -104,6 +104,10 @@ async function* providerChunks(
   reasoningWire: ReasoningWireFragment,
 ): AsyncIterable<GenerationChunk> {
   const pending: PendingChunk[] = [];
+  const startedAt = Date.now();
+  const turnId = request.identity?.turnId ?? 'unknown';
+  let contentChunkCount = 0;
+  let streamedContent = '';
   let wake: (() => void) | null = null;
   const push = (item: PendingChunk) => {
     pending.push(item);
@@ -128,9 +132,35 @@ async function* providerChunks(
       mobileMessages(request.messages ?? []),
       providerOptions(request, reasoningWire),
       {
-        onToken: content => push({ value: { content } }),
+        onToken: content => {
+          contentChunkCount += 1;
+          streamedContent += content;
+          if (contentChunkCount === 1 || contentChunkCount % 25 === 0) {
+            logger.log('[ChatStreamBoundary] provider content', {
+              turnId,
+              elapsedMs: Date.now() - startedAt,
+              chunkCount: contentChunkCount,
+              chars: streamedContent.length,
+            });
+          }
+          push({ value: { content } });
+        },
         onReasoning: reasoning => push({ value: { reasoning } }),
         onComplete: result => {
+          logger.log('[ChatStreamBoundary] provider complete', {
+            turnId,
+            elapsedMs: Date.now() - startedAt,
+            chunkCount: contentChunkCount,
+            streamedChars: streamedContent.length,
+            finalChars: result.content.length,
+          });
+          // Completion is authoritative. Some native runtimes return a valid final answer without
+          // invoking their answer-token callback. Reconcile that result at the callback-to-stream
+          // boundary so every downstream consumer sees one coherent generation stream.
+          if (!streamedContent && result.content) {
+            streamedContent = result.content;
+            push({ value: { content: result.content } });
+          }
           const nativeCalls =
             result.toolCalls?.map(call => ({
               id: call.id,

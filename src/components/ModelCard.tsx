@@ -44,6 +44,8 @@ interface ModelCardProps {
   /** A person paused this download. The bytes on disk still show; the label says "Paused" so the
    *  card reads as neither idle nor downloading. */
   isPaused?: boolean;
+  /** Shared has accepted a download command that has not reached its next stable projection yet. */
+  isDownloadPending?: boolean;
   downloadProgress?: number;
   downloadBytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   /** Concurrent downloads behind this card (main+mmproj / grouped) → "N downloads". */
@@ -279,6 +281,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   isDownloading,
   isQueued,
   isPaused,
+  isDownloadPending,
   downloadProgress = 0,
   downloadBytes,
   downloadCount,
@@ -332,6 +335,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
       isDownloading={isDownloading}
       isQueued={isQueued}
       isPaused={isPaused}
+      isDownloadPending={isDownloadPending}
       isActive={isActive}
       isCompatible={isCompatible}
       incompatibleReason={incompatibleReason}
