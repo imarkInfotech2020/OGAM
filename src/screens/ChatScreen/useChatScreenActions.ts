@@ -50,7 +50,6 @@ interface ChatScreenActionsArgs {
   setAlertState: SetState<AlertState>;
   activeConversationId: string | null;
   activeConversation: Conversation | undefined;
-  hasActiveModel: boolean;
   setPendingProjectId: (projectId?: string) => void;
   setShowProjectSelector: SetState<boolean>;
   activeImageModel: GenerationDeps['activeImageModel'];
@@ -70,7 +69,6 @@ export function useChatScreenActions({
   setAlertState,
   activeConversationId,
   activeConversation,
-  hasActiveModel,
   setPendingProjectId,
   setShowProjectSelector,
   activeImageModel,
@@ -142,7 +140,6 @@ export function useChatScreenActions({
     ) =>
       handleRetryMessageFn(message, generationDeps, {
         activeConversationId,
-        hasActiveModel,
         setDebugInfo,
       }),
     handleEditMessage: (
@@ -153,7 +150,6 @@ export function useChatScreenActions({
         message,
         newContent,
         activeConversationId,
-        hasActiveModel,
         setDebugInfo,
       }),
     handleSelectProject: (project: Project | null) => {

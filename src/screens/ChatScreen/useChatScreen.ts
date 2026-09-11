@@ -12,8 +12,8 @@ import { useSyncIdentityStore } from '../../stores/syncIdentityStore';
 import { useRemoteChatStreamPreviews } from './useRemoteChatStreamPreviews';
 import { useActiveTextModel } from '../../hooks/useActiveTextModel';
 import { useActiveImageModel } from '../../hooks/useActiveImageModel';
-import { useMobileModelInventory } from '../../hooks/useMobileModelInventory';
 import {
+  useChatModelAccess,
   useModelsProjection,
   useWorkspaceContentProjection,
 } from '../../hooks/useApplicationProjection';
@@ -42,7 +42,6 @@ import {
   useChatRuntimeSubscriptions,
 } from './useChatScreenLifecycle';
 import { useChatScreenActions } from './useChatScreenActions';
-import type { RuntimeModel } from '@offgrid/application';
 import { useGeneratedImageGalleryProjection } from '../../services/adapters/generated-image-gallery/useGeneratedImageGalleryProjection';
 
 export type { AlertState };
@@ -51,18 +50,6 @@ export { getPlaceholderText } from './types';
 export { computePendingSettings } from './pendingSettings';
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;
-
-/**
- * A model can make chat available only when Shared says that its route is ready
- * and the route can serve a chat turn. Embedding and operation-only sidecars are
- * inventory entries, but they are not chat routes.
- */
-export function hasUsableChatRoute(models: readonly RuntimeModel[]): boolean {
-  return models.some(
-    model =>
-      model.ready && (model.modality === 'text' || model.modality === 'image'),
-  );
-}
 
 /**
  * The active conversation's durable facts and transcript, read only from the reactive Workspace
@@ -179,7 +166,7 @@ export const useChatScreen = () => {
   // which is how it ended up refusing to send to a model the engine had loaded.
   const activeModelInfo = useActiveTextModel();
   const activeImageModelInfo = useActiveImageModel();
-  const availableModels = useMobileModelInventory();
+  const chatModelAccess = useChatModelAccess();
 
   // activeModel is for LOCAL models only (for file path, memory checks, etc.)
   const activeModel = activeModelInfo.isRemote
@@ -188,12 +175,11 @@ export const useChatScreen = () => {
   const activeRemoteModel = activeModelInfo.isRemote
     ? (activeModelInfo.model as RemoteModel | null)
     : null;
-  const hasTextModel = activeModelInfo.selected && activeModelInfo.modelId !== null;
-  const hasImageModel =
-    activeImageModelInfo.selected && activeImageModelInfo.modelId !== null;
-  const hasActiveModel = hasTextModel || hasImageModel;
+  const hasTextModel = chatModelAccess.hasText;
+  const hasImageModel = chatModelAccess.hasImage;
+  const hasActiveModel = chatModelAccess.hasSelected;
   const activeModelName = activeModelInfo.modelName;
-  const hasAvailableModels = hasUsableChatRoute(availableModels);
+  const hasAvailableModels = chatModelAccess.hasAvailable;
   const isModelLoading =
     activeModelInfo.loading || activeImageModelInfo.loading;
   const loadingModelName = activeModelInfo.loading
@@ -229,7 +215,7 @@ export const useChatScreen = () => {
     activeModelId: activeModelInfo.modelId,
     activeModel,
     activeModelInfo,
-    hasActiveModel,
+    conversationModelId: chatModelAccess.conversationModelId,
     hasTextModel,
     supportsToolCalling,
     activeConversationId,
@@ -337,7 +323,6 @@ export const useChatScreen = () => {
     setAlertState,
     activeConversationId,
     activeConversation,
-    hasActiveModel,
     setPendingProjectId,
     setShowProjectSelector,
     activeImageModel,

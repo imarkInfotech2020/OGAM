@@ -67,17 +67,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setPickerType,
     loadingState,
     isEjecting,
+    hasEjectableModel,
+    hasChatModel,
     alertState,
     setAlertState,
     downloadedModels,
-    activeModelId,
     downloadedImageModels,
-    activeImageModelId,
     generatedImages,
     conversations,
     activeTextModel,
     activeImageModel,
-    activeImageRoute,
     recentConversations,
     // Remote model state
     remoteTextModels,
@@ -204,7 +203,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </AnimatedEntry>
 
           {/* New Chat Button */}
-          {activeTextModel || activeImageRoute ? (
+          {hasChatModel ? (
             <Button
               title="New Chat"
               onPress={startNewChat}
@@ -354,14 +353,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         }}
         loadingState={loadingState}
         isEjecting={isEjecting}
-        hasActiveModel={
-          !!(
-            activeModelId ||
-            activeImageModelId ||
-            activeRemoteTextModelId ||
-            activeRemoteImageModelId
-          )
-        }
+        hasActiveModel={hasEjectableModel}
         onOpenRow={openModelRow}
         onEject={() => closeManagerThen(handleEjectAll)}
       />

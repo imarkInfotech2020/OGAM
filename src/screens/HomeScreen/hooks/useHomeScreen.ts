@@ -24,10 +24,7 @@ import { useModelLoading } from './useModelLoading';
 import { useLANDiscovery } from './useLANDiscovery';
 import { useRemoteModelHandlers } from './useRemoteModelHandlers';
 import { useActiveTextModel } from '../../../hooks/useActiveTextModel';
-import {
-  useActiveLocalModelId,
-  useActiveMobileModel,
-} from '../../../hooks/useActiveMobileModel';
+import { useEjectAllModels } from '../../../hooks/useEjectAllModels';
 import {
   modelsFailureMessage,
   remoteServerModelOptions,
@@ -36,7 +33,10 @@ import {
 } from '@offgrid/application';
 import logger from '../../../utils/logger';
 import { applicationFacade } from '../../../services/applicationFacade';
-import { useWorkspaceContentProjection } from '../../../hooks/useApplicationProjection';
+import {
+  useChatModelAccess,
+  useWorkspaceContentProjection,
+} from '../../../hooks/useApplicationProjection';
 import { useGeneratedImageGalleryProjection } from '../../../services/adapters/generated-image-gallery';
 import { startHomeStartup } from './homeStartup';
 // Shared hook types live in ./types so the sub-hooks can import them without importing this file
@@ -138,7 +138,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     type: null,
     modelName: null,
   });
-  const [isEjecting, setIsEjecting] = useState(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const [memoryInfo, setMemoryInfo] = useState<ResourceUsage | null>(null);
   const isFirstMount = useRef(true);
@@ -153,9 +152,16 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   const generatedImages = useGeneratedImageGalleryProjection();
   const { setDownloadedModels, setDownloadedImageModels, setDeviceInfo } =
     useAppStore.getState();
-  // Selection is read from the shared active route, never from a store mirror.
-  const activeModelId = useActiveLocalModelId('text');
-  const activeImageModelId = useActiveLocalModelId('image');
+  const chatModelAccess = useChatModelAccess();
+  const activeModelId =
+    chatModelAccess.text?.source === 'local' ? chatModelAccess.text.id : null;
+  const activeImageModelId =
+    chatModelAccess.image?.source === 'local' ? chatModelAccess.image.id : null;
+  const {
+    isEjecting,
+    hasActiveModel: hasEjectableModel,
+    ejectAll,
+  } = useEjectAllModels();
 
   const workspaceContent = useWorkspaceContentProjection();
   const setActiveConversation = useChatStore(
@@ -188,7 +194,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     modelId: activeTextModelId,
     isRemote: isRemoteTextModel,
   } = useActiveTextModel();
-  const activeImageRoute = useActiveMobileModel('image').model;
+  const activeImageRoute = chatModelAccess.image;
   const activeRemoteTextModelId = isRemoteTextModel ? activeTextModelId : null;
   const activeRemoteImageModelId =
     activeImageRoute?.source === 'remote' ? activeImageRoute.id : null;
@@ -261,15 +267,10 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
   };
 
   const handleEjectAll = () => {
-    const hasLocalModels = activeModelId || activeImageModelId;
-    const hasRemoteModel = activeRemoteTextModelId || activeRemoteImageModelId;
-    if (!hasLocalModels && !hasRemoteModel) {
-      return;
-    }
+    if (!hasEjectableModel) return;
 
     const doEjectAll = async () => {
       setAlertState(hideAlert());
-      setIsEjecting(true);
       setLoadingState({
         isLoading: true,
         type: 'text',
@@ -280,15 +281,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
         InteractionManager.runAfterInteractions(() => setTimeout(resolve, 350)),
       );
       try {
-        // Single owning side-effect — same cancellation + unload path as Chat.
-        const outcome = await applicationFacade().workflows.ejectModels();
-        if (!outcome.ok) {
-          setAlertState(
-            showAlert('Error', modelsFailureMessage(outcome.failure)),
-          );
-          return;
-        }
-        const { count } = outcome.value;
+        const count = await ejectAll();
         if (count > 0) {
           setAlertState(
             showAlert('Done', `Unloaded ${count} model${count > 1 ? 's' : ''}`),
@@ -302,7 +295,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
           ),
         );
       } finally {
-        setIsEjecting(false);
         setLoadingState({ isLoading: false, type: null, modelName: null });
       }
     };
@@ -326,9 +318,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
 
   const startNewChat = () => {
     // Allow image-only users to start a chat; conversation is lazily created in useChatScreen
-    if (!activeTextModelId && !activeImageRoute) {
-      return;
-    }
+    if (!chatModelAccess.hasSelected) return;
     navigation.navigate('Chat', {});
   };
 
@@ -385,6 +375,8 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     setPickerType,
     loadingState,
     isEjecting,
+    hasEjectableModel,
+    hasChatModel: chatModelAccess.hasSelected,
     alertState,
     setAlertState,
     memoryInfo,

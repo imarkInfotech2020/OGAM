@@ -19,7 +19,6 @@ type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type RetryParams = {
   activeConversationId: string | null | undefined;
-  hasActiveModel: boolean;
   setDebugInfo: SetState<any>;
 };
 
@@ -48,9 +47,6 @@ export async function handleRetryMessageFn(
   const msgs = p.activeConversationId
     ? requireWorkspaceConversationMessages(p.activeConversationId).map(toWorkspaceMessage)
     : [];
-  // No model loaded (e.g. user ejected all models): tell them, don't silently
-  // no-op. Mirrors the send path's "No Model Selected" alert (handleSendFn).
-  if (!p.hasActiveModel) { genDeps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
   if (!p.activeConversationId) return;
   // Stop any in-flight TTS before deleting messages (no-op without pro audio)
   callHook(HOOKS.audioStop);
@@ -65,7 +61,6 @@ type EditParams = {
   message: Message;
   newContent: string;
   activeConversationId: string | null | undefined;
-  hasActiveModel: boolean;
   setDebugInfo: SetState<any>;
 };
 
@@ -111,8 +106,6 @@ export async function handleEditMessageFn(genDeps: GenerationDeps, p: EditParams
     }
     return;
   }
-  // Same as retry: no model loaded → alert instead of a silent no-op.
-  if (!p.hasActiveModel) { genDeps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
   // Same as resend: a synced reply is a live preview until its op lands, so clear it before regenerating.
   supersedeSyncedReplies(p.activeConversationId);
   // Shared ChatSession.edit is the sole durable writer; the edited content reaches the UI through

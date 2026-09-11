@@ -60,7 +60,7 @@ export type GenerationDeps = {
     modelId: string | null;
     modelName: string;
   };
-  hasActiveModel?: boolean;
+  conversationModelId: string | null;
   hasTextModel?: boolean;
   supportsToolCalling?: boolean;
   activeConversationId: string | null | undefined;
@@ -314,7 +314,7 @@ export async function handleSendFn(
   deps: GenerationDeps,
   call: SendCall,
 ): Promise<void> {
-  if (!deps.hasActiveModel) {
+  if (!deps.conversationModelId) {
     deps.setAlertState(
       showAlert('No Model Selected', 'Please select a model first.'),
     );
@@ -332,9 +332,8 @@ export async function handleSendFn(
   let conversationId = deps.activeConversationId;
   let projectId = deps.activeConversation?.projectId;
   if (!conversationId) {
-    const modelId = deps.activeModelInfo?.modelId || deps.activeImageModel?.id;
     conversationId = await createWorkspaceConversation(deps, {
-      modelId: modelId!,
+      modelId: deps.conversationModelId,
       title: call.text,
     });
     projectId = deps.pendingProjectId;
@@ -370,7 +369,7 @@ export async function replayPersistedChatTurnFn(
     | { type: 'vision' },
 ): Promise<void> {
   const conversationId = deps.activeConversationId;
-  if (!conversationId || !deps.hasActiveModel) return;
+  if (!conversationId) return;
   if (blockedImageForNonVisionModel(deps, userMessage.attachments)) return;
   const workspaceContent = applicationFacade().workspaceContent.snapshot();
   const persistedMessage = workspaceContent.messages.find(
@@ -422,7 +421,7 @@ export async function editPersistedChatTurnFn(
   message: Message,
 ): Promise<void> {
   const conversationId = deps.activeConversationId;
-  if (!conversationId || !deps.hasActiveModel) return;
+  if (!conversationId) return;
   let turnId: string | undefined;
   try {
     const persistedMessage = applicationFacade()
