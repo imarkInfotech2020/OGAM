@@ -26,6 +26,7 @@ import {
   type RamProfile,
   type CompletionMeta,
 } from './nativeBoundary';
+import type { ReactTestInstance } from 'react-test-renderer';
 import { createDownloadedModel } from '../utils/factories';
 import { doMockRealSqlite } from './sqliteFake';
 import { ChatScenario, type ChatScenarioOptions } from './chatScenario';
@@ -1224,7 +1225,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
       const modeToggle = await rtl.waitFor(() =>
         view.getByTestId('chat-mode-toggle'),
       );
-      let pressable = modeToggle;
+      let pressable: ReactTestInstance | null = modeToggle;
       while (pressable && typeof pressable.props.onPress !== 'function') {
         pressable = pressable.parent;
       }
@@ -1271,7 +1272,7 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
         boundary.whisper!.setFileTranscript(transcript);
       }
       const pressVoiceButton = async () => {
-        let target = await rtl.waitFor(() =>
+        let target: ReactTestInstance | null = await rtl.waitFor(() =>
           view.getByTestId('voice-record-button-audio'),
         );
         while (target && typeof target.props.onPress !== 'function') {
