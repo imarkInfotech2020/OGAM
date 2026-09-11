@@ -1,20 +1,12 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { Message, Conversation } from '../types';
 import { stripStreamingControlTokens } from '../utils/messageContent';
 import { generateId } from '../utils/generateId';
 import {
   type ReplyEnd,
   type StreamingSnapshot,
 } from './chatStoreReplyFinalization';
-import {
-  CHAT_STORAGE_VERSION,
-  chatPersistStorage,
-  migratePersistedChatState,
-} from './chatPersistence';
 
 export interface ChatState {
-  conversations: Conversation[];
   activeConversationId: string | null;
   streamingMessage: string;
   streamingReasoningContent: string;
@@ -28,7 +20,6 @@ export interface ChatState {
    */
   streamingMessageUuid: string | null;
   setActiveConversation: (conversationId: string | null) => void;
-  getActiveConversation: () => Conversation | null;
   startStreaming: (conversationId: string) => void;
   setStreamingMessage: (content: string) => void;
   appendToStreamingMessage: (token: string) => void;
@@ -39,7 +30,6 @@ export interface ChatState {
   noteReplyEndHandled: () => void;
   clearStreamingMessage: () => void;
   getStreamingState: () => StreamingSnapshot;
-  getConversationMessages: (conversationId: string) => Message[];
 }
 
 /** The streaming fields, named so a caller can say WHICH state it means rather than list it. */
@@ -68,104 +58,74 @@ const NO_REPLY_FORMING: StreamingFields = {
   streamingMessageUuid: null,
 };
 
-export const useChatStore = create<ChatState>()(
-  persist(
-    (set, get) => ({
-      conversations: [],
-      activeConversationId: null,
+export const useChatStore = create<ChatState>()((set, get) => ({
+  activeConversationId: null,
+  ...NO_REPLY_FORMING,
+  ...NO_REPLY_ENDED,
+
+  setActiveConversation: conversationId => {
+    set({ activeConversationId: conversationId });
+  },
+
+  startStreaming: conversationId => {
+    set({
       ...NO_REPLY_FORMING,
-      ...NO_REPLY_ENDED,
+      streamingForConversationId: conversationId,
+      // Minted here, before the first token, and carried all the way to the stored row. This is
+      // the id a paired device sees on every live frame, so when the record arrives it recognises
+      // the answer it is already showing instead of drawing it a second time.
+      streamingMessageUuid: generateId(),
+    });
+  },
 
-      setActiveConversation: conversationId => {
-        set({ activeConversationId: conversationId });
-      },
+  setStreamingMessage: content => {
+    set({ streamingMessage: content });
+  },
 
-      getActiveConversation: () => {
-        const state = get();
-        return (
-          state.conversations.find(c => c.id === state.activeConversationId) ||
-          null
-        );
-      },
+  appendToStreamingMessage: token => {
+    set(state => ({
+      streamingMessage: stripStreamingControlTokens(
+        state.streamingMessage + token,
+      ),
+    }));
+  },
 
-      startStreaming: conversationId => {
-        set({
-          ...NO_REPLY_FORMING,
-          streamingForConversationId: conversationId,
-          // Minted here, before the first token, and carried all the way to the stored row. This is
-          // the id a paired device sees on every live frame, so when the record arrives it recognises
-          // the answer it is already showing instead of drawing it a second time.
-          streamingMessageUuid: generateId(),
-        });
-      },
+  appendToStreamingReasoningContent: token => {
+    set(state => ({
+      streamingReasoningContent: state.streamingReasoningContent + token,
+    }));
+  },
 
-      setStreamingMessage: content => {
-        set({ streamingMessage: content });
-      },
+  resetStreamingSegment: () => {
+    set({ streamingMessage: '', streamingReasoningContent: '' });
+  },
 
-      appendToStreamingMessage: token => {
-        set(state => ({
-          streamingMessage: stripStreamingControlTokens(
-            state.streamingMessage + token,
-          ),
-        }));
-      },
+  clearStreamingMessage: () => {
+    // Nothing was shown and nothing is stored, so any peer preview for this reply is orphaned.
+    const conversationId = get().streamingForConversationId;
+    set({
+      ...NO_REPLY_FORMING,
+      ...(conversationId
+        ? { lastReplyEnd: { conversationId, persisted: false } }
+        : {}),
+    });
+  },
 
-      appendToStreamingReasoningContent: token => {
-        set(state => ({
-          streamingReasoningContent: state.streamingReasoningContent + token,
-        }));
-      },
+  noteReplyEndHandled: () => set(NO_REPLY_ENDED),
 
-      resetStreamingSegment: () => {
-        set({ streamingMessage: '', streamingReasoningContent: '' });
-      },
-
-      clearStreamingMessage: () => {
-        // Nothing was shown and nothing is stored, so any peer preview for this reply is orphaned.
-        const conversationId = get().streamingForConversationId;
-        set({
-          ...NO_REPLY_FORMING,
-          ...(conversationId
-            ? { lastReplyEnd: { conversationId, persisted: false } }
-            : {}),
-        });
-      },
-
-      noteReplyEndHandled: () => set(NO_REPLY_ENDED),
-
-      getStreamingState: () => {
-        const state = get();
-        const hasStream = state.streamingForConversationId !== null;
-        return {
-          conversationId: state.streamingForConversationId,
-          messageId: state.streamingMessageUuid,
-          content: state.streamingMessage,
-          reasoningContent: state.streamingReasoningContent,
-          isStreaming: hasStream,
-          isThinking:
-            hasStream &&
-            !state.streamingMessage &&
-            !state.streamingReasoningContent,
-        };
-      },
-
-      getConversationMessages: conversationId => {
-        const conversation = get().conversations.find(
-          c => c.id === conversationId,
-        );
-        return conversation?.messages || [];
-      },
-    }),
-    {
-      name: 'local-llm-chat-storage',
-      storage: chatPersistStorage,
-      version: CHAT_STORAGE_VERSION,
-      migrate: migratePersistedChatState,
-      partialize: state => ({
-        conversations: state.conversations,
-        activeConversationId: state.activeConversationId,
-      }),
-    },
-  ),
-);
+  getStreamingState: () => {
+    const state = get();
+    const hasStream = state.streamingForConversationId !== null;
+    return {
+      conversationId: state.streamingForConversationId,
+      messageId: state.streamingMessageUuid,
+      content: state.streamingMessage,
+      reasoningContent: state.streamingReasoningContent,
+      isStreaming: hasStream,
+      isThinking:
+        hasStream &&
+        !state.streamingMessage &&
+        !state.streamingReasoningContent,
+    };
+  },
+}));

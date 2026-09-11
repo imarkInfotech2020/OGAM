@@ -140,7 +140,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     fs: true,
     ram,
     whisper: opts.whisper,
-    microphone: scenario?.chatMode === 'voice',
+    microphone:
+      opts.audio === true ||
+      opts.whisper === true ||
+      scenario?.chatMode === 'voice',
     download: opts.download,
   });
   const originalXHR = global.XMLHttpRequest;
@@ -605,10 +608,10 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     useChatStore,
     scriptTextTurn,
     scriptImageTurnFor(
-      scenario: ChatScenario,
+      targetScenario: ChatScenario,
       scripted: { enhancedPrompt: string; thinkingText: string },
     ) {
-      if (scenario.engine === 'none') return;
+      if (targetScenario.engine === 'none') return;
       scriptTextTurn({
         text: scripted.enhancedPrompt,
         thinkingText: scripted.thinkingText,
@@ -750,18 +753,20 @@ export async function setupChatScreen(opts: ChatHarnessOptions | ChatScenario) {
     },
 
     /** Place the image route declared by the scenario. Tests never map an OS to a backend. */
-    async placeImageModelFor(scenario: ChatScenario) {
-      if (!scenario.imageBackend) {
-        throw new Error(`${scenario.label} does not declare an image backend.`);
+    async placeImageModelFor(targetScenario: ChatScenario) {
+      if (!targetScenario.imageBackend) {
+        throw new Error(
+          `${targetScenario.label} does not declare an image backend.`,
+        );
       }
-      if (scenario.imageBackend === 'remote') {
+      if (targetScenario.imageBackend === 'remote') {
         if (scenarioImagePlaced) return null;
         scenarioImagePlaced = true;
         return placeRemoteImageModel();
       }
       if (scenarioImagePlaced) return null;
       scenarioImagePlaced = true;
-      return placeLocalImageModel({ backend: scenario.imageBackend });
+      return placeLocalImageModel({ backend: targetScenario.imageBackend });
     },
 
     /** Set the visible in-chat Thinking choice through the real quick-settings control. */

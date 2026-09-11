@@ -3,7 +3,6 @@
  * the transcript in the composer and must not create an empty user turn.
  */
 import {setupChatScreen, usingLiteRT} from '../../harness/chatHarness';
-import type {Message} from '../../../src/types';
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
@@ -39,14 +38,6 @@ describe('LiteRT chat-mode dictation', () => {
         'draw a dog',
       );
     });
-    const messages = h.conversationId
-      ? h.useChatStore.getState().getConversationMessages(h.conversationId)
-      : [];
-    expect(
-      messages.some(
-        (message: Message) =>
-          message.role === 'user' && message.content.trim() === '',
-      ),
-    ).toBe(false);
+    expect(h.view!.queryAllByTestId('user-message')).toHaveLength(0);
   });
 });

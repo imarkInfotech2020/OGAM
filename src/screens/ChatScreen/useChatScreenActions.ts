@@ -2,11 +2,12 @@ import { Dispatch, MutableRefObject, SetStateAction, useCallback } from 'react';
 import { AlertState } from '../../components';
 import type { ModelSettingsRecord } from '@offgrid/application';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
-import { useChatStore } from '../../stores';
 import {
+  Conversation,
   DebugInfo,
   DownloadedModel,
   MediaAttachment,
+  Message,
   Project,
 } from '../../types';
 import type { ActiveTextModelResult } from '../../hooks/useActiveTextModel';
@@ -32,8 +33,6 @@ import {
 } from './useChatMessageHandlers';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
-type ChatStoreState = ReturnType<typeof useChatStore.getState>;
-
 const VIEWER_FADE_OUT_MS = 350;
 
 interface ChatScreenActionsArgs {
@@ -50,7 +49,7 @@ interface ChatScreenActionsArgs {
   setDebugInfo: SetState<DebugInfo | null>;
   setAlertState: SetState<AlertState>;
   activeConversationId: string | null;
-  activeConversation: ChatStoreState['conversations'][number] | undefined;
+  activeConversation: Conversation | undefined;
   hasActiveModel: boolean;
   setPendingProjectId: (projectId?: string) => void;
   setShowProjectSelector: SetState<boolean>;
@@ -139,7 +138,7 @@ export function useChatScreenActions({
       callHook(HOOKS.clipboardRecordLocalText, content, Date.now());
     },
     handleRetryMessage: (
-      message: ChatStoreState['conversations'][number]['messages'][number],
+      message: Message,
     ) =>
       handleRetryMessageFn(message, generationDeps, {
         activeConversationId,
@@ -147,7 +146,7 @@ export function useChatScreenActions({
         setDebugInfo,
       }),
     handleEditMessage: (
-      message: ChatStoreState['conversations'][number]['messages'][number],
+      message: Message,
       newContent: string,
     ) =>
       handleEditMessageFn(generationDeps, {
