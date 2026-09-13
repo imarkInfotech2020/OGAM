@@ -136,6 +136,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     // Capture signal in closure so abort checks remain valid even after
     // this.abortController is nulled by stopGeneration().
     const { signal } = this.abortController;
+    let streamError: Error | null = null;
 
     try {
       const openaiMessages = await this.buildOpenAIMessages(messages, options);
@@ -181,7 +182,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         if (message.error) {
           logger.error(`[Provider][DEBUG] Stream error: ${JSON.stringify(message.error)}`);
           state.streamErrorOccurred = true;
-          callbacks.onError(new Error(message.error.message || 'API error'));
+          streamError = new Error(message.error.message || 'API error');
           this.abortController?.abort();
           return;
         }
@@ -215,6 +216,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
         }
       });
 
+      if (streamError) throw streamError;
+
       // Fallback: if stream ended without a recognised finish_reason (e.g. 'length',
       // 'content_filter', null), ensure the generation is finalised.
       if (!state.completeCalled && !state.streamErrorOccurred) {
@@ -230,6 +233,10 @@ export class OpenAICompatibleProvider implements LLMProvider {
         });
       }
     } catch (error) {
+      if (streamError) {
+        callbacks.onError(streamError);
+        return;
+      }
       if (signal.aborted) {
         callbacks.onComplete({ content: '', meta: { gpu: false } });
         return;

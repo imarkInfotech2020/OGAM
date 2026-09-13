@@ -1,6 +1,8 @@
 /** GenerationService - Handles LLM generation independently of UI lifecycle */
 import { llmService } from './llm';
-import { getActiveEngineService, stopAllTextEngines } from './engines';
+import { getActiveEngineService, prepareActiveConversation, stopAllTextEngines } from './engines';
+import { activeModelService } from './activeModelService';
+import { remoteServerManager } from './remoteServerManager';
 import { useAppStore, useChatStore, useRemoteServerStore } from '../stores';
 import { Message, GenerationMeta, MediaAttachment } from '../types';
 import { runToolLoop } from './generationToolLoop';
@@ -14,6 +16,7 @@ import {
   buildToolLoopHandlersImpl,
   prepareGenerationImpl,
   generateResponseImpl,
+  keepShownPartialOnError,
   type GenerationRequest,
   type GenerationWithToolsRequest,
 } from './generationServiceHelpers';
@@ -24,6 +27,9 @@ import {
 
 const SHARE_PROMPT_DELAY_MS = 1500;
 type StreamChunk = string | { content?: string; reasoningContent?: string };
+type FallbackRoute =
+  | { kind: 'remote'; serverId: string; id: string; name: string }
+  | { kind: 'local'; id: string; name: string };
 
 export interface QueuedMessage {
   id: string; conversationId: string; text: string;
@@ -157,11 +163,105 @@ class GenerationService {
     contextUsage?: GenerationRequest['contextUsage'],
   ): Promise<void> {
     logger.log(`[REMOTE-SM] generateResponse entry conv=${conversationId} msgs=${messages.length}`);
-    // Route to remote provider if active
-    if (this.isUsingRemoteProvider()) {
-      return this.generateRemoteResponse(conversationId, messages, onFirstToken, contextUsage);
+    return this.withModelFallback(conversationId, messages, async (route, prepared) => {
+      const request = { conversationId, messages, onFirstToken, contextUsage,
+        prepared, preservePartialOnError: false };
+      if (route.kind === 'remote') await generateRemoteResponseImpl(this, request);
+      else await generateResponseImpl(this, request);
+    });
+  }
+
+  private fallbackRoutes(messages: Message[]): FallbackRoute[] {
+    const remote = useRemoteServerStore.getState();
+    const local = useAppStore.getState();
+    const startedRemote = this.isUsingRemoteProvider();
+    const selectedId = startedRemote ? remote.activeRemoteTextModelId : local.activeModelId;
+    const selectedName = startedRemote
+      ? remote.getActiveRemoteTextModel()?.name || selectedId || 'Remote model'
+      : local.downloadedModels.find(model => model.id === selectedId)?.name || 'Local model';
+    const needsVision = messages.some(message =>
+      message.attachments?.some(attachment => attachment.type === 'image'),
+    );
+    const remoteRoutes = startedRemote
+      ? remote.servers.flatMap(server =>
+          (remote.discoveredModels[server.id] || [])
+            .filter(model =>
+              (server.id !== remote.activeServerId || model.id !== selectedId) &&
+              (!needsVision || model.capabilities.supportsVision),
+            )
+            .map(model => ({ kind: 'remote' as const, serverId: server.id, id: model.id, name: model.name })),
+        )
+      : [];
+    const localRoutes = local.downloadedModels
+      .filter(model =>
+        model.id !== selectedId &&
+        (!needsVision || (model.engine === 'litert' ? model.liteRTVision : model.isVisionModel)),
+      )
+      .sort((a, b) => a.fileSize - b.fileSize)
+      .map(model => ({ kind: 'local' as const, id: model.id, name: model.name }));
+    return [
+      startedRemote
+        ? { kind: 'remote', serverId: remote.activeServerId || '', id: selectedId || '', name: selectedName }
+        : { kind: 'local', id: selectedId || '', name: selectedName },
+      ...remoteRoutes,
+      ...localRoutes,
+    ];
+  }
+
+  private async withModelFallback<T>(
+    conversationId: string,
+    messages: Message[],
+    run: (route: FallbackRoute, prepared: boolean) => Promise<T>,
+    canRetry: () => boolean = () => true,
+  ): Promise<T | void> {
+    const routes = this.fallbackRoutes(messages);
+    let failedName = routes[0].name;
+    let lastError: unknown;
+    let prepared = false;
+    for (let index = 0; index < routes.length; index += 1) {
+      const route = routes[index];
+      if (index > 0) {
+        try {
+          if (route.kind === 'remote') {
+            await remoteServerManager.setActiveRemoteTextModel(route.serverId, route.id);
+          } else {
+            await activeModelService.loadTextModel(route.id);
+            if (this.abortRequested) return;
+            await prepareActiveConversation(conversationId);
+            if (this.abortRequested) return;
+            remoteServerManager.clearActiveRemoteTextModel();
+          }
+        } catch (error) {
+          lastError = error;
+          continue;
+        }
+        if (this.abortRequested) return;
+        if (this.state.isGenerating) {
+          this.forceFlushTokens();
+          useChatStore.getState().resetStreamingSegment();
+          this.updateState({ streamingContent: '', isThinking: true, startTime: Date.now() });
+        }
+        this.tokenBuffer = '';
+        this.reasoningBuffer = '';
+        this.totalReasoningLength = 0;
+        this.remoteTimeToFirstToken = undefined;
+        useChatStore.getState().addMessage(conversationId, {
+          role: 'tool', toolName: 'model_fallback',
+          content: `${failedName} could not answer. Trying ${route.name}.`,
+        });
+        prepared = this.state.isGenerating;
+      }
+      try {
+        return await run(route, prepared);
+      } catch (error) {
+        if (this.abortRequested) return;
+        lastError = error;
+        failedName = route.name;
+        if (!canRetry()) break;
+      }
     }
-    return generateResponseImpl(this, { conversationId, messages, onFirstToken, contextUsage });
+    if (this.state.isGenerating) keepShownPartialOnError(this, conversationId);
+    throw lastError;
   }
 
   /** Generate a response with tool calling support (LLM → tools → repeat, max 5 iterations). */
@@ -177,16 +277,29 @@ class GenerationService {
       contextUsage?: GenerationRequest['contextUsage'];
     },
   ): Promise<import('./generationToolLoop').ToolLoopOutcome | void> {
-    // Route to remote provider if active
-    if (this.isUsingRemoteProvider()) {
-      return this.generateRemoteWithTools(conversationId, messages, options);
-    }
-    // Local generation with tools
-    const { enabledToolIds, projectId, contextUsage, ...callbacks } = options;
-    if (!(await this.prepareGeneration(conversationId))) return;
-    this.contextUsage = contextUsage;
-
-    try {
+    let toolStarted = false;
+    const trackedOptions = {
+      ...options,
+      onToolCallStart: (name: string, args: Record<string, any>) => {
+        toolStarted = true;
+        options.onToolCallStart?.(name, args);
+      },
+      onToolCallComplete: (name: string, result: ToolResult) => {
+        toolStarted = true;
+        options.onToolCallComplete?.(name, result);
+      },
+    };
+    return this.withModelFallback(conversationId, messages, async (route, prepared) => {
+      if (route.kind === 'remote') {
+        return generateRemoteWithToolsImpl(this, {
+          conversationId, messages,
+          options: { ...trackedOptions, prepared, preservePartialOnError: false },
+        });
+      }
+      const { enabledToolIds, projectId, contextUsage, ...callbacks } = trackedOptions;
+      if (!prepared && !(await this.prepareGeneration(conversationId))) return;
+      this.contextUsage = contextUsage;
+      try {
       const outcome = await runToolLoop({
         conversationId,
         messages,
@@ -212,12 +325,9 @@ class GenerationService {
     } catch (error) {
       if (this.abortRequested) return;
       logger.error('[GenerationService] Tool generation error:', error);
-      // Even on error, keep any partial the user already saw — keepShownPartialOrClear flushes the token
-      // buffer to the store first (do NOT discard it here), then finalizes.
-      this.keepShownPartialOrClear();
-      this.resetState();
       throw error;
-    }
+      }
+    }, () => !toolStarted);
   }
 
   /**

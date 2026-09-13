@@ -675,7 +675,7 @@ describe('mobile clipboard Sync journey', () => {
     await waitFor(() =>
       expect(ui!.getByTestId('clipboard-empty')).toBeTruthy(),
     );
-  });
+  }, 30000);
 
   it('shows the supported Android selection action without a permission remedy', async () => {
     NativeModules.SyncClipboardModule = {

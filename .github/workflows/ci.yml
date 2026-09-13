@@ -52,7 +52,7 @@ jobs:
       # pointer is deliberately a pin - it records which pro revision a core commit was verified against
       # - but a pin is the wrong thing for CI to test: a coordinated core+pro change would run this
       # branch's core against whatever commit the pointer happens to hold, so the two halves of one
-      # change are never seen together. Matching branch first, main as the fallback, exactly as the
+      # change are never seen together. Matching branch first, PR base branch as the fallback, exactly as the
       # shared checkout below and as OGAD does it.
       - name: Check out the matching pro branch
         if: ${{ steps.private_sources.outputs.available == 'true' }}
@@ -65,13 +65,14 @@ jobs:
           path: pro
           ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
-      - name: Fall back to pro main
+      - name: Fall back to pro base branch
         if: ${{ steps.private_sources.outputs.available == 'true' && steps.pro_branch.outcome != 'success' }}
         uses: actions/checkout@v4
         with:
           repository: off-grid-ai/mobile-pro
           token: ${{ secrets.PRO_SUBMODULE_PAT }}
           path: pro
+          ref: ${{ github.base_ref || 'main' }}
           persist-credentials: false
 
       - name: Setup Node.js
@@ -101,7 +102,7 @@ jobs:
       # actions/checkout refuses a path outside the workspace, so it lands inside and is moved up one
       # level - which is exactly where the file: specifiers and jest's moduleNameMapper both point.
       #
-      # Matching branch first, main as the fallback: a PR that changes the app and the shared package
+      # Matching branch first, PR base branch as the fallback: a PR that changes the app and the shared package
       # together has to be tested against the package it expects, not against main's copy.
       - name: Check out the shared monorepo
         if: ${{ steps.private_sources.outputs.available == 'true' }}
@@ -114,13 +115,14 @@ jobs:
           path: _shared
           ref: ${{ github.head_ref || github.ref_name }}
           persist-credentials: false
-      - name: Fall back to shared main
+      - name: Fall back to shared base branch
         if: ${{ steps.private_sources.outputs.available == 'true' && steps.shared_branch.outcome != 'success' }}
         uses: actions/checkout@v4
         with:
           repository: off-grid-ai/shared
           token: ${{ secrets.PRO_SUBMODULE_PAT }}
           path: _shared
+          ref: ${{ github.base_ref || 'main' }}
           persist-credentials: false
       - name: Put shared beside this checkout
         if: ${{ steps.private_sources.outputs.available == 'true' }}
