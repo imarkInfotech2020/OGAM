@@ -261,6 +261,9 @@ class GenerationService {
           this.resetState();
           throw error;
         }
+        logger.warn(
+          `[GenerationService] ${route.name} failed before model fallback: ${error instanceof Error ? error.message : String(error)}`,
+        );
         lastError = error;
         failedName = route.name;
         if (!canRetry()) break;
