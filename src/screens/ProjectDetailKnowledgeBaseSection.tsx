@@ -4,7 +4,7 @@ import {
   Text,
   TouchableOpacity,
   Switch,
-  ScrollView,
+  FlatList,
   Platform,
 } from 'react-native';
 import { LoadingDots } from '../components/LoadingDots';
@@ -239,10 +239,13 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
           <Text style={styles.emptyStateText}>No documents added</Text>
         </View>
       ) : (
-        <ScrollView style={styles.sectionList} nestedScrollEnabled>
-          {kbDocs.map(doc => (
+        <FlatList
+          style={styles.sectionList}
+          data={kbDocs}
+          keyExtractor={doc => String(doc.id)}
+          removeClippedSubviews={Platform.OS !== 'android'}
+          renderItem={({ item: doc }) => (
             <TouchableOpacity
-              key={doc.id}
               style={styles.kbDocRow}
               onPress={() => onDocumentPress(doc)}
               activeOpacity={0.7}
@@ -272,8 +275,8 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({
                 <Icon name="trash-2" size={14} color={colors.error} />
               </TouchableOpacity>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          )}
+        />
       )}
 
       <PasteNoteSheet

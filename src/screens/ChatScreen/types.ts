@@ -111,6 +111,7 @@ export type StreamingState = {
   isThinking: boolean;
   streamingMessage: string;
   streamingReasoningContent: string;
+  hasStreamingText?: boolean;
   isStreamingForThisConversation: boolean;
   isModelLoading?: boolean;
   loadingModelName?: string;
@@ -237,7 +238,7 @@ function localDisplayMessages(
   if (
     streaming.isModelLoading &&
     streaming.isGeneratingForThisConversation &&
-    !streamingMessage
+    !streamingMessage && !streaming.hasStreamingText
   ) {
     return [
       ...allMessages,
@@ -268,7 +269,7 @@ function localDisplayMessages(
     ];
   }
   if (
-    (streamingMessage || streamingReasoningContent) &&
+    (streamingMessage || streamingReasoningContent || streaming.hasStreamingText) &&
     isStreamingForThisConversation
   ) {
     if (_lastDisplayBranch !== 'streaming') {

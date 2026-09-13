@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, FlatList, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -22,6 +22,7 @@ import { KnowledgeBaseSection } from './ProjectDetailKnowledgeBaseSection';
 import { formatWhen } from '../utils/localTime';
 import { useConversationPreviewLine } from '../hooks/useConversationPreviewLine';
 import { PROJECT_DELETE_FALLBACK_REASON } from '../stores/projectDeleteOutcome';
+import { byRecentActivity } from '../utils/conversationOrdering';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type RouteProps = RouteProp<RootStackParamList, 'ProjectDetail'>;
@@ -35,25 +36,22 @@ export const ProjectDetailScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
-  const { getProject, deleteProject } = useProjectStore();
-  const {
-    conversations,
-    deleteConversation,
-    setActiveConversation,
-    createConversation,
-  } = useChatStore();
-  const { downloadedModels, activeModelId } = useAppStore();
+  const project = useProjectStore(state => state.projects.find(p => p.id === projectId));
+  const deleteProject = useProjectStore(state => state.deleteProject);
+  const conversations = useChatStore(state => state.conversations);
+  const deleteConversation = useChatStore(state => state.deleteConversation);
+  const setActiveConversation = useChatStore(state => state.setActiveConversation);
+  const createConversation = useChatStore(state => state.createConversation);
+  const downloadedModels = useAppStore(state => state.downloadedModels);
+  const activeModelId = useAppStore(state => state.activeModelId);
 
-  const project = getProject(projectId);
   const hasModels = downloadedModels.length > 0;
 
   // Get chats for this project
-  const projectChats = conversations
-    .filter(c => c.projectId === projectId)
-    .sort(
-      (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
+  const projectChats = useMemo(
+    () => byRecentActivity(conversations.filter(c => c.projectId === projectId)),
+    [conversations, projectId],
+  );
 
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);
@@ -274,8 +272,8 @@ export const ProjectDetailScreen: React.FC = () => {
             </View>
           </TouchableOpacity>
 
-          <ScrollView style={styles.sectionList} nestedScrollEnabled>
-            {projectChats.length === 0 ? (
+          {projectChats.length === 0 ? (
+            <View style={styles.sectionList}>
               <View style={styles.emptyState}>
                 <Icon
                   name="message-circle"
@@ -294,14 +292,18 @@ export const ProjectDetailScreen: React.FC = () => {
                   />
                 )}
               </View>
-            ) : (
-              projectChats.map(chat => (
-                <View key={chat.id} style={styles.chatItemWrapper}>
-                  {renderChat({ item: chat })}
-                </View>
-              ))
-            )}
-          </ScrollView>
+            </View>
+          ) : (
+            <FlatList
+              style={styles.sectionList}
+              data={projectChats}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.chatItemWrapper}>{renderChat({ item })}</View>
+              )}
+              removeClippedSubviews={Platform.OS !== 'android'}
+            />
+          )}
         </View>
       </View>
 

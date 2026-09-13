@@ -174,7 +174,12 @@ const NO_REPLY_FORMING: StreamingFields = {
   isThinking: false,
 };
 
-const chatStorage = createHydrationGatedStorage<PersistedChatState>();
+const chatStorage = createHydrationGatedStorage<PersistedChatState>(
+  undefined,
+  (previous, next) =>
+    previous.conversations === next.conversations &&
+    previous.activeConversationId === next.activeConversationId,
+);
 
 export const useChatStore = create<ChatState>()(
   persist(

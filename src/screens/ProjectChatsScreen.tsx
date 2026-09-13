@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { TYPOGRAPHY, SPACING } from '../constants';
 import { useChatStore, useProjectStore, useAppStore } from '../stores';
 import { Conversation } from '../types';
 import { RootStackParamList } from '../navigation/types';
+import { byRecentActivity } from '../utils/conversationOrdering';
 import { useConversationPreviewLine } from '../hooks/useConversationPreviewLine';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -155,17 +156,21 @@ export const ProjectChatsScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
-  const { getProject } = useProjectStore();
-  const { conversations, deleteConversation, setActiveConversation, createConversation } = useChatStore();
-  const { downloadedModels, activeModelId } = useAppStore();
+  const project = useProjectStore(state => state.projects.find(p => p.id === projectId));
+  const conversations = useChatStore(state => state.conversations);
+  const deleteConversation = useChatStore(state => state.deleteConversation);
+  const setActiveConversation = useChatStore(state => state.setActiveConversation);
+  const createConversation = useChatStore(state => state.createConversation);
+  const downloadedModels = useAppStore(state => state.downloadedModels);
+  const activeModelId = useAppStore(state => state.activeModelId);
 
-  const project = getProject(projectId);
   const hasModels = downloadedModels.length > 0;
 
   // Get chats for this project
-  const projectChats = conversations
-    .filter((c) => c.projectId === projectId)
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  const projectChats = useMemo(
+    () => byRecentActivity(conversations.filter(c => c.projectId === projectId)),
+    [conversations, projectId],
+  );
 
   const handleChatPress = (conversation: Conversation) => {
     setActiveConversation(conversation.id);

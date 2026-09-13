@@ -282,7 +282,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const ttsCanSpeak = callHook<boolean>(HOOKS.audioCanSpeak) ?? false;
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState(message.content);
   const [showThinking, setShowThinking] = useState(!!isStreaming);
   const [showSupportingContext, setShowSupportingContext] = useState(false);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
@@ -321,19 +320,17 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const handleEdit = () => {
-    setEditedContent(isUser ? message.content : displayContent);
     setShowActionMenu(false);
     setTimeout(() => setIsEditing(true), 350);
   };
 
-  const handleSaveEdit = () => {
-    const trimmed = editedContent.trim();
+  const handleSaveEdit = (text: string) => {
+    const trimmed = text.trim();
     if (trimmed !== (isUser ? message.content : displayContent)) onEdit?.(message, trimmed);
     setIsEditing(false);
   };
 
   const handleCancelEdit = () => {
-    setEditedContent(isUser ? message.content : displayContent);
     setIsEditing(false);
   };
 
@@ -456,7 +453,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         displayContent={displayContent}
         alertState={alertState}
         onCloseActionMenu={() => setShowActionMenu(false)}
-        onChangeEditText={setEditedContent}
         onCopy={handleCopy}
         onEdit={handleEdit}
         onRetry={handleRetry}

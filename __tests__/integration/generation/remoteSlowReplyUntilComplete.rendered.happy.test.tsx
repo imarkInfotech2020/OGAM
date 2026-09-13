@@ -29,4 +29,52 @@ describe('slow remote reply in the chat UI', () => {
       expect(h.view!.queryByTestId('stop-button')).toBeNull();
     });
   });
+
+  it('keeps a draft and the Projects screen usable while a reply streams', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    await installRemoteModel();
+    const upstream = installRemoteStream(SLOW_REPLY);
+    h.render();
+
+    await h.tapSend('Take your time');
+    await h.rtl.waitFor(() => {
+      expect(h.view!.getByText(/Still working/)).toBeTruthy();
+    });
+
+    h.rtl.fireEvent.changeText(h.view!.getByTestId('chat-input'), 'Next question');
+    expect(h.view!.getByTestId('chat-input').props.value).toBe('Next question');
+
+    const { ProjectEditScreen } = require('../../../src/screens/ProjectEditScreen');
+    const { ProjectsScreen } = require('../../../src/screens/ProjectsScreen');
+    const editor = h.rtl.render(h.React.createElement(ProjectEditScreen));
+    h.rtl.fireEvent.changeText(editor.getByTestId('project-edit-name'), 'Research');
+    h.rtl.fireEvent.changeText(editor.getByTestId('project-edit-system-prompt'), 'Help with research.');
+    h.rtl.fireEvent.press(editor.getByTestId('project-edit-save'));
+    editor.unmount();
+
+    const projects = h.rtl.render(h.React.createElement(ProjectsScreen));
+    expect(projects.getByText('Research')).toBeTruthy();
+    expect(h.view!.getByText(/Still working/)).toBeTruthy();
+
+    upstream.release();
+    await h.rtl.waitFor(() => {
+      expect(h.view!.getByText(/Still working — finished\./)).toBeTruthy();
+      expect(h.view!.getByTestId('chat-input').props.value).toBe('Next question');
+    });
+    projects.unmount();
+  });
+
+  it('saves an edited message and shows the new reply', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    h.render();
+    await h.send('First question', { text: 'First answer' });
+    await h.rtl.waitFor(() => expect(h.view!.getByText('First answer')).toBeTruthy());
+
+    await h.editLastUserMessage('Revised question', { text: 'Revised answer' });
+    await h.rtl.waitFor(() => {
+      expect(h.view!.getByText('Revised question')).toBeTruthy();
+      expect(h.view!.getByText('Revised answer')).toBeTruthy();
+      expect(h.view!.queryByText('First answer')).toBeNull();
+    });
+  });
 });
