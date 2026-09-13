@@ -42,8 +42,14 @@ describe('context full in a tool-enabled chat', () => {
     await h.rtl.waitFor(() => {
       expect(h.view!.queryByText('Context window full')).not.toBeNull();
     }, { timeout: 8000 });
+    expect(h.view!.getByText(/A new chat can also hit this limit/)).toBeTruthy();
+    expect(h.view!.getByText(/Max Tokens only limits the reply/)).toBeTruthy();
     expect(h.view!.queryByText('No response')).toBeNull();
     expect(h.view!.queryByTestId('tool-result-label-model_fallback')).toBeNull();
     expect(h.view!.queryByTestId('stop-button')).toBeNull();
+    h.rtl.fireEvent.press(h.view!.getByText('Settings'));
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText('Chat Settings')).not.toBeNull();
+    }, { timeout: 3000 });
   });
 });
