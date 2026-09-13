@@ -123,9 +123,8 @@ export const useChatScreen = () => {
   const discoveredModels = useRemoteServerStore(s => s.discoveredModels);
 
   const activeConversationId = useChatStore(s => s.activeConversationId);
-  const activeConversation = useChatStore(s =>
-    s.conversations.find(c => c.id === s.activeConversationId),
-  );
+  const conversations = useChatStore(s => s.conversations);
+  const activeConversation = useMemo(() => conversations.find(c => c.id === activeConversationId), [conversations, activeConversationId]);
   const hasStreamingText = useChatStore(s =>
     Boolean(s.streamingMessage || s.streamingReasoningContent),
   );
