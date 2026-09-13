@@ -1,6 +1,26 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Easing, ViewStyle } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, ViewStyle } from 'react-native';
+import Animated, { css, useReducedMotion } from 'react-native-reanimated';
 import { useTheme } from '../theme';
+
+const wave = css.keyframes({
+  '0%': { transform: [{ translateY: 0 }] },
+  '16.667%': { transform: [{ translateY: -5 }] },
+  '50%': { transform: [{ translateY: -5 }] },
+  '66.667%': { transform: [{ translateY: 0 }] },
+  '100%': { transform: [{ translateY: 0 }] },
+});
+
+const waveStyles = css.create({
+  dot: {
+    animationName: wave,
+    animationDuration: 900,
+    animationTimingFunction: 'ease-in-out',
+    animationIterationCount: 'infinite',
+  },
+  second: { animationDelay: 150 },
+  third: { animationDelay: 300 },
+});
 
 interface LoadingDotsProps {
   /** Dot colour. Defaults to the accent, which is what a surface uses on its own background. */
@@ -25,28 +45,7 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
   testID,
 }) => {
   const { colors } = useTheme();
-  const dot1Anim = useRef(new Animated.Value(0)).current;
-  const dot2Anim = useRef(new Animated.Value(0)).current;
-  const dot3Anim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const dots = [dot1Anim, dot2Anim, dot3Anim];
-    const bounce = Animated.loop(
-      Animated.sequence(
-        [...dots, ...dots].map((anim, index) =>
-          Animated.timing(anim, {
-            toValue: index < dots.length ? -5 : 0,
-            duration: 150,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ),
-      ),
-    );
-    bounce.start();
-
-    return () => bounce.stop();
-  }, [dot1Anim, dot2Anim, dot3Anim]);
+  const reducedMotion = useReducedMotion();
 
   const dotStyle = {
     width: size,
@@ -62,9 +61,9 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
       accessibilityRole="progressbar"
       accessibilityLabel="Working"
     >
-      <Animated.View style={[styles.dot, dotStyle, { transform: [{ translateY: dot1Anim }] }]} />
-      <Animated.View style={[styles.dot, dotStyle, { transform: [{ translateY: dot2Anim }] }]} />
-      <Animated.View style={[styles.dot, dotStyle, { transform: [{ translateY: dot3Anim }] }]} />
+      <Animated.View style={[styles.dot, dotStyle, reducedMotion ? undefined : waveStyles.dot]} />
+      <Animated.View style={[styles.dot, dotStyle, reducedMotion ? undefined : waveStyles.dot, waveStyles.second]} />
+      <Animated.View style={[styles.dot, dotStyle, reducedMotion ? undefined : waveStyles.dot, waveStyles.third]} />
     </View>
   );
 };
