@@ -831,7 +831,7 @@ describe('Pro mobile saved-device management journey', () => {
       ).toBeNull(),
     );
     expect(ui.queryByText(/Could not reach/)).toBeNull();
-    expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
+    expect(ui.getByText('1 of 3 devices saved')).toBeTruthy();
 
     remote = buildSyncEngine({
       pairingEntitlement: mesh.peer(),
@@ -1134,7 +1134,7 @@ describe('Pro mobile saved-device management journey', () => {
     expect(sheetAction(ui, 'Waiting for confirmation', 'Cancel')).toBeTruthy();
     // Two installations: this phone and the Mac. Both are on the licence throughout - what the pairing
     // adds is the trust between them, not a seat.
-    expect(ui.getByText('2 of 5 devices saved')).toBeTruthy();
+    expect(ui.getByText('2 of 3 devices saved')).toBeTruthy();
     await waitFor(() => expect(passphraseResolvers).toHaveLength(1));
     fireEvent.press(sheetAction(ui, 'Waiting for confirmation', 'Cancel'));
 

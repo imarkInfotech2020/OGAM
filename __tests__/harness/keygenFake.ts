@@ -127,6 +127,7 @@ export function createKeygenFake(): KeygenFake {
       name: licence.name ?? null,
       metadata: licence.metadata ?? {},
     },
+    relationships: { policy: { data: { type: 'policies', id: `policy-${licence.id}` } } },
   });
 
   const validate = async (request: Request): Promise<Response> => {
@@ -170,6 +171,7 @@ export function createKeygenFake(): KeygenFake {
     return json(200, {
       meta: { valid: code === 'VALID', code },
       data: licenceResource(licence),
+      included: [{ type: 'policies', id: `policy-${licence.id}`, attributes: { maxMachines: licence.seats } }],
     });
   };
 
@@ -225,7 +227,7 @@ export function createKeygenFake(): KeygenFake {
   const handle = async (request: Request, path: string): Promise<Response> => {
     calls.push({ method: request.method, path });
     if (
-      path === '/licenses/actions/validate-key' &&
+      path === '/licenses/actions/validate-key?include=policy' &&
       request.method === 'POST'
     ) {
       return validate(request);

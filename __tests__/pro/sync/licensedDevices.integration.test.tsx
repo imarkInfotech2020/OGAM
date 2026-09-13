@@ -127,6 +127,18 @@ describe('Settings to Sync licensed-device management', () => {
     ui.unmount();
   });
 
+  it('shows the provider capacity when the licence grants three devices', async () => {
+    mesh.reset(3);
+    storedSecrets.clear();
+    installLicensedPhone(mesh, { fingerprint: THIS_FINGERPRINT, secrets: storedSecrets });
+    mesh.register({ id: THIS_FINGERPRINT, name: 'My iPhone', platform: 'ios' });
+    mesh.register({ id: RETIRED_FINGERPRINT, name: 'Old Android', platform: 'android' });
+    await syncService.start();
+    const ui = await openSync();
+    await waitFor(() => expect(ui.getByText('2 of 3 devices saved')).toBeTruthy());
+    ui.unmount();
+  });
+
   it('says so when a seat cannot be freed, instead of looking like nothing happened', async () => {
     await syncService.start();
     const ui = await openSync();

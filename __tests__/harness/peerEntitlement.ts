@@ -41,7 +41,7 @@ export function createPeerEntitlement(
   const preparedExports = new Map<string, PersonalMeshRegistrationInput>();
   const preparedImports = new Map<string, PairingEntitlementCredential>();
   let held: PairingEntitlementCredential | undefined = options.licensed
-    ? { version: 1, entitlementId, secret, expiresAt: null, verifiedAt: 0 }
+    ? { version: 1, entitlementId, secret, expiresAt: null, maxDevices: 5, verifiedAt: 0 }
     : undefined;
   let sequence = 0;
 
