@@ -68,7 +68,8 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
     expect(h.view!.queryByText('Load Anyway')).toBeNull();
 
     // GESTURE: the real first-send lazy load → residency admits → resolveSafeContext refuses.
-    await h.tapSend('hello');
+    h.boundary.llama!.scriptCompletion({ text: 'Paris.' });
+    await h.tapSend('What is the capital of France?');
 
     // TERMINAL ARTIFACT: the override alert offers "Load Anyway", AND its body carries resolveSafeContext's
     // signature ("it needs ~") so this can only pass when THAT gate (the fix site) refuses — no false-green
@@ -78,6 +79,17 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
     }, { timeout: 8000 });
     expect(h.view!.queryByText(/it needs ~/)).not.toBeNull();
     expect(h.view!.queryByText(/Failed to load model/)).toBeNull();
+
+    await h.rtl.act(async () => {
+      let action: any = h.view!.getByText('Load Anyway');
+      while (action && typeof action.props.onPress !== 'function') action = action.parent;
+      expect(action).not.toBeNull();
+      action.props.onPress();
+    });
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText('Paris.')).not.toBeNull();
+    }, { timeout: 8000 });
+    expect(h.view!.getAllByTestId('user-message')).toHaveLength(1);
 
     stopSync();
   }, 30000);

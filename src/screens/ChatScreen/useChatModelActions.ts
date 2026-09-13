@@ -84,9 +84,9 @@ function addBackendFallbackMsg(deps: Pick<ModelActionDeps, 'activeModel' | 'acti
   });
 }
 
-async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolean }): Promise<void> {
+async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolean }): Promise<boolean> {
   const { activeModel, activeModelId } = deps;
-  if (!activeModel || !activeModelId) return;
+  if (!activeModel || !activeModelId) return false;
   try {
     await activeModelService.loadTextModel(activeModelId, undefined, opts);
     deps.setSupportsVision(loadedModelVision(activeModel));
@@ -95,8 +95,10 @@ async function doLoadTextModel(deps: ModelActionDeps, opts?: { override?: boolea
       addSystemMsg(deps, `Model loaded: ${activeModel.name} (${loadTime}s)`);
     }
     addBackendFallbackMsg(deps);
+    return true;
   } catch (error: any) {
     deps.setAlertState(showAlert('Error', `Failed to load model: ${error?.message || 'Unknown error'}`));
+    return false;
   } finally {
     deps.setIsModelLoading(false);
     deps.setLoadingModel(null);
@@ -163,7 +165,7 @@ export async function initiateModelLoad(
                   .then(() => doLoadTextModel(deps, { override: true }))
                   // Resume once the load resolves — don't gate on isModelLoaded() (races
                   // false after a multimodal load, dropping the resume). See the sibling path.
-                  .then(() => onLoadedResume?.())
+                  .then(loaded => { if (loaded) onLoadedResume?.(); })
                   .catch((e) => logger.error('[ModelLoad] Load Anyway resume failed:', e));
               },
             },
