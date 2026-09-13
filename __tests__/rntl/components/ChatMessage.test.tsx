@@ -690,19 +690,17 @@ describe('ChatMessage', () => {
       expect(getByTestId('action-edit')).toBeTruthy();
     });
 
-    it('does not show edit option for assistant messages', () => {
-      const onEdit = jest.fn();
-      const message = createAssistantMessage('Cannot edit me');
+    it('shows edit option for assistant messages', () => {
+      const message = createAssistantMessage('Edit me');
 
-      const { getByTestId, queryByTestId } = render(
-        <ChatMessage message={message} onEdit={onEdit} showActions={true} />,
+      const { getByTestId } = render(
+        <ChatMessage message={message} onEdit={() => {}} showActions={true} />,
       );
 
       // Open menu
       fireEvent(getByTestId('assistant-message'), 'longPress');
 
-      // Edit option should not be available
-      expect(queryByTestId('action-edit')).toBeNull();
+      expect(getByTestId('action-edit')).toBeTruthy();
     });
 
     it('shows generate image option when canGenerateImage is true', () => {
