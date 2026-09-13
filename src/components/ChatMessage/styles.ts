@@ -64,6 +64,8 @@ const createBubbleStyles = (colors: ThemeColors) => ({
   },
   messageFooterRow: {
     paddingVertical: 0,
+    width: MESSAGE_MAX_WIDTH,
+    alignSelf: 'flex-start' as const,
   },
   messageFooterHeader: {
     paddingVertical: 0,
@@ -102,6 +104,10 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     fontFamily: FONTS.mono,
     color: colors.textMuted,
     flex: 1,
+  },
+  toolStatusTextCompact: {
+    flex: 0,
+    flexShrink: 1,
   },
   toolDetailContainer: {
     marginTop: 6,
