@@ -799,6 +799,7 @@ describe('ChatMessage', () => {
         <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
+      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByTestId('generation-meta')).toBeTruthy();
       expect(getByText('Metal')).toBeTruthy();
     });
@@ -813,10 +814,11 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText } = render(
+      const { getByText, getByTestId } = render(
         <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
+      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText(/Metal.*32L/)).toBeTruthy();
     });
 
@@ -829,10 +831,11 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText } = render(
+      const { getByText, getByTestId } = render(
         <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
+      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('CPU')).toBeTruthy();
     });
 
@@ -845,10 +848,11 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText } = render(
+      const { getByText, getByTestId } = render(
         <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
+      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('22.3 tok/s')).toBeTruthy();
     });
 
@@ -860,10 +864,11 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText } = render(
+      const { getByText, getByTestId } = render(
         <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
+      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText(/TTFT.*0\.45s/)).toBeTruthy();
     });
 
@@ -875,10 +880,11 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText } = render(
+      const { getByText, getByTestId } = render(
         <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
+      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('Phi-3-mini-Q4_K_M')).toBeTruthy();
     });
 
@@ -892,10 +898,11 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText } = render(
+      const { getByText, getByTestId } = render(
         <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
+      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('20 steps')).toBeTruthy();
       expect(getByText('cfg 7.5')).toBeTruthy();
       expect(getByText('512x512')).toBeTruthy();
@@ -1069,10 +1076,11 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText } = render(
+      const { getByText, getByTestId } = render(
         <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
+      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('150 tokens')).toBeTruthy();
     });
 
@@ -1556,10 +1564,11 @@ describe('ChatMessage', () => {
         generationMeta: meta,
       });
 
-      const { getByText } = render(
+      const { getByText, getByTestId } = render(
         <ChatMessage message={message} showGenerationDetails={true} />,
       );
 
+      fireEvent.press(getByTestId('generation-details-toggle'));
       expect(getByText('GPU')).toBeTruthy();
     });
   });

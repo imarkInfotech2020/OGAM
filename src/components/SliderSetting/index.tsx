@@ -14,6 +14,8 @@ interface SliderSettingProps {
   decimals?: number;
   /** Formats the value shown in the header. */
   formatValue?: (value: number) => string;
+  /** Hide exact numeric entry when slider positions represent named choices. */
+  allowValueEditing?: boolean;
   description?: string;
   warning?: string | null;
   warningColor?: string;
@@ -35,6 +37,7 @@ export const SliderSetting: React.FC<SliderSettingProps> = ({
   step,
   decimals,
   formatValue,
+  allowValueEditing = true,
   description,
   warning,
   warningColor,
@@ -80,7 +83,7 @@ export const SliderSetting: React.FC<SliderSettingProps> = ({
     <View style={styles.group}>
       <View style={styles.header}>
         <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
-        {editing ? (
+        {allowValueEditing && editing ? (
           <TextInput
             testID={testID ? `${testID}-input` : undefined}
             style={[styles.value, { color: colors.primary, borderColor: colors.primary, backgroundColor: colors.surfaceLight }]}
@@ -93,7 +96,7 @@ export const SliderSetting: React.FC<SliderSettingProps> = ({
             selectTextOnFocus
             returnKeyType="done"
           />
-        ) : (
+        ) : allowValueEditing ? (
           <TouchableOpacity
             testID={testID ? `${testID}-value-button` : undefined}
             onPress={startEdit}
@@ -106,6 +109,13 @@ export const SliderSetting: React.FC<SliderSettingProps> = ({
               {display}
             </Text>
           </TouchableOpacity>
+        ) : (
+          <Text
+            testID={testID ? `${testID}-value` : undefined}
+            style={[styles.value, { color: colors.primary, borderColor: colors.border, backgroundColor: colors.surfaceLight }]}
+          >
+            {display}
+          </Text>
         )}
       </View>
 

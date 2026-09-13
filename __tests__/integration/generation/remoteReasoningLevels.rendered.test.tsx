@@ -96,7 +96,7 @@ it('uses the existing budget for an Ollama model that accepts reasoning levels',
     editor.unmount();
 
     const budget = render(<ThinkingBudgetSelector />);
-    fireEvent.press(budget.getByTestId('thinking-budget-8192-button'));
+    fireEvent(budget.getByTestId('thinking-budget-slider'), 'slidingComplete', 5);
     budget.unmount();
 
     const chat = renderRoute('Chat');

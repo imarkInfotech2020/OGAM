@@ -63,8 +63,10 @@ describe('T016 (rendered) — GPU init timeout falls back to CPU gracefully (DEV
     await h.send('hello', { text: 'Hi there.' });
     // The turn still works — the load did not hang or fail; a reply renders.
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
+    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('stop-button')).toBeNull(); });
 
     // ...and the Generation Details reflect the CPU fallback, not a phantom GPU offload.
+    await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('generation-details-toggle')); });
     const meta = await h.rtl.waitFor(() => h.view!.getByTestId('generation-meta'));
     expect(h.rtl.within(meta).queryByText('CPU')).not.toBeNull();
     expect(h.rtl.within(meta).queryByText(/OpenCL/)).toBeNull();
@@ -79,7 +81,9 @@ describe('T016 (rendered) — GPU init timeout falls back to CPU gracefully (DEV
     await reloadOnOpenCL(h);
     await h.send('hello', { text: 'Hi there.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
+    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('stop-button')).toBeNull(); });
 
+    await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('generation-details-toggle')); });
     const meta = await h.rtl.waitFor(() => h.view!.getByTestId('generation-meta'));
     expect(h.rtl.within(meta).queryByText(/OpenCL \(\d+L\)/)).not.toBeNull(); // GPU offload kept
   }, 30000); // reload now includes the device-critical memory-reclaim wait — allow for it under load

@@ -1,11 +1,16 @@
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
+import Icon from 'react-native-vector-icons/Feather';
 import { Message } from '../../../types';
+import { useAccordionExpanded } from '../../../stores';
+import { useTheme } from '../../../theme';
 
 interface GenerationMetaProps {
+  messageId: string;
   generationMeta: NonNullable<Message['generationMeta']>;
   styles: any;
+  colors: ReturnType<typeof useTheme>['colors'];
 }
 
 type MetaItem = { key: string; label: string; maxLines?: number };
@@ -47,22 +52,42 @@ function buildMetaItems(
   ];
 }
 
-export function GenerationMeta({ generationMeta, styles }: Readonly<GenerationMetaProps>) {
+export function GenerationMeta({ messageId, generationMeta, styles, colors }: Readonly<GenerationMetaProps>) {
+  const [expanded, toggle] = useAccordionExpanded(`generation-meta:${messageId}`);
   const rawTps = generationMeta.decodeTokensPerSecond ?? generationMeta.tokensPerSecond;
   const tps = rawTps && rawTps > 0 ? rawTps : undefined;
   const items = buildMetaItems(generationMeta, tps);
 
   return (
-    <Animated.View entering={FadeIn.duration(250)}>
-      <View testID="generation-meta" style={styles.generationMetaRow}>
-        {items.map((item, index) => (
-          <React.Fragment key={item.key}>
-            {index > 0 && <Text style={styles.generationMetaSep}>·</Text>}
-            <Text style={styles.generationMetaText} numberOfLines={item.maxLines}>
-              {item.label}
-            </Text>
-          </React.Fragment>
-        ))}
+    <Animated.View entering={FadeIn.duration(250)} style={styles.generationMetaContainer}>
+      <View style={[styles.toolRow, styles.messageFooterRow]}>
+        <TouchableOpacity
+          testID="generation-details-toggle"
+          accessibilityRole="button"
+          accessibilityLabel="Generation details"
+          accessibilityState={{ expanded }}
+          style={[styles.toolStatusRow, styles.messageFooterHeader]}
+          onPress={toggle}
+          activeOpacity={0.6}
+        >
+          <Icon name="activity" size={13} color={colors.textMuted} />
+          <Text style={styles.toolStatusText}>Generation details</Text>
+          <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={12} color={colors.textMuted} />
+        </TouchableOpacity>
+        {expanded && (
+          <View style={styles.toolDetailContainer}>
+            <View testID="generation-meta" style={styles.generationMetaRow}>
+              {items.map((item, index) => (
+                <React.Fragment key={item.key}>
+                  {index > 0 && <Text style={styles.generationMetaSep}>·</Text>}
+                  <Text style={styles.generationMetaText} numberOfLines={item.maxLines}>
+                    {item.label}
+                  </Text>
+                </React.Fragment>
+              ))}
+            </View>
+          </View>
+        )}
       </View>
     </Animated.View>
   );

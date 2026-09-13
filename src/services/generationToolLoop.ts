@@ -1,6 +1,7 @@
 /* eslint-disable max-lines */
 /** Tool-calling generation loop. Extracted to keep generationService.ts under the max-lines limit. */
 import { llmService } from './llm';
+import { contextCompactionService } from './contextCompaction';
 import type { StreamToken } from './llm';
 import { liteRTService } from './litert';
 import { useChatStore, useRemoteServerStore, useAppStore } from '../stores';
@@ -450,6 +451,7 @@ function isNonRetryableError(msg: string): boolean {
     msg.includes('No model loaded') ||
     msg.includes('aborted') ||
     msg.includes('Remote provider') ||
+    contextCompactionService.isContextFullError(msg) ||
     // A native decode/evaluation failure (llama_decode: failed to decode, ret=-1 →
     // "Failed to evaluate chunks", or an invalid-token abort) is FATAL and DETERMINISTIC: the
     // context/inputs that failed the decode will fail identically on every retry. Retrying it only
@@ -1280,10 +1282,28 @@ async function selectEffectiveSchemas(
         extSchemas,
         MCP_TOOL_ROUTE_TOPK,
       );
-      const filteredExt = extSchemas.filter(s =>
+      const shortlist = extSchemas.filter(s =>
         selected.includes(s.function.name),
       );
-      return [...builtInSchemas, ...filteredExt];
+      if (litertActive || llamaIosNative) {
+        try {
+          const chosen = await selectRelevantTools(
+            getLastUserQuery(ctx.messages),
+            shortlist,
+            litertActive
+              ? undefined
+              : (s, u) => llmService.generateToolSelection(s, u),
+          );
+          if (chosen !== null) {
+            return [...builtInSchemas, ...shortlist.filter(s =>
+              chosen.includes(s.function.name),
+            )];
+          }
+        } catch (error) {
+          logger.warn(`[ToolLoop] tool selection failed; using embedding shortlist: ${String(error)}`);
+        }
+      }
+      return [...builtInSchemas, ...shortlist];
     } catch (e) {
       logger.warn(
         `[ToolLoop] embedding tool routing failed; using all tools: ${String(

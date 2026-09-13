@@ -286,14 +286,12 @@ export const useChatScreen = () => {
     activeModelInfo,
     activeModelId,
     activeModel,
-    modelDeps,
     activeRemoteModel,
     activeRemoteTextModelId,
     isModelLoading,
     setSupportsVision,
     setSupportsToolCalling,
     setSupportsThinking,
-    prepareSelectedModel: route.params?.conversationId == null,
   });
 
   const isGeneratingForThisConversation =

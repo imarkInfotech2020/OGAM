@@ -174,15 +174,7 @@ export async function checkMemoryForModel(
   }
 }
 
-/**
- * Find the largest context that fits available memory, stepping down from the
- * requested size. Throws only when the model weights alone exceed available RAM
- * (a load that would certainly crash the allocator); otherwise proceeds at the
- * smallest context, since the estimate is intentionally conservative.
- *
- * Extracted from LLMService to keep llm.ts under the max-lines limit; behavior is
- * unchanged. `getAvailableMemory` is passed in so this stays free of the hardware dep.
- */
+/** Check the selected context without changing it. A memory refusal can be overridden by the user. */
 export async function resolveSafeContext(args: {
   fileSize: number;
   requestedCtx: number;
@@ -200,86 +192,23 @@ export async function resolveSafeContext(args: {
     override = false,
     getAvailableMemory: getMem,
   } = args;
-  // Step down from the requested size so the LARGEST fitting context wins — a request
-  // of 16384 tries 14336, 12288, ... rather than jumping straight to a hardcoded 8192
-  // ceiling and needlessly shrinking context on devices that could hold more.
-  const STEP = 2048;
-  const fallbacks: number[] = [];
-  for (let ctx = requestedCtx - STEP; ctx >= 1024; ctx -= STEP)
-    fallbacks.push(ctx);
-  for (const ctx of fallbacks) {
-    const mc = await checkMemoryForModel({
-      modelFileSize: fileSize,
-      contextLength: ctx,
-      getAvailableMemory: getMem,
-      quantizedCache,
-    });
-    if (mc.safe) {
-      logger.warn(
-        `[LLM] Memory tight — reducing context ${requestedCtx} → ${ctx} (~${mc.estimatedMB.toFixed(
-          0,
-        )}MB of ${mc.availableMB.toFixed(0)}MB available)`,
-      );
-      return { ctxLen: ctx, memCheck: mc };
-    }
-  }
-  const minCtx = fallbacks.length
-    ? fallbacks[fallbacks.length - 1]
-    : requestedCtx;
-  const finalCheck = await checkMemoryForModel({
+  const memCheck = await checkMemoryForModel({
     modelFileSize: fileSize,
-    contextLength: minCtx,
+    contextLength: requestedCtx,
     getAvailableMemory: getMem,
     quantizedCache,
   });
-  const modelMB = (fileSize * 1.2) / (1024 * 1024);
-  // [MEM-SM] the weights-alone refusal decision — kept. weightsExceedAvail && !override is the
-  // dead-end that used to throw a plain Error; it now throws OverridableMemoryError (Load Anyway).
-  logger.log(
-    `[MEM-SM] resolveSafeContext gate modelMB=${Math.round(
-      modelMB,
-    )} availMB=${Math.round(
-      finalCheck.availableMB,
-    )} override=${override} weightsExceedAvail=${
-      finalCheck.availableMB > 0 && modelMB > finalCheck.availableMB
-    }`,
-  );
-  if (
-    finalCheck.availableMB > 0 &&
-    modelMB > finalCheck.availableMB &&
-    !override
-  ) {
-    // OVERRIDABLE, always: a budget refusal in ANY mode must offer "Load Anyway" — never a
-    // dead-end. This is the single behavior the image path already had (makeRoomFor →
-    // OverridableMemoryError); the text pre-load gate used to throw a plain Error here, which
-    // surfaced as an OK-only alert with no override (the 12GB-Aggressive-refused-with-no-Load-
-    // Anyway bug). OverridableMemoryError is pure, so this stays layering-clean.
+  if (!memCheck.safe && !override) {
     throw new OverridableMemoryError(
-      `Not enough memory to load this model: it needs ~${Math.round(
-        modelMB,
-      )}MB but only ${Math.round(
-        finalCheck.availableMB,
-      )}MB is available. Close other apps or choose a smaller model.`,
+      `Not enough memory to load this model at ${requestedCtx.toLocaleString()} context tokens: it needs ~${Math.round(memCheck.estimatedMB)}MB but only ${Math.round(memCheck.availableMB)}MB is available. Close other apps or choose a smaller model.`,
     );
   }
-  if (
-    override &&
-    finalCheck.availableMB > 0 &&
-    modelMB > finalCheck.availableMB
-  ) {
-    // User forced the load ("Load Anyway" / continue). Skip the hard block and let the
-    // native loader's GPU→CPU→smaller-ctx fallback + OOM recovery try — they accepted
-    // the risk, and eviction already freed everything it could. NORMAL loads still throw.
+  if (!memCheck.safe && override) {
     logger.warn(
-      `[LLM] OVERRIDE — proceeding despite tight memory (~${Math.round(
-        modelMB,
-      )}MB needed, ${Math.round(finalCheck.availableMB)}MB free)`,
+      `[LLM] OVERRIDE — trying selected context ${requestedCtx} despite tight memory`,
     );
   }
-  logger.warn(
-    `[LLM] Memory very tight — proceeding at minimum context ${minCtx} (estimate may be conservative)`,
-  );
-  return { ctxLen: minCtx, memCheck: finalCheck };
+  return { ctxLen: requestedCtx, memCheck };
 }
 
 /**

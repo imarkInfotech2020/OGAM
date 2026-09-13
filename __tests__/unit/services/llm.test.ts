@@ -113,13 +113,13 @@ describe('LLMService', () => {
       await expect(llmService.loadModel('/missing/model.gguf')).rejects.toThrow('Model file not found');
     });
 
-    it('downgrades context when memory is tight instead of loading and crashing (F4)', async () => {
+    it('offers a memory override and then tries the selected context', async () => {
       const { hardwareService } = require('../../../src/services/hardware');
       mockedRNFS.exists.mockResolvedValue(true);
       mockedRNFS.stat.mockResolvedValue({ size: 2 * 1024 * 1024 * 1024 } as any); // 2 GB model
       const ctx = createMockLlamaContext();
       mockedInitLlama.mockResolvedValue(ctx as any);
-      // ~2.9 GB available: 8192/4096 ctx don't fit, a smaller ctx does.
+      // ~2.9 GB available: the estimate rejects the selected 8192 context.
       jest.spyOn(hardwareService, 'getAppMemoryUsage').mockResolvedValue({
         used: 5 * 1024 * 1024 * 1024,
         available: 2900 * 1024 * 1024,
@@ -129,10 +129,11 @@ describe('LLMService', () => {
         settings: { ...useAppStore.getState().settings, contextLength: 8192, cacheType: 'q8_0' },
       });
 
-      await llmService.loadModel('/models/big.gguf');
-
+      await expect(llmService.loadModel('/models/big.gguf')).rejects.toThrow('Not enough memory');
+      expect(initLlama).not.toHaveBeenCalled();
+      await llmService.loadModel('/models/big.gguf', undefined, { override: true });
       const ctxArg = (initLlama as jest.Mock).mock.calls[0][0].n_ctx;
-      expect(ctxArg).toBeLessThan(8192); // context was reduced to fit
+      expect(ctxArg).toBe(8192);
       expect(llmService.isModelLoaded()).toBe(true);
     });
 
@@ -204,14 +205,12 @@ describe('LLMService', () => {
       expect(llmService.isModelLoaded()).toBe(true);
     });
 
-    it('falls back to smaller context when CPU also fails', async () => {
+    it('reports failure at the selected context when CPU also fails', async () => {
       mockedRNFS.exists.mockResolvedValue(true);
 
-      const ctx = createMockLlamaContext();
       mockedInitLlama
         .mockRejectedValueOnce(new Error('GPU error'))
-        .mockRejectedValueOnce(new Error('OOM with ctx=4096'))
-        .mockResolvedValueOnce(ctx as any);
+        .mockRejectedValueOnce(new Error('OOM with ctx=4096'));
 
       useAppStore.setState({
         settings: {
@@ -221,12 +220,10 @@ describe('LLMService', () => {
         },
       });
 
-      await llmService.loadModel('/models/test.gguf');
-
-      // Third call should use ctx=2048
-      expect(initLlama).toHaveBeenCalledTimes(3);
-      const thirdCallArgs = (initLlama as jest.Mock).mock.calls[2][0];
-      expect(thirdCallArgs.n_ctx).toBe(2048);
+      await expect(llmService.loadModel('/models/test.gguf'))
+        .rejects.toThrow('selected context 4096');
+      expect(initLlama).toHaveBeenCalledTimes(2);
+      expect((initLlama as jest.Mock).mock.calls.every(([args]) => args.n_ctx === 4096)).toBe(true);
     });
 
     it('warns when mmproj file not found but continues', async () => {
@@ -1884,7 +1881,7 @@ describe('LLMService', () => {
       });
 
       await expect(llmService.loadModel('/models/test.gguf'))
-        .rejects.toThrow('Failed to load model even at minimum context');
+        .rejects.toThrow('Failed to load model at selected context');
     });
   });
 

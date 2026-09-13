@@ -49,7 +49,7 @@ const MessageMetaRow: React.FC<MetaRowProps> = ({
   onMenuOpen,
   metaExtra,
 }) => (
-  <View style={styles.metaRow}>
+  <View testID="message-meta-row" style={styles.metaRow}>
     <Text style={styles.timestamp}>{formatTime(message.timestamp)}</Text>
     {message.generationTimeMs != null && message.role === 'assistant' && (
       <Text style={styles.generationTime}>
@@ -168,7 +168,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       onLongPress={onLongPress}
       delayLongPress={300}
     >
-      <View testID="message-bubble" style={bubbleStyle}>
+      <View
+        testID={message.isThinking ? undefined : 'message-bubble'}
+        style={message.isThinking ? undefined : bubbleStyle}
+      >
         {!!supportingContextParsedContent?.thinking && (
           <ThinkingBlock
             parsedContent={supportingContextParsedContent}
@@ -200,6 +203,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         />
       </View>
 
+      {!message.isThinking && (
+        <MessageMetaRow
+          message={message}
+          styles={styles}
+          isStreaming={isStreaming}
+          showActions={showActions}
+          onMenuOpen={onMenuOpen}
+          metaExtra={metaExtra}
+        />
+      )}
+
       <SyncedToolArtifacts message={message} styles={styles} colors={colors} />
 
       <RoutedToolsRow
@@ -219,19 +233,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         </View>
       )}
 
-      <MessageMetaRow
-        message={message}
-        styles={styles}
-        isStreaming={isStreaming}
-        showActions={showActions}
-        onMenuOpen={onMenuOpen}
-        metaExtra={metaExtra}
-      />
-
       {showGenerationDetails && !isUser && message.generationMeta && (
         <GenerationMeta
+          messageId={message.id}
           generationMeta={message.generationMeta}
           styles={styles}
+          colors={colors}
         />
       )}
     </TouchableOpacity>

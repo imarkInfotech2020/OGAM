@@ -52,8 +52,15 @@ describe('remote model fallback in chat', () => {
     await h.rtl.waitFor(() => {
       expect(h.view!.queryByText(/Backup answer/)).not.toBeNull();
       expect(h.view!.queryByTestId('tool-result-label-model_fallback')).not.toBeNull();
-      expect(h.view!.queryByText(/backup-model/)).not.toBeNull();
     }, { timeout: 8000 });
+    await h.rtl.act(async () => {
+      let action: any = h.view!.getByText('Generation details');
+      while (action && typeof action.props.onPress !== 'function') action = action.parent;
+      expect(action).not.toBeNull();
+      action.props.onPress();
+    });
+    await h.rtl.waitFor(() => expect(h.view!.queryByTestId('generation-meta')).not.toBeNull());
+    expect(h.view!.queryByText(/backup-model/)).not.toBeNull();
     expect(h.view!.queryByText(/Failed route partial/)).toBeNull();
   });
 
@@ -88,8 +95,14 @@ describe('remote model fallback in chat', () => {
     await h.rtl.waitFor(() => {
       expect(h.view!.queryByText(/Local answer/)).not.toBeNull();
       expect(h.view!.queryByTestId('tool-result-label-model_fallback')).not.toBeNull();
-      expect(h.view!.queryByText('Test Model')).not.toBeNull();
     }, { timeout: 8000 });
+    await h.rtl.act(async () => {
+      let action: any = h.view!.getByText('Generation details');
+      while (action && typeof action.props.onPress !== 'function') action = action.parent;
+      expect(action).not.toBeNull();
+      action.props.onPress();
+    });
+    expect(h.view!.queryByText('Test Model')).not.toBeNull();
     expect(h.view!.queryByText(/Failed route partial/)).toBeNull();
   });
 });

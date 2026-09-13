@@ -102,7 +102,7 @@ it('uses the existing Thinking toggle and budget for an OpenRouter chat', async 
     editor.unmount();
 
     const budget = render(<ThinkingBudgetSelector />);
-    fireEvent.press(budget.getByTestId('thinking-budget-1024-button'));
+    fireEvent(budget.getByTestId('thinking-budget-slider'), 'slidingComplete', 2);
     budget.unmount();
 
     const chat = renderRoute('Chat');

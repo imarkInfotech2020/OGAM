@@ -15,6 +15,8 @@ export interface LLMPerformanceStats {
   lastTimeToFirstToken: number;
   lastGenerationTime: number;
   lastTokenCount: number;
+  /** Native prompt size for the most recent completion, including offered tool schemas. */
+  lastPromptTokenCount?: number;
   /** True when the completion hit the n_predict cap without an EOS token (cut off mid-output, B15). */
   lastTruncated?: boolean;
 }

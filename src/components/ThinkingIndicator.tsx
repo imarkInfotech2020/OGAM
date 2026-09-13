@@ -8,17 +8,17 @@ interface ThinkingIndicatorProps {
   textStyle?: any;
 }
 
-/** The three-dot loader with a label beside it. The dots themselves live in LoadingDots. */
+/** The three-dot loader, with a label when the caller supplies one. */
 export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
-  text = 'Thinking...',
+  text,
   textStyle
 }) => {
   const { colors } = useTheme();
 
   return (
     <View style={styles.thinkingContainer}>
-      <LoadingDots style={styles.thinkingDots} />
-      <Text style={[styles.thinkingText, { color: colors.textSecondary }, textStyle]}>{text}</Text>
+      <LoadingDots style={text ? styles.thinkingDots : undefined} />
+      {!!text && <Text style={[styles.thinkingText, { color: colors.textSecondary }, textStyle]}>{text}</Text>}
     </View>
   );
 };

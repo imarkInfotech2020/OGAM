@@ -764,6 +764,7 @@ export async function startGenerationFn(
       error?.message || error?.toString?.() || 'Failed to generate response';
     logger.error('[ChatGen] Generation failed:', msg, error);
     const isContextOverflow =
+      contextCompactionService.isContextFullError(error) ||
       msg.includes('too long') ||
       msg.includes('Exceeding the maximum number of tokens') ||
       msg.includes('Input token ids');
@@ -771,7 +772,7 @@ export async function startGenerationFn(
       deps.setAlertState({
         ...showAlert(
           'Context window full',
-          "The conversation is too long for this model's context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.",
+          'This request did not fit in the loaded context window. A new chat can also hit this limit when the message or tool definitions are large.\n\nIncrease Context Length in Settings and reload, reduce enabled tools, or shorten the message. Max Tokens only limits the reply.',
           [
             {
               text: 'Settings',
@@ -782,7 +783,9 @@ export async function startGenerationFn(
                   message: '',
                   buttons: [],
                 });
-                deps.setShowSettingsPanel?.(true);
+                // The alert is a native modal; wait for its 200ms close animation
+                // before presenting the in-chat settings sheet on iOS.
+                setTimeout(() => deps.setShowSettingsPanel?.(true), 300);
               },
             },
             {
@@ -1200,6 +1203,7 @@ export async function regenerateResponseFn(
   } catch (error: any) {
     const msg = error?.message || 'Failed to generate response';
     const isContextOverflow =
+      contextCompactionService.isContextFullError(error) ||
       msg.includes('too long') ||
       msg.includes('Exceeding the maximum number of tokens') ||
       msg.includes('Input token ids');
@@ -1207,7 +1211,7 @@ export async function regenerateResponseFn(
       deps.setAlertState({
         ...showAlert(
           'Context window full',
-          "The conversation is too long for this model's context window.\n\nIncrease the context limit in Settings, reduce the number of enabled tools, or start a new chat.",
+          'This request did not fit in the loaded context window. A new chat can also hit this limit when the message or tool definitions are large.\n\nIncrease Context Length in Settings and reload, reduce enabled tools, or shorten the message. Max Tokens only limits the reply.',
           [
             {
               text: 'Settings',
@@ -1218,7 +1222,9 @@ export async function regenerateResponseFn(
                   message: '',
                   buttons: [],
                 });
-                deps.setShowSettingsPanel?.(true);
+                // The alert is a native modal; wait for its 200ms close animation
+                // before presenting the in-chat settings sheet on iOS.
+                setTimeout(() => deps.setShowSettingsPanel?.(true), 300);
               },
             },
             {

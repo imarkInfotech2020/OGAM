@@ -174,7 +174,7 @@ async function tryGpuInit(promise: Promise<LlamaContext>, nGpuLayers: number, is
   catch (e) { timedOut = true; throw e; }
 }
 
-/** Init llama with GPU/HTP, fall back to CPU, then retry with ctx=2048 on failure. */
+/** Init llama with GPU/HTP, then retry on CPU at the selected context. */
 export async function initContextWithFallback(
   params: object,
   contextLength: number,
@@ -191,7 +191,7 @@ export async function initContextWithFallback(
   logger.log(`[WIRE-LLAMA-LOAD] ${JSON.stringify({ modelPath, contextLength, nGpuLayers, isHtp, params: { ...(params as Record<string, unknown>), model: undefined } })}`); // [WIRE] settings→native model-load config
   let gpuAttemptFailed = false;
   try {
-    logger.log(`[LLM] Attempt 1/3: ${isHtp ? 'HTP' : 'GPU'} init (ctx=${contextLength}, gpu_layers=${nGpuLayers})`);
+    logger.log(`[LLM] Attempt 1/2: ${isHtp ? 'HTP' : 'GPU'} init (ctx=${contextLength}, gpu_layers=${nGpuLayers})`);
     const gpuInitPromise = initLlama({ ...params, n_ctx: contextLength, n_gpu_layers: nGpuLayers } as any);
     const context = await tryGpuInit(gpuInitPromise, nGpuLayers, isHtp);
     logger.log('[LLM] GPU init succeeded');
@@ -199,13 +199,13 @@ export async function initContextWithFallback(
   } catch (gpuError: any) {
     const gpuMsg = gpuError?.message || String(gpuError);
     if (nGpuLayers > 0) {
-      logger.warn(`[LLM] Attempt 1/3 failed (GPU): ${gpuMsg}`);
+      logger.warn(`[LLM] Attempt 1/2 failed (GPU): ${gpuMsg}`);
       gpuAttemptFailed = true;
     } else {
-      logger.warn(`[LLM] Attempt 1/3 failed (no GPU requested): ${gpuMsg}`);
+      logger.warn(`[LLM] Attempt 1/2 failed (no GPU requested): ${gpuMsg}`);
     }
     try {
-      logger.log(`[LLM] Attempt 2/3: CPU init (ctx=${contextLength}, gpu_layers=0)`);
+      logger.log(`[LLM] Attempt 2/2: CPU init (ctx=${contextLength}, gpu_layers=0)`);
       // Strip devices — HTP requires n_gpu_layers > 0; CPU fallback must not request it
       const cpuParams = { ...(params as Record<string, unknown>) };
       delete cpuParams.devices;
@@ -214,31 +214,12 @@ export async function initContextWithFallback(
       return { context, gpuAttemptFailed, actualLength: contextLength };
     } catch (cpuError: any) {
       const cpuMsg = cpuError?.message || String(cpuError);
-      logger.warn(`[LLM] Attempt 2/3 failed (CPU, ctx=${contextLength}): ${cpuMsg}`);
-      try {
-        logger.log('[LLM] Attempt 3/3: CPU init (ctx=2048, gpu_layers=0)');
-        const cpuMinParams = { ...(params as Record<string, unknown>) };
-        delete cpuMinParams.devices;
-        const context = await initLlama({ ...cpuMinParams, n_ctx: 2048, n_gpu_layers: 0 } as any);
-        logger.log('[LLM] CPU init with ctx=2048 succeeded');
-        return { context, gpuAttemptFailed, actualLength: 2048 };
-      } catch (finalError: any) {
-        const finalMsg = finalError?.message || String(finalError);
-        logger.error(`[LLM] Attempt 3/3 failed (CPU, ctx=2048): ${finalMsg}`);
-        logger.error(`[LLM] All 3 init attempts failed for model: ${modelPath}`);
-        logger.error(`[LLM] Error chain — GPU: "${gpuMsg}" | CPU: "${cpuMsg}" | min-ctx: "${finalMsg}"`);
-        const errorParts = [
-          gpuMsg && gpuMsg !== finalMsg ? `GPU: ${gpuMsg}` : null,
-          cpuMsg && cpuMsg !== finalMsg ? `CPU: ${cpuMsg}` : null,
-          `min-ctx: ${finalMsg}`,
-        ].filter(Boolean).join(' | ');
-        // Surface llama.cpp's actual reason (rnllama only gives "Failed to load
-        // model"); the native log says e.g. "missing tensor" / "unknown arch".
-        const nativeReason = recentNativeLog();
-        logger.error(`[LLM] llama.cpp native log tail:\n${nativeReason}`);
-        const nativeSuffix = nativeReason ? `\n\nllama.cpp: ${nativeReason}` : '';
-        throw new Error(`Failed to load model even at minimum context (2048). This may indicate insufficient memory, a corrupted model file, or an unsupported model format.\n\nError chain: ${errorParts}${nativeSuffix}`);
-      }
+      logger.warn(`[LLM] Attempt 2/2 failed (CPU, ctx=${contextLength}): ${cpuMsg}`);
+      const nativeReason = recentNativeLog();
+      logger.error(`[LLM] Both init attempts failed for model: ${modelPath}`);
+      logger.error(`[LLM] Error chain — GPU: "${gpuMsg}" | CPU: "${cpuMsg}"`);
+      const nativeSuffix = nativeReason ? `\n\nllama.cpp: ${nativeReason}` : '';
+      throw new Error(`Failed to load model at selected context ${contextLength}. This may indicate insufficient memory, a corrupted model file, or an unsupported model format.\n\nGPU: ${gpuMsg} | CPU: ${cpuMsg}${nativeSuffix}`);
     }
   }
 }

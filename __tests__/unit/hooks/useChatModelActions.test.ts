@@ -31,6 +31,7 @@ jest.mock('../../../src/services/llm', () => ({
   llmService: {
     getMultimodalSupport: jest.fn(),
     getLoadedModelPath: jest.fn(),
+    getBackendFallbackNotice: jest.fn(() => null),
     stopGeneration: jest.fn(),
     isModelLoaded: jest.fn(),
     // engines.activeTextCapabilities (reached via loadedModelVision / state-sync) reads these too.
