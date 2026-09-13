@@ -105,6 +105,23 @@ describe('model settings surface parity', () => {
     );
   });
 
+  it('uses the same thinking-budget step in chat and model settings', () => {
+    const chatSettings = render(
+      <GenerationSettingsModal visible onClose={() => {}} />,
+    );
+    fireEvent.press(chatSettings.getByText('TEXT GENERATION'));
+    expect(chatSettings.getByText('Auto (unrestricted)')).toBeTruthy();
+    fireEvent(chatSettings.getByTestId('thinking-budget-slider'), 'slidingComplete', 4);
+    expect(chatSettings.getByText('4K tokens')).toBeTruthy();
+    chatSettings.unmount();
+
+    const modelSettings = renderModelSettings();
+    fireEvent.press(modelSettings.getByTestId('text-generation-accordion'));
+    expect(modelSettings.getByText('4K tokens')).toBeTruthy();
+    fireEvent(modelSettings.getByTestId('thinking-budget-slider'), 'slidingComplete', 0);
+    expect(modelSettings.getByText('Auto (unrestricted)')).toBeTruthy();
+  });
+
   it('shows the same selected STT model on both settings surfaces', () => {
     useWhisperStore.setState({ downloadedModelId: 'base.en' });
     const chatSettings = render(
