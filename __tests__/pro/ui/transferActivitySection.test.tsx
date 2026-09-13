@@ -177,6 +177,29 @@ describePro('the Activity list', () => {
     expect(ui.getByText(/From The Mac/)).toBeTruthy();
   });
 
+  it('shows the saved event time for a completed transfer', () => {
+    if (!guard()) return;
+    const projection = project(handlers(), {
+      completedTransfers: [{
+        requestId: 'transfer-done',
+        deviceId: THE_MAC,
+        deviceName: 'The Mac',
+        fileName: 'Notes.txt',
+        direction: 'receive',
+        status: 'completed',
+        bytesTransferred: 64,
+        totalBytes: 64,
+        updatedAt: NOW,
+      }] as never,
+    });
+
+    const ui = render(
+      <TransferActivitySection projection={projection} onOpen={jest.fn()} />,
+    );
+
+    expect(ui.getByText(new Date(NOW).toLocaleString())).toBeTruthy();
+  });
+
   it('lists nothing when nothing has moved', () => {
     if (!guard()) return;
     const acts = handlers();

@@ -1013,7 +1013,11 @@ describe('Pro mobile saved-device management journey', () => {
     if (!discovery) throw new Error('Sync discovery did not start');
     const stopsBefore = discovery.stopCount;
     expect(ui.queryByTestId('sync-toggle-browsing')).toBeNull();
-    fireEvent.press(ui.getByTestId('sync-open-device-settings'));
+    const status = ui.getByTestId('sync-discoverability-status');
+    expect(status.props.accessibilityLabel).toBe(
+      'Sync is discoverable. Open device settings.',
+    );
+    fireEvent.press(status);
     expect(await waitFor(() => ui!.getByText('Device settings'))).toBeTruthy();
     fireEvent(ui.getByTestId('sync-toggle-browsing'), 'valueChange', false);
     await waitFor(() => {
