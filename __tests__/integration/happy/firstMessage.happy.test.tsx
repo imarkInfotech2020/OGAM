@@ -43,10 +43,13 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
     expect(h.boundary.llama!.calls.clearCache).toContain(true);
   });
 
-  it('new chat starts the selected model load and shows the real loading state', async () => {
+  it('first send starts the selected model load and shows the real loading state', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'ios', deferInitialLoad: true });
     h.boundary.llama!.scriptMultimodalHold();
     h.render();
+    expect(h.view!.queryByText(/Loading Test Model/)).toBeNull();
+    h.boundary.llama!.scriptCompletion({ text: 'Hello.' });
+    await h.tapSend('Hi');
 
     await h.rtl.waitFor(() => {
       expect(h.boundary.llama!.multimodalHoldActive()).toBe(true);
@@ -56,6 +59,7 @@ describe('happy — first message renders the answer (heavy entry point)', () =>
     h.boundary.llama!.releaseMultimodalHold();
     await h.rtl.waitFor(() => {
       expect(h.view!.queryByText(/Loading Test Model/)).toBeNull();
+      expect(h.view!.queryByText('Hello.')).not.toBeNull();
     }, { timeout: 5000 });
   });
 

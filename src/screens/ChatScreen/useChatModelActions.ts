@@ -383,37 +383,16 @@ type ModelStateSyncDeps = {
   activeModelInfo: { isRemote: boolean };
   activeModelId: string | null;
   activeModel: DownloadedModel | undefined;
-  modelDeps: any;
   activeRemoteModel: { capabilities?: { supportsVision?: boolean; supportsToolCalling?: boolean; supportsThinking?: boolean; thinkingLevelsOnly?: boolean } } | null;
   activeRemoteTextModelId: string | null;
   isModelLoading: boolean;
   setSupportsVision: (v: boolean) => void;
   setSupportsToolCalling: (v: boolean) => void;
   setSupportsThinking: (v: boolean) => void;
-  prepareSelectedModel?: boolean;
 };
 export function useChatModelStateSync(deps: ModelStateSyncDeps): void {
-  const { activeModelInfo, activeModelId, activeModel, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking, prepareSelectedModel } = deps;
+  const { activeModelInfo, activeModelId, activeModel, activeRemoteModel, activeRemoteTextModelId, isModelLoading, setSupportsVision, setSupportsToolCalling, setSupportsThinking } = deps;
   const activeModelMmProjPath = activeModel?.engine === 'llama' ? activeModel.mmProjPath : undefined;
-  // A brand-new chat is an explicit request to get the selected model ready. Start the
-  // real load here so the chat renders its authoritative loading state before Send.
-  // Existing conversations still load on demand, and remote models have no local load.
-  useEffect(() => {
-    if (
-      !prepareSelectedModel ||
-      activeModelInfo.isRemote ||
-      !!activeRemoteTextModelId ||
-      !activeModel ||
-      !activeModelId ||
-      isModelReady(activeModel)
-    ) return;
-    initiateModelLoad(deps.modelDeps, false).catch(error => {
-      logger.error('[ChatScreen] New-chat model preparation failed:', error);
-    });
-    // modelDeps is a render snapshot; the identity inputs below own when a new load starts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepareSelectedModel, activeModelInfo.isRemote, activeRemoteTextModelId, activeModelId, activeModel?.filePath]);
-
   useEffect(() => {
     // Single capability rule (engines.activeTextCapabilities); vision keys on activeModelInfo.isRemote.
     setSupportsVision(activeTextCapabilities({
