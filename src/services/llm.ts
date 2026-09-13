@@ -96,12 +96,10 @@ class LLMService {
     };
     let memCheck = await checkMemoryForModel({ modelFileSize: fileSize, contextLength: params.ctxLen, getAvailableMemory: getMem, quantizedCache });
     if (!memCheck.safe) {
-      // Don't just warn and load into a near-certain native allocator crash (the iOS
-      // metal_buffer_type_alloc_buffer / Android litert OOM clusters). Reduce context
-      // to the largest size that fits; only block when the weights alone can't fit.
-      const downgrade = await resolveSafeContext({ fileSize, requestedCtx: params.ctxLen, quantizedCache, override, getAvailableMemory: getMem });
-      params.ctxLen = downgrade.ctxLen;
-      memCheck = downgrade.memCheck;
+      // Keep the selected context. A failed estimate asks for Load Anyway; an explicit
+      // override passes the selected value to native init even when memory is tight.
+      const decision = await resolveSafeContext({ fileSize, requestedCtx: params.ctxLen, quantizedCache, override, getAvailableMemory: getMem });
+      memCheck = decision.memCheck;
     }
     logger.log(`[LLM] Memory check: estimatedMB=${memCheck.estimatedMB.toFixed(0)}, availableMB=${memCheck.availableMB.toFixed(0)}, safe=${memCheck.safe}, ctx=${params.ctxLen}`);
     return { fileSize, memCheck, params };
@@ -198,9 +196,8 @@ class LLMService {
       }
     }
     // The model metadata and the user's setting own context length. Do not impose a
-    // second RAM-tier ceiling here. validateAndPrepareModel already checks this exact
-    // model + cache + requested context against live memory and reduces only when it
-    // does not fit.
+    // second RAM-tier ceiling here. validateAndPrepareModel checks this exact
+    // model + cache + selected context against live memory without changing it.
     return {
       ...await initContextWithFallback(resolvedBaseParams, params.ctxLen, safeGpuLayers),
       attemptedGpuLayers: safeGpuLayers,

@@ -89,6 +89,12 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
     await h.rtl.waitFor(() => {
       expect(h.view!.queryByText('Paris.')).not.toBeNull();
     }, { timeout: 8000 });
+    // The explicit override must pass the selected 4K context to the native loader.
+    // A successful reply at a silently reduced context is not a successful override.
+    expect(h.boundary.llama!.module.initLlama.mock.calls.length).toBeGreaterThan(0);
+    expect(h.boundary.llama!.module.initLlama.mock.calls.every(
+      ([params]: [{ n_ctx: number }]) => params.n_ctx === 4096,
+    )).toBe(true);
     expect(h.view!.getAllByTestId('user-message')).toHaveLength(1);
 
     stopSync();
