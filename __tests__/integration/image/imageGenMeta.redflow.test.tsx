@@ -24,7 +24,7 @@ async function generateWithSettings(settings: Record<string, unknown>) {
   const boundary = installNativeBoundary({ ram: { platform: 'android', totalBytes: 12 * GB, availBytes: 8 * GB } });
 
   const React = require('react');
-  const { render } = requireRTL();
+  const { render, fireEvent } = requireRTL();
   const { imageGenerationService } = require('../../../src/services/imageGenerationService');
   const { localDreamGeneratorService } = require('../../../src/services/localDreamGenerator');
   const { useAppStore, useChatStore } = require('../../../src/stores');
@@ -45,7 +45,9 @@ async function generateWithSettings(settings: Record<string, unknown>) {
 
   const messages = useChatStore.getState().getConversationMessages(conversationId);
   const assistant = [...messages].reverse().find((m: { role: string }) => m.role === 'assistant');
-  return render(React.createElement(ChatMessage, { message: assistant, showGenerationDetails: true }));
+  const view = render(React.createElement(ChatMessage, { message: assistant, showGenerationDetails: true }));
+  fireEvent.press(view.getByTestId('generation-details-toggle'));
+  return view;
 }
 
 describe('image gen meta — UI red-flow (the size/guidance you set is what runs)', () => {
