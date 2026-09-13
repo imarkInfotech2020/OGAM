@@ -101,4 +101,17 @@ describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloa
     expect(h.rtl.within(meta).queryByText(/OpenCL/)).toBeNull();
     expect(h.rtl.within(meta).queryByText(/\(\d+L\)/)).toBeNull();
   });
+
+  it('shows native prompt usage, not the reply token count, in generation details', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'ios' });
+    h.enableToolViaUI('calculator');
+    h.enableGenerationDetailsViaUI();
+    h.render();
+
+    await h.send('Hi', { text: 'Hello.', completionMeta: { tokens_evaluated: 410 } });
+    await h.rtl.waitFor(() => expect(h.view!.queryByText('Hello.')).not.toBeNull());
+    expect(h.view!.queryByText(/Tools sent in request/)).not.toBeNull();
+    await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('generation-details-toggle')); });
+    expect(h.view!.queryByText('Context: 10% used')).not.toBeNull();
+  });
 });

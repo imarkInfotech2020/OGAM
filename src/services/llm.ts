@@ -315,7 +315,10 @@ class LLMService {
       const cr = completionResult as any;
       // [WIRE] Full raw stream + final result, so we can build fixtures from real Gemma/Qwen wire format.
       logger.log(`[WIRE-LLAMA] ${JSON.stringify({ model: this.currentModelPath, stream: __wire, final: { content: cr?.content, text: cr?.text, reasoning_content: cr?.reasoning_content, tool_calls: cr?.tool_calls } })}`);
-      this.performanceStats = recordGenerationStats(startTime, firstTokenMs, tokenCount);
+      this.performanceStats = {
+        ...recordGenerationStats(startTime, firstTokenMs, tokenCount),
+        lastPromptTokenCount: cr?.tokens_evaluated,
+      };
       // Capture truncation (hit n_predict cap without EOS) so the UI can flag a cut-off
       // reply instead of it looking finished (B15).
       this.performanceStats.lastTruncated = isTruncatedResult(cr);

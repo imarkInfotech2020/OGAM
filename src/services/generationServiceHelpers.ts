@@ -111,6 +111,13 @@ function buildLiteRTMeta(
 export function buildGenerationMetaImpl(svc: any): GenerationMeta {
   const meta = buildBaseGenerationMeta(svc);
   if (svc.contextUsage) Object.assign(meta, svc.contextUsage);
+  if (!svc.isUsingRemoteProvider() && !isLiteRTActive()) {
+    const nativePromptTokens = llmService.getPerformanceStats().lastPromptTokenCount;
+    if (nativePromptTokens != null && nativePromptTokens > 0) {
+      meta.contextPromptTokens = nativePromptTokens;
+      meta.contextEstimate = false;
+    }
+  }
   const routed = svc.state?.routedToolNames;
   if (Array.isArray(routed) && routed.length > 0) meta.routedToolNames = routed;
   return meta;

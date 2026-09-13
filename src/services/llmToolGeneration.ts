@@ -235,6 +235,7 @@ export async function generateWithToolsImpl(
 
     deps.setPerformanceStats({
       ...recordGenerationStats(startTime, firstTokenMs, tokenCount),
+      lastPromptTokenCount: cr?.tokens_evaluated,
       // Flag a reply cut off at the n_predict cap so the UI can show it (B15) — but NOT a user stop
       // (interrupted), which also has stopped_eos:false. Single verdict shared with the plain path.
       lastTruncated: isTruncatedResult(cr),

@@ -324,6 +324,7 @@ export interface CompletionMeta {
   stopped_limit?: number; // 1 = hit the n_predict cap (B15's condition)
   truncated?: boolean; // llama.rn's own truncation flag
   tokens_predicted?: number; // == n_predict at the cap (device saw 1024)
+  tokens_evaluated?: number; // native prompt tokens, including offered tools
 }
 
 export interface LlamaCompletionScript {
@@ -459,7 +460,7 @@ function makeLlamaFake(
               reasoning_content: scripted.reasoning,
               tool_calls: scripted.toolCalls,
               tokens_predicted: metaR.tokens_predicted ?? 8,
-              tokens_evaluated: 4,
+              tokens_evaluated: metaR.tokens_evaluated ?? 4,
               stopped_eos: metaR.stopped_eos ?? true,
               stopped_limit: metaR.stopped_limit ?? 0,
               truncated: metaR.truncated ?? false,
@@ -525,7 +526,7 @@ function makeLlamaFake(
           content: outText,
           tool_calls: scripted.toolCalls,
           tokens_predicted: meta.tokens_predicted ?? 8,
-          tokens_evaluated: 4,
+          tokens_evaluated: meta.tokens_evaluated ?? 4,
           stopped_eos: meta.stopped_eos ?? true,
           stopped_limit: meta.stopped_limit ?? 0,
           truncated: meta.truncated ?? false,
