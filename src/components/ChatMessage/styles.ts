@@ -64,7 +64,6 @@ const createBubbleStyles = (colors: ThemeColors) => ({
   },
   messageFooterRow: {
     paddingVertical: 0,
-    marginTop: -SPACING.xs,
   },
   messageFooterHeader: {
     paddingVertical: 0,
@@ -354,6 +353,7 @@ const createThinkingStyles = (colors: ThemeColors) => ({
   },
   generationMetaContainer: {
     alignSelf: 'stretch' as const,
+    marginTop: 2,
   },
   generationMetaText: {
     ...TYPOGRAPHY.meta,
