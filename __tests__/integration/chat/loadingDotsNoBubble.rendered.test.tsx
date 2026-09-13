@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, within } from '@testing-library/react-native';
 import { ChatMessage } from '../../../src/components/ChatMessage';
 import { getDisplayMessages } from '../../../src/screens/ChatScreen/types';
 import type { Message } from '../../../src/types';
@@ -32,4 +32,21 @@ it('shows bare loading dots, then an answer bubble when the reply arrives', () =
   expect(view.getByText('Hello.')).toBeTruthy();
   expect(view.getByTestId('message-bubble')).toBeTruthy();
   expect(view.getByTestId('message-meta-row')).toBeTruthy();
+});
+
+it('shows only dots beneath reasoning while the answer is still loading', () => {
+  const view = render(
+    <ChatMessage
+      message={{
+        id: 'reasoning',
+        role: 'assistant',
+        content: '<think>I should answer this greeting.',
+        timestamp: 3,
+      }}
+      isStreaming
+    />,
+  );
+  const loader = view.getByTestId('streaming-thinking-hint');
+  expect(within(loader).getByLabelText('Working')).toBeTruthy();
+  expect(within(loader).queryByText('Thinking...')).toBeNull();
 });
