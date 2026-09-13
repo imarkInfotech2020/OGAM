@@ -1104,11 +1104,25 @@ describe('Pro mobile saved-device management journey', () => {
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
     fireEvent.press(ui.getByTestId(`sync-repair-${remoteDevice.id}`));
-    fireEvent.changeText(
-      await waitFor(() => ui!.getByTestId('sync-pairing-code-input')),
-      TYPED_PAIRING_CODE,
-    );
-    fireEvent.press(ui.getByTestId('sync-pairing-code-confirm'));
+    await waitFor(() => ui!.getByTestId('sync-pairing-code-scan'));
+    (useCameraDevice as jest.Mock).mockReturnValue({ id: 'back-camera' });
+    (useCameraPermission as jest.Mock).mockReturnValue({
+      hasPermission: true,
+      requestPermission: jest.fn(),
+    });
+    fireEvent.press(ui.getByTestId('sync-pairing-code-scan'));
+    const rowScanner = (useCodeScanner as jest.Mock).mock.calls.at(-1)?.[0] as {
+      onCodeScanned(codes: { value: string }[]): void;
+    };
+    act(() => {
+      rowScanner.onCodeScanned([{
+        value: encodePairingQrPayload({
+          device: remoteDevice,
+          pairingCode: TYPED_PAIRING_CODE,
+          routes: [{ kind: 'lan', host: '192.168.1.20', port: remoteDevice.port }],
+        }),
+      }]);
+    });
 
     await waitFor(() =>
       expect(ui!.getByText('Waiting for confirmation')).toBeTruthy(),
@@ -1176,5 +1190,58 @@ describe('Pro mobile saved-device management journey', () => {
     );
     expect(ui.queryByTestId('pairing-attempt-sheet')).toBeNull();
     expect(ui.queryByText('Pairing failed')).toBeNull();
+  });
+
+  it('shows that pairing needs reconciliation when entitlement setup and rollback both fail', async () => {
+    const remoteDevice: DeviceInfo = {
+      id: 'desktop-rollback-peer',
+      name: 'Rollback Desktop',
+      platform: 'macos',
+      version: '1',
+      host: '127.0.0.1',
+      port: 0,
+    };
+    const peer = mesh.joiner({ name: remoteDevice.name, platform: 'macos' });
+    remote = buildSyncEngine({
+      pairingEntitlement: {
+        ...peer,
+        async commitImport() {
+          throw new Error('Registration failed at the provider.');
+        },
+        async rollbackImport() {
+          throw new Error('The provider could not remove the partial registration.');
+        },
+      },
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getPassphrase: async () => TYPED_PAIRING_CODE,
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+    await syncService.start();
+    ui = render(
+      <>
+        <ProRoot />
+        <NavigationContainer>
+          <SyncScreen />
+        </NavigationContainer>
+      </>,
+    );
+
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!discovery) throw new Error('Sync did not start native discovery');
+    await waitFor(() => expect(discovery.scanCount).toBeGreaterThan(0));
+    discovery.resolve(remoteDevice);
+    fireEvent.press(
+      await waitFor(() => ui!.getByTestId(`sync-pair-${remoteDevice.id}`)),
+    );
+    fireEvent.changeText(ui.getByTestId('sync-pairing-code-input'), TYPED_PAIRING_CODE);
+    fireEvent.press(ui.getByTestId('sync-pairing-code-confirm'));
+
+    await waitFor(() => expect(ui!.getByText('Pairing failed')).toBeTruthy());
+    expect(
+      ui.getByText('The device registry needs reconciliation before pairing can continue.'),
+    ).toBeTruthy();
+    expect(remote.engine.isPaired(PHONE_FINGERPRINT)).toBe(false);
   });
 });
