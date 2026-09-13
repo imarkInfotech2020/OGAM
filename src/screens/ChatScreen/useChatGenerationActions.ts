@@ -764,6 +764,7 @@ export async function startGenerationFn(
       error?.message || error?.toString?.() || 'Failed to generate response';
     logger.error('[ChatGen] Generation failed:', msg, error);
     const isContextOverflow =
+      contextCompactionService.isContextFullError(error) ||
       msg.includes('too long') ||
       msg.includes('Exceeding the maximum number of tokens') ||
       msg.includes('Input token ids');
@@ -1200,6 +1201,7 @@ export async function regenerateResponseFn(
   } catch (error: any) {
     const msg = error?.message || 'Failed to generate response';
     const isContextOverflow =
+      contextCompactionService.isContextFullError(error) ||
       msg.includes('too long') ||
       msg.includes('Exceeding the maximum number of tokens') ||
       msg.includes('Input token ids');

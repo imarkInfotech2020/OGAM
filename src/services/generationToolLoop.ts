@@ -1,6 +1,7 @@
 /* eslint-disable max-lines */
 /** Tool-calling generation loop. Extracted to keep generationService.ts under the max-lines limit. */
 import { llmService } from './llm';
+import { contextCompactionService } from './contextCompaction';
 import type { StreamToken } from './llm';
 import { liteRTService } from './litert';
 import { useChatStore, useRemoteServerStore, useAppStore } from '../stores';
@@ -450,6 +451,7 @@ function isNonRetryableError(msg: string): boolean {
     msg.includes('No model loaded') ||
     msg.includes('aborted') ||
     msg.includes('Remote provider') ||
+    contextCompactionService.isContextFullError(msg) ||
     // A native decode/evaluation failure (llama_decode: failed to decode, ret=-1 →
     // "Failed to evaluate chunks", or an invalid-token abort) is FATAL and DETERMINISTIC: the
     // context/inputs that failed the decode will fail identically on every retry. Retrying it only

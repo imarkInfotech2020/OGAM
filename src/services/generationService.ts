@@ -8,6 +8,7 @@ import { Message, GenerationMeta, MediaAttachment } from '../types';
 import { runToolLoop } from './generationToolLoop';
 import type { ToolResult } from './tools/types';
 import { providerRegistry } from './providers';
+import { contextCompactionService } from './contextCompaction';
 import logger from '../utils/logger';
 import { maybeScheduleSharePrompt } from '../utils/sharePrompt';
 import { checkProPromptForText } from './proPrompt';
@@ -255,6 +256,11 @@ class GenerationService {
         return await run(route, prepared);
       } catch (error) {
         if (this.abortRequested) return;
+        if (contextCompactionService.isContextFullError(error)) {
+          useChatStore.getState().clearStreamingMessage();
+          this.resetState();
+          throw error;
+        }
         lastError = error;
         failedName = route.name;
         if (!canRetry()) break;

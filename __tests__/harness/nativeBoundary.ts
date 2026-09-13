@@ -319,6 +319,7 @@ function makeLiteRTFake(handle: FakeEmitterHandle): LiteRTFake {
  *  llama.rn types). Lets a test script a TRUNCATED turn (hit the n_predict cap without EOS) so the
  *  cutoff is device-shaped, not hand-asserted. Defaults model a normal complete turn. */
 export interface CompletionMeta {
+  context_full?: boolean; // native completed with no room for this request
   stopped_eos?: boolean; // false = did NOT stop on an end-of-sequence token
   stopped_limit?: number; // 1 = hit the n_predict cap (B15's condition)
   truncated?: boolean; // llama.rn's own truncation flag
@@ -462,6 +463,7 @@ function makeLlamaFake(
               stopped_eos: metaR.stopped_eos ?? true,
               stopped_limit: metaR.stopped_limit ?? 0,
               truncated: metaR.truncated ?? false,
+              context_full: metaR.context_full ?? false,
               timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
             };
           }
@@ -527,6 +529,7 @@ function makeLlamaFake(
           stopped_eos: meta.stopped_eos ?? true,
           stopped_limit: meta.stopped_limit ?? 0,
           truncated: meta.truncated ?? false,
+          context_full: meta.context_full ?? false,
           timings: { predicted_per_token_ms: 50, predicted_per_second: 20 },
         };
       },

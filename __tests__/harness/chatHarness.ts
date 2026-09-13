@@ -61,6 +61,8 @@ export interface ChatHarnessOptions {
   /** Override the test model's declared fileSize (drives the residency budget). Default 2GB — a
    *  realistic small model that fits the default 8GB-avail profile. Memory tests set this explicitly. */
   modelFileSizeBytes?: number;
+  /** Place a second downloaded model at the native storage boundary for fallback journeys. */
+  backupModel?: boolean;
   /** (llama) GGUF chat_template on the model context's metadata — drives the REAL Thinking-capability
    *  detection. Omit for the reasoning-capable default; pass a marker-free template (Mistral's tool-use
    *  template) to model a model that does NOT support thinking so the Thinking toggle stays hidden. */
@@ -129,9 +131,19 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
     liteRTVision: opts.vision,
     liteRTAudio: opts.audio,
   });
+  const downloadedModels = [model];
+  if (opts.backupModel) {
+    const backupFileName = opts.engine === 'llama' ? 'backup.gguf' : 'backup.litertlm';
+    const backupPath = `${docs}/models/${backupFileName}`;
+    boundary.fs!.seedFile(backupPath, 500 * 1024 * 1024);
+    downloadedModels.push(createDownloadedModel({
+      id: 'backup', name: 'Backup Model', engine: opts.engine,
+      filePath: backupPath, fileName: backupFileName, fileSize: fileSize / 2,
+    }));
+  }
   await AsyncStorage.setItem(
     '@local_llm/downloaded_models',
-    JSON.stringify([model]),
+    JSON.stringify(downloadedModels),
   );
   await hardwareService.refreshMemoryInfo();
 
