@@ -3,7 +3,6 @@ import {
   View,
   FlatList,
   Text,
-  Keyboard,
   Platform,
 } from 'react-native';
 import { useUiModeStore } from '../../stores/uiModeStore';
@@ -273,7 +272,6 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           scrollEventThrottle={16}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
-          onTouchStart={() => Keyboard.dismiss()}
           maintainVisibleContentPosition={{
             minIndexForVisible: 0,
             autoscrollToTopThreshold: 100,
