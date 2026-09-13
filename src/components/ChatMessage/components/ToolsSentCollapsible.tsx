@@ -31,8 +31,8 @@ const ToolsSentCollapsibleInner: React.FC<ToolsSentCollapsibleProps> = ({ names,
   const [expanded, toggle] = useAccordionExpanded(key);
   if (!names?.length) return null;
   return (
-    <View testID="tools-sent-collapsible" style={styles.toolRow}>
-      <TouchableOpacity style={styles.toolStatusRow} onPress={toggle} activeOpacity={0.6}>
+    <View testID="tools-sent-collapsible" style={[styles.toolRow, styles.messageFooterRow]}>
+      <TouchableOpacity style={[styles.toolStatusRow, styles.messageFooterHeader]} onPress={toggle} activeOpacity={0.6}>
         <Icon name="tool" size={13} color={colors.textMuted} />
         <Text style={styles.toolStatusText} numberOfLines={1}>
           Tools sent in request ({names.length})

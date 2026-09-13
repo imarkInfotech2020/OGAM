@@ -62,6 +62,13 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     alignItems: 'flex-start' as const,
     paddingVertical: 4,
   },
+  messageFooterRow: {
+    paddingVertical: 0,
+    marginTop: -SPACING.xs,
+  },
+  messageFooterHeader: {
+    paddingVertical: 0,
+  },
   /**
    * The head of a call/result pair: the "Using X" row, which is always followed by the row carrying
    * that same call's duration. They are one event, so they sit closer to each other than to the next
@@ -318,7 +325,7 @@ const createThinkingStyles = (colors: ThemeColors) => ({
   metaRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginTop: 4,
+    marginTop: 0,
     marginHorizontal: 8,
     gap: 8,
   },
@@ -343,9 +350,10 @@ const createThinkingStyles = (colors: ThemeColors) => ({
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     alignItems: 'center' as const,
-    marginTop: 2,
-    marginHorizontal: 8,
     gap: 3,
+  },
+  generationMetaContainer: {
+    alignSelf: 'stretch' as const,
   },
   generationMetaText: {
     ...TYPOGRAPHY.meta,

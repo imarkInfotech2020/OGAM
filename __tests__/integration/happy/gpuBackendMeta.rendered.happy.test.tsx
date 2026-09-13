@@ -71,9 +71,11 @@ describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloa
 
     await h.send('hello', { text: 'Hi there.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
+    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('stop-button')).toBeNull(); });
 
     // The per-message Generation Details show a GPU-offloaded backend with a layer count (e.g. "OpenCL (99L)")
     // — the layers reached the GPU, not a silent CPU fallback.
+    await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('generation-details-toggle')); });
     const meta = await h.rtl.waitFor(() => h.view!.getByTestId('generation-meta'));
     expect(h.rtl.within(meta).queryByText(/OpenCL \(\d+L\)/)).not.toBeNull();
     // And it is NOT running on CPU.
@@ -91,7 +93,9 @@ describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloa
     // The default backend IS CPU on Android — no backend change, straight to a send.
     await h.send('hello', { text: 'Hi there.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
+    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('stop-button')).toBeNull(); });
 
+    await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('generation-details-toggle')); });
     const meta = await h.rtl.waitFor(() => h.view!.getByTestId('generation-meta'));
     expect(h.rtl.within(meta).queryByText('CPU')).not.toBeNull();
     expect(h.rtl.within(meta).queryByText(/OpenCL/)).toBeNull();

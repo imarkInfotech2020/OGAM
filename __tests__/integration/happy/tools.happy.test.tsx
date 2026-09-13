@@ -75,13 +75,27 @@ describe('happy — a tool runs and its result renders (heavy entry point)', () 
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/160500 and 25/)).not.toBeNull(); });
   });
 
-  it('show generation details: the details row renders when enabled', async () => {
+  it('places time below the answer, then tools, and opens generation details on tap', async () => {
     const h = await setupChatScreen({ engine: 'litert' });
-    h.enableGenerationDetailsViaUI(); // real segmented toggle
+    h.enableToolViaUI('calculator');
+    h.enableGenerationDetailsViaUI();
     h.render();
     await h.send('hello', { content: 'Hi there.' });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Hi there\./)).not.toBeNull(); });
-    // With details on, the model name is shown in the per-message details.
+
+    const answer = h.view!.getAllByTestId('assistant-message').at(-1)!;
+    const visibleOrder = answer.findAll(node => [
+      'message-bubble', 'message-meta-row', 'tools-sent-collapsible', 'generation-details-toggle',
+    ].includes(node.props.testID)).map(node => node.props.testID);
+    expect([...new Set(visibleOrder)]).toEqual([
+      'message-bubble', 'message-meta-row', 'tools-sent-collapsible', 'generation-details-toggle',
+    ]);
+    expect(h.rtl.within(answer).getByTestId('message-meta-row').children.length).toBeGreaterThan(0);
+    expect(h.view!.queryByTestId('generation-meta')).toBeNull();
+
+    h.rtl.fireEvent.press(h.view!.getByText('Generation details'));
     expect(h.view!.queryByText(/Test Model/)).not.toBeNull();
+    h.rtl.fireEvent.press(h.view!.getByText('Generation details'));
+    expect(h.view!.queryByTestId('generation-meta')).toBeNull();
   });
 });
