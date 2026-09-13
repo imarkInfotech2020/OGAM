@@ -168,7 +168,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       onLongPress={onLongPress}
       delayLongPress={300}
     >
-      <View testID="message-bubble" style={bubbleStyle}>
+      <View
+        testID={message.isThinking ? undefined : 'message-bubble'}
+        style={message.isThinking ? undefined : bubbleStyle}
+      >
         {!!supportingContextParsedContent?.thinking && (
           <ThinkingBlock
             parsedContent={supportingContextParsedContent}
@@ -200,14 +203,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         />
       </View>
 
-      <MessageMetaRow
-        message={message}
-        styles={styles}
-        isStreaming={isStreaming}
-        showActions={showActions}
-        onMenuOpen={onMenuOpen}
-        metaExtra={metaExtra}
-      />
+      {!message.isThinking && (
+        <MessageMetaRow
+          message={message}
+          styles={styles}
+          isStreaming={isStreaming}
+          showActions={showActions}
+          onMenuOpen={onMenuOpen}
+          metaExtra={metaExtra}
+        />
+      )}
 
       <SyncedToolArtifacts message={message} styles={styles} colors={colors} />
 
