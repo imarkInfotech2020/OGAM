@@ -280,6 +280,24 @@ describe('Pro mobile state sync journey', () => {
       expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy(),
     );
 
+    // A live turn may reach this phone before its parent chat in a separate frame.
+    // Both records must appear in the rendered chat after the parent arrives.
+    remoteLog.record(CORE_SYNC_ENTITIES.message, 'late-parent-message', 'put', {
+      conversation_id: 'late-parent-conversation',
+      role: 'assistant',
+      content: 'The late chat turn arrived.',
+      context: null,
+      created_at: createdAt,
+    });
+    remoteLog.record(CORE_SYNC_ENTITIES.conversation, 'late-parent-conversation', 'put', {
+      title: 'Late parent chat',
+      project_id: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+    remoteState.sendRecord(mobile.id, CORE_SYNC_ENTITIES.message, 'late-parent-message');
+    remoteState.sendRecord(mobile.id, CORE_SYNC_ENTITIES.conversation, 'late-parent-conversation');
+
     // The "no devices found, open Sync on a nearby device" notice must NOT come back, or the screen tells the user
     // to go and do the thing they have just finished doing, directly above the device they did it to. It reads as
     // the app failing to see the peer it is holding a pairing with.
@@ -306,6 +324,12 @@ describe('Pro mobile state sync journey', () => {
     await waitFor(() => expect(ui!.getByText('Desktop Research')).toBeTruthy());
     fireEvent.press(ui.getByTestId('chats-tab'));
     await waitFor(() => expect(ui!.getByText('Field planning')).toBeTruthy());
+    await waitFor(() => expect(ui!.getByText('Late parent chat')).toBeTruthy());
+    fireEvent.press(ui.getByText('Late parent chat'));
+    await waitFor(() =>
+      expect(ui!.getByText('The late chat turn arrived.')).toBeTruthy(),
+    );
+    fireEvent.press(ui.getByLabelText('Back'));
     expect(ui.getByText('The field notes are ready.')).toBeTruthy();
     expect(ui.getByText('Desktop Research')).toBeTruthy();
     fireEvent.press(ui.getByText('Field planning'));
@@ -317,6 +341,26 @@ describe('Pro mobile state sync journey', () => {
     expect(
       ui.getByText('I should confirm the notes before answering.'),
     ).toBeTruthy();
+
+    remoteLog.record(CORE_SYNC_ENTITIES.message, 'older-gap-message', 'put', {
+      conversation_id: 'remote-conversation',
+      role: 'user',
+      content: 'An older turn was missed.',
+      context: null,
+      created_at: '2026-07-27T12:01:00.000Z',
+    });
+    remoteLog.record(CORE_SYNC_ENTITIES.message, 'newer-gap-message', 'put', {
+      conversation_id: 'remote-conversation',
+      role: 'assistant',
+      content: 'A newer turn arrived.',
+      context: null,
+      created_at: '2026-07-27T12:02:00.000Z',
+    });
+    remoteState.sendRecord(mobile.id, CORE_SYNC_ENTITIES.message, 'newer-gap-message');
+    await waitFor(() => expect(ui!.getByText('A newer turn arrived.')).toBeTruthy());
+    expect(ui.queryByText('An older turn was missed.')).toBeNull();
+    remoteState.requestSync(mobile.id);
+    await waitFor(() => expect(ui!.getByText('An older turn was missed.')).toBeTruthy());
     fireEvent.press(ui.getByLabelText('Back'));
 
     useChatStore.getState().addMessage('remote-conversation', {

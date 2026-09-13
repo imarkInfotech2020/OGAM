@@ -48,10 +48,13 @@ describe('T119 (rendered) — voice note transcribes when whisper load is blocke
 
     // Real voice turn: record → transcribe. On the tight device the first whisper load blocks; the real
     // ensureWhisperForTranscription frees the text model and retries so the transcript can be produced.
-    await h.voiceSend('what is two plus two', { content: 'It is four.' });
+    await h.voiceSend('what is two plus two', { text: 'It is four.' });
 
-    // The reply renders as an audio bubble — which, on a blocked device, is only possible if the free→retry
-    // loaded whisper and the transcript reached the model.
-    await h.rtl.waitFor(() => { expect(h.view!.queryAllByTestId(/^audio-bubble-/).length).toBeGreaterThan(0); }, { timeout: 6000 });
+    // The tight budget also blocks reloading the text model for the reply. Accept the visible override.
+    await h.rtl.waitFor(() => { expect(h.view!.getByText('Load Anyway')).toBeTruthy(); }, { timeout: 6000 });
+    h.rtl.fireEvent.press(h.view!.getByText('Load Anyway'));
+
+    // Wait for the answer, not the loading audio bubble.
+    await h.rtl.waitFor(() => { expect(h.view!.getByText('It is four.')).toBeTruthy(); }, { timeout: 6000 });
   });
 });

@@ -65,6 +65,7 @@ maybe('PairingCodeSheet scan-to-pair', () => {
   const baseProps = () => ({
     visible: true,
     deviceName: 'Studio Mac',
+    deviceId: 'studio-mac',
     confirmLabel: 'Pair',
     testIDPrefix: 'sync-test',
     onClose: jest.fn(),
