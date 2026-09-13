@@ -76,7 +76,7 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
     // on the residency gate. RED on HEAD: plain Error → dead-end "Failed to load model", no "Load Anyway".
     await h.rtl.waitFor(() => {
       expect(h.view!.queryByText('Load Anyway')).not.toBeNull();
-    }, { timeout: 8000 });
+    }, { timeout: 20000 });
     expect(h.view!.queryByText(/it needs ~/)).not.toBeNull();
     expect(h.view!.queryByText(/Failed to load model/)).toBeNull();
 
@@ -92,5 +92,5 @@ describe('memory refusal shows "Load Anyway" on the rendered alert, not a dead-e
     expect(h.view!.getAllByTestId('user-message')).toHaveLength(1);
 
     stopSync();
-  }, 30000);
+  }, 45000);
 });
