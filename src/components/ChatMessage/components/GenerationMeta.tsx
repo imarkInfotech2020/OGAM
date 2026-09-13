@@ -71,7 +71,7 @@ export function GenerationMeta({ messageId, generationMeta, styles, colors }: Re
           activeOpacity={0.6}
         >
           <Icon name="activity" size={13} color={colors.textMuted} />
-          <Text style={styles.toolStatusText}>Generation details</Text>
+          <Text style={[styles.toolStatusText, styles.toolStatusTextCompact]}>Generation details</Text>
           <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={12} color={colors.textMuted} />
         </TouchableOpacity>
         {expanded && (
