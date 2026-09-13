@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, ViewStyle } from 'react-native';
+import { View, StyleSheet, Animated, Easing, ViewStyle } from 'react-native';
 import { useTheme } from '../theme';
 
 interface LoadingDotsProps {
@@ -25,35 +25,27 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
   testID,
 }) => {
   const { colors } = useTheme();
-  const dot1Anim = useRef(new Animated.Value(0.3)).current;
-  const dot2Anim = useRef(new Animated.Value(0.3)).current;
-  const dot3Anim = useRef(new Animated.Value(0.3)).current;
+  const dot1Anim = useRef(new Animated.Value(0)).current;
+  const dot2Anim = useRef(new Animated.Value(0)).current;
+  const dot3Anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const duration = 400;
-    // Each dot runs the same fade, offset by 150ms, so the brightness travels left to right.
-    const loops = [dot1Anim, dot2Anim, dot3Anim].map((anim, i) =>
-      Animated.sequence([
-        Animated.delay(i * 150),
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(anim, {
-              toValue: 1,
-              duration,
-              useNativeDriver: true,
-            }),
-            Animated.timing(anim, {
-              toValue: 0.3,
-              duration,
-              useNativeDriver: true,
-            }),
-          ]),
+    const dots = [dot1Anim, dot2Anim, dot3Anim];
+    const bounce = Animated.loop(
+      Animated.sequence(
+        [...dots, ...dots].map((anim, index) =>
+          Animated.timing(anim, {
+            toValue: index < dots.length ? -5 : 0,
+            duration: 150,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
         ),
-      ]),
+      ),
     );
-    loops.forEach(loop => loop.start());
+    bounce.start();
 
-    return () => loops.forEach(loop => loop.stop());
+    return () => bounce.stop();
   }, [dot1Anim, dot2Anim, dot3Anim]);
 
   const dotStyle = {
@@ -70,9 +62,9 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
       accessibilityRole="progressbar"
       accessibilityLabel="Working"
     >
-      <Animated.View style={[styles.dot, dotStyle, { opacity: dot1Anim }]} />
-      <Animated.View style={[styles.dot, dotStyle, { opacity: dot2Anim }]} />
-      <Animated.View style={[styles.dot, dotStyle, { opacity: dot3Anim }]} />
+      <Animated.View style={[styles.dot, dotStyle, { transform: [{ translateY: dot1Anim }] }]} />
+      <Animated.View style={[styles.dot, dotStyle, { transform: [{ translateY: dot2Anim }] }]} />
+      <Animated.View style={[styles.dot, dotStyle, { transform: [{ translateY: dot3Anim }] }]} />
     </View>
   );
 };
