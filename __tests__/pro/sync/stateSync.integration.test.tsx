@@ -341,6 +341,26 @@ describe('Pro mobile state sync journey', () => {
     expect(
       ui.getByText('I should confirm the notes before answering.'),
     ).toBeTruthy();
+
+    remoteLog.record(CORE_SYNC_ENTITIES.message, 'older-gap-message', 'put', {
+      conversation_id: 'remote-conversation',
+      role: 'user',
+      content: 'An older turn was missed.',
+      context: null,
+      created_at: '2026-07-27T12:01:00.000Z',
+    });
+    remoteLog.record(CORE_SYNC_ENTITIES.message, 'newer-gap-message', 'put', {
+      conversation_id: 'remote-conversation',
+      role: 'assistant',
+      content: 'A newer turn arrived.',
+      context: null,
+      created_at: '2026-07-27T12:02:00.000Z',
+    });
+    remoteState.sendRecord(mobile.id, CORE_SYNC_ENTITIES.message, 'newer-gap-message');
+    await waitFor(() => expect(ui!.getByText('A newer turn arrived.')).toBeTruthy());
+    expect(ui.queryByText('An older turn was missed.')).toBeNull();
+    remoteState.requestSync(mobile.id);
+    await waitFor(() => expect(ui!.getByText('An older turn was missed.')).toBeTruthy());
     fireEvent.press(ui.getByLabelText('Back'));
 
     useChatStore.getState().addMessage('remote-conversation', {
