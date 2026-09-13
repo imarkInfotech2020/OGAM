@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, ScrollView } from 'react-native';
+import { View, Text, TextInput } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../../theme';
 import { AppSheet } from '../../AppSheet';
@@ -19,8 +19,6 @@ interface ActionMenuSheetProps {
   onRetry: () => void;
   onGenerateImage: () => void;
   onSpeak: () => void;
-  /** When provided, shows a "Select text" item (chat mode) for partial copy. */
-  onSelectText?: () => void;
 }
 
 export function ActionMenuSheet({
@@ -37,7 +35,6 @@ export function ActionMenuSheet({
   onRetry,
   onGenerateImage,
   onSpeak,
-  onSelectText,
 }: ActionMenuSheetProps) {
   const { colors } = useTheme();
 
@@ -59,19 +56,7 @@ export function ActionMenuSheet({
           <Text style={styles.actionSheetText}>Copy</Text>
         </AnimatedPressable>
 
-        {onSelectText && (
-          <AnimatedPressable
-            testID="action-select-text"
-            hapticType="selection"
-            style={styles.actionSheetItem}
-            onPress={onSelectText}
-          >
-            <Icon name="type" size={18} color={colors.textSecondary} />
-            <Text style={styles.actionSheetText}>Select text</Text>
-          </AnimatedPressable>
-        )}
-
-        {isUser && canEdit && (
+        {canEdit && (
           <AnimatedPressable
             testID="action-edit"
             hapticType="selection"
@@ -125,34 +110,6 @@ export function ActionMenuSheet({
   );
 }
 
-interface SelectTextSheetProps {
-  visible: boolean;
-  onClose: () => void;
-  content: string;
-  styles: any;
-}
-
-/**
- * Read-only sheet that presents the message text fully selectable, so the user
- * can select part of it and copy via the native selection toolbar. This avoids
- * the conflict where the bubble's long-press opens the action menu before the
- * OS text-selection gesture can start.
- */
-export function SelectTextSheet({ visible, onClose, content, styles }: SelectTextSheetProps) {
-  return (
-    <AppSheet visible={visible} onClose={onClose} title="SELECT TEXT" enableDynamicSizing>
-      <View style={styles.selectTextContent}>
-        <Text style={styles.selectTextHint}>Long-press to select, then copy.</Text>
-        <ScrollView style={styles.selectTextScroll} nestedScrollEnabled>
-          <Text selectable testID="select-text-body" style={styles.selectTextBody}>
-            {content}
-          </Text>
-        </ScrollView>
-      </View>
-    </AppSheet>
-  );
-}
-
 interface EditSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -160,6 +117,7 @@ interface EditSheetProps {
   onChangeText: (text: string) => void;
   onSave: () => void;
   onCancel: () => void;
+  resendsAfterSave: boolean;
   styles: any;
   colors: any;
 }
@@ -171,6 +129,7 @@ export function EditSheet({
   onChangeText,
   onSave,
   onCancel,
+  resendsAfterSave,
   styles,
   colors,
 }: EditSheetProps) {
@@ -205,7 +164,9 @@ export function EditSheet({
             style={[styles.editButton, styles.editButtonSave]}
             onPress={onSave}
           >
-            <Text style={[styles.editButtonText, styles.editButtonTextSave]}>SAVE & RESEND</Text>
+            <Text style={[styles.editButtonText, styles.editButtonTextSave]}>
+              {resendsAfterSave ? 'SAVE & RESEND' : 'SAVE'}
+            </Text>
           </AnimatedPressable>
         </View>
       </View>

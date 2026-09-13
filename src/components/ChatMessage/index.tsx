@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Clipboard } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useTheme, useThemedStyles } from '../../theme';
-import { useUiModeStore } from '../../stores';
 import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import Icon from 'react-native-vector-icons/Feather';
 import {
@@ -281,9 +280,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const ttsCanSpeak = callHook<boolean>(HOOKS.audioCanSpeak) ?? false;
-  const interfaceMode = useUiModeStore(s => s.interfaceMode);
   const [showActionMenu, setShowActionMenu] = useState(false);
-  const [showSelectText, setShowSelectText] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(message.content);
   const [showThinking, setShowThinking] = useState(!!isStreaming);
@@ -324,25 +321,19 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const handleEdit = () => {
-    setEditedContent(message.content);
+    setEditedContent(isUser ? message.content : displayContent);
     setShowActionMenu(false);
     setTimeout(() => setIsEditing(true), 350);
   };
 
-  const handleSelectText = () => {
-    setShowActionMenu(false);
-    // Let the action sheet finish closing before opening the select-text sheet.
-    setTimeout(() => setShowSelectText(true), 350);
-  };
-
   const handleSaveEdit = () => {
     const trimmed = editedContent.trim();
-    if (trimmed !== message.content) onEdit?.(message, trimmed);
+    if (trimmed !== (isUser ? message.content : displayContent)) onEdit?.(message, trimmed);
     setIsEditing(false);
   };
 
   const handleCancelEdit = () => {
-    setEditedContent(message.content);
+    setEditedContent(isUser ? message.content : displayContent);
     setIsEditing(false);
   };
 
@@ -456,25 +447,21 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         styles={styles}
         colors={colors}
         showActionMenu={showActionMenu}
-        showSelectText={showSelectText}
         isEditing={isEditing}
         isUser={isUser}
         canEdit={!!onEdit}
         canRetry={!!onRetry}
         canGenerateImage={canGenerateImage && !!onGenerateImage}
         canSpeak={canSpeak}
-        showSelectTextAction={interfaceMode === 'chat'}
         displayContent={displayContent}
         alertState={alertState}
         onCloseActionMenu={() => setShowActionMenu(false)}
-        onCloseSelectText={() => setShowSelectText(false)}
         onChangeEditText={setEditedContent}
         onCopy={handleCopy}
         onEdit={handleEdit}
         onRetry={handleRetry}
         onGenerateImage={handleGenerateImage}
         onSpeak={handleSpeak}
-        onSelectText={handleSelectText}
         onSaveEdit={handleSaveEdit}
         onCancelEdit={handleCancelEdit}
         onCloseAlert={() => setAlertState(hideAlert())}
