@@ -200,6 +200,31 @@ describePro('the Activity list', () => {
     expect(ui.getByText(new Date(NOW).toLocaleString())).toBeTruthy();
   });
 
+  it('keeps the saved event time while a transfer reports live progress', () => {
+    if (!guard()) return;
+    const projection = project(handlers(), {
+      completedTransfers: [{
+        requestId: 'transfer-live',
+        deviceId: THE_MAC,
+        deviceName: 'The Mac',
+        fileName: 'Report.pdf',
+        direction: 'send',
+        status: 'queued',
+        bytesTransferred: 0,
+        totalBytes: 1024,
+        updatedAt: NOW,
+      }] as never,
+      transfers: [liveSend],
+    });
+
+    const ui = render(
+      <TransferActivitySection projection={projection} onOpen={jest.fn()} />,
+    );
+
+    expect(ui.getByText(new Date(NOW).toLocaleString())).toBeTruthy();
+    expect(ui.getByText(/Sending/)).toBeTruthy();
+  });
+
   it('lists nothing when nothing has moved', () => {
     if (!guard()) return;
     const acts = handlers();
