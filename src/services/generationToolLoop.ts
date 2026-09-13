@@ -1282,10 +1282,28 @@ async function selectEffectiveSchemas(
         extSchemas,
         MCP_TOOL_ROUTE_TOPK,
       );
-      const filteredExt = extSchemas.filter(s =>
+      const shortlist = extSchemas.filter(s =>
         selected.includes(s.function.name),
       );
-      return [...builtInSchemas, ...filteredExt];
+      if (litertActive || llamaIosNative) {
+        try {
+          const chosen = await selectRelevantTools(
+            getLastUserQuery(ctx.messages),
+            shortlist,
+            litertActive
+              ? undefined
+              : (s, u) => llmService.generateToolSelection(s, u),
+          );
+          if (chosen !== null) {
+            return [...builtInSchemas, ...shortlist.filter(s =>
+              chosen.includes(s.function.name),
+            )];
+          }
+        } catch (error) {
+          logger.warn(`[ToolLoop] tool selection failed; using embedding shortlist: ${String(error)}`);
+        }
+      }
+      return [...builtInSchemas, ...shortlist];
     } catch (e) {
       logger.warn(
         `[ToolLoop] embedding tool routing failed; using all tools: ${String(

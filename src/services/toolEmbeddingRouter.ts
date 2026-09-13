@@ -166,11 +166,6 @@ export async function selectToolsByEmbedding(
   tools: RoutableTool[],
   topK: number,
 ): Promise<string[]> {
-  // A greeting is a complete social turn, not a request for any external action.
-  // Returning the top K for "Hi" sent twelve unrelated MCP schemas to a 2K context.
-  if (/^\s*(?:hi|hey|hello|good (?:morning|afternoon|evening))[!?.\s]*$/i.test(query)) {
-    return [];
-  }
   if (tools.length <= topK || !query.trim()) {
     return tools.map(t => t.function.name);
   }

@@ -9,6 +9,7 @@ jest.mock('@react-navigation/native', () => ({
 describe('greeting with remote tools enabled', () => {
   it('answers on the selected model without sending unrelated remote tools', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'ios', pro: true, backupModel: true });
+    h.boundary.fs!.seedFile(`${h.boundary.fs!.DocumentDirectoryPath}/all-MiniLM-L6-v2-Q8_0.gguf`, 25 * 1024 * 1024);
     const { useMcpStore } = require('../../../pro/mcp/mcpStore');
     const mcp = useMcpStore.getState();
     mcp.addServer({ id: 'greeting-server', name: 'Mac tools', url: 'http://mac.local/mcp' });
@@ -19,7 +20,10 @@ describe('greeting with remote tools enabled', () => {
       inputSchema: { type: 'object', properties: {} },
     })));
     h.render();
-    h.boundary.llama!.scriptCompletion({ text: 'Hello!' });
+    h.boundary.llama!.scriptCompletions([
+      { text: 'none' },
+      { text: 'Hello!' },
+    ]);
 
     await h.tapSend('Hi');
 
