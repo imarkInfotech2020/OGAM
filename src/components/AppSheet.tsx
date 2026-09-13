@@ -215,6 +215,8 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   useEffect(() => {
     if (visible) {
+      // A presented sheet must not dismiss the keyboard after its input takes focus.
+      if (modalVisible) return;
       pendingAnimateIn.current = true;
       // Dismiss keyboard first, then open — prevents animation conflict
       const keyboardVisible = Keyboard.isVisible?.() ?? false;
