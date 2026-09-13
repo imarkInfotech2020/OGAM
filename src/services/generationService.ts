@@ -257,8 +257,7 @@ class GenerationService {
       } catch (error) {
         if (this.abortRequested) return;
         if (contextCompactionService.isContextFullError(error)) {
-          useChatStore.getState().clearStreamingMessage();
-          this.resetState();
+          keepShownPartialOnError(this, conversationId);
           throw error;
         }
         logger.warn(

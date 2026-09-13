@@ -29,6 +29,24 @@ describe('context full in a tool-enabled chat', () => {
     expect(h.view!.queryByText('Test Model')).not.toBeNull();
   });
 
+  it('keeps reasoning already shown when a full context starts a retry', async () => {
+    const h = await setupChatScreen({ engine: 'llama' });
+    h.render();
+    h.rtl.fireEvent.press(h.view!.getByTestId('quick-settings-button'));
+    h.rtl.fireEvent.press(h.view!.getByTestId('quick-thinking-toggle'));
+    h.boundary.llama!.scriptCompletions([
+      { reasoning: 'I was working through the first attempt.', completionMeta: { context_full: true } },
+      { text: 'Answer after compaction.' },
+    ]);
+    await h.tapSend('Hi');
+
+    await h.rtl.waitFor(() => expect(h.view!.queryByText('Answer after compaction.')).not.toBeNull());
+    const firstThought = h.view!.getAllByTestId('thinking-block')[0];
+    h.rtl.fireEvent.press(h.rtl.within(firstThought).getByTestId('thinking-block-toggle'));
+    expect(h.rtl.within(firstThought).getByTestId('thinking-block-content'))
+      .toHaveTextContent('I was working through the first attempt.');
+  });
+
   it('shows a context limit after the retry also fills, and ends the busy state', async () => {
     const h = await setupChatScreen({ engine: 'llama', backupModel: true });
     h.enableToolViaUI('calculator');
