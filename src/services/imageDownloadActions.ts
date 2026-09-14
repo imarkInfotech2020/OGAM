@@ -414,7 +414,6 @@ export async function proceedWithDownload(
   modelInfo: ImageModelDescriptor,
   deps: ImageDownloadDeps,
 ): Promise<void> {
-  deps.setAlertState({ ...showAlert('Download Started', 'Keep app open while image model processes'), closeLabel: '' });
   if (modelInfo.huggingFaceRepo && modelInfo.huggingFaceFiles) {
     await downloadHuggingFaceModel(modelInfo, deps);
     return;
