@@ -25,7 +25,7 @@ import { Button } from '../components/Button';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { RootStackParamList } from '../navigation/types';
 import { remoteServerManager } from '../services/remoteServerManager';
-import { discoverLANServers } from '../services/networkDiscovery';
+import type { DiscoverableServerKind } from '../services/networkDiscovery';
 import {
   CustomAlert,
   AlertState,
@@ -37,6 +37,11 @@ import { withUtm } from '../utils/utm';
 import { createStyles } from './RemoteServersScreen.styles';
 
 const DESKTOP_URL = withUtm(OFF_GRID_DESKTOP_URL, 'remote-servers');
+const SCAN_KINDS: Array<{ kind: DiscoverableServerKind; label: string; port: number }> = [
+  { kind: 'gateway', label: 'Off Grid AI Desktop', port: 7878 },
+  { kind: 'ollama', label: 'Ollama', port: 11434 },
+  { kind: 'lmstudio', label: 'LM Studio', port: 1234 },
+];
 
 type NavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -53,9 +58,15 @@ export const RemoteServersScreen: React.FC = () => {
     s => s.settings.autoDiscoverRemoteModels === true,
   );
   const updateSettings = useAppStore(s => s.updateSettings);
+  const savedScanKinds = useAppStore(s => s.settings.remoteScanKinds);
+  const scanKinds = savedScanKinds?.length
+    ? savedScanKinds
+    : SCAN_KINDS.map(item => item.kind);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState({ completed: 0, total: 0 });
+  const [scanFound, setScanFound] = useState(0);
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
 
   // Auto-check all server statuses when screen opens
@@ -87,34 +98,31 @@ export const RemoteServersScreen: React.FC = () => {
   const handleScanNetwork = useCallback(async () => {
     setIsScanning(true);
     setScanNote(null);
+    setScanProgress({ completed: 0, total: 0 });
+    setScanFound(0);
     try {
-      const discovered = await discoverLANServers();
-      const existingEndpoints = new Set(servers.map(s => s.endpoint));
-      const newServers = discovered.filter(
-        d => !existingEndpoints.has(d.endpoint),
-      );
+      const pendingAdds: Array<Promise<unknown>> = [];
+      const { found: newServers } = await remoteServerManager.scanAndReconcile({
+        kinds: scanKinds,
+        onProgress: (completed, total) => setScanProgress({ completed, total }),
+        onFound: server => {
+          setScanFound(count => count + 1);
+          pendingAdds.push(
+            remoteServerManager.addServer({
+              name: server.name,
+              endpoint: server.endpoint,
+              providerType: 'openai-compatible',
+            }).then(saved => remoteServerManager.testConnection(saved.id)),
+          );
+        },
+      });
+      await Promise.allSettled(pendingAdds);
       if (newServers.length === 0) {
-        // Say what was actually tried. "No servers found" leaves the user with nothing to act
-        // on; the ports do, because that is what has to be listening on the other machine.
         setScanNote(
-          discovered.length > 0
-            ? 'Everything on this network is already in your list.'
-            : 'Nothing answered on this network. Off Grid AI Desktop serves on port 7878, Ollama on 11434, LM Studio on 1234.',
+          `No new servers answered. Check ${SCAN_KINDS.filter(item => scanKinds.includes(item.kind)).map(item => `${item.label} on port ${item.port}`).join(', ')}.`,
         );
         return;
       }
-      const added = await Promise.all(
-        newServers.map(d =>
-          remoteServerManager.addServer({
-            name: d.name,
-            endpoint: d.endpoint,
-            providerType: 'openai-compatible',
-          }),
-        ),
-      );
-      added.forEach(s =>
-        remoteServerManager.testConnection(s.id).catch(() => {}),
-      );
       setScanNote(
         `Added ${newServers.length} server${newServers.length > 1 ? 's' : ''}.`,
       );
@@ -125,7 +133,7 @@ export const RemoteServersScreen: React.FC = () => {
     } finally {
       setIsScanning(false);
     }
-  }, [servers]);
+  }, [scanKinds]);
 
   const handleDeleteServer = useCallback(
     (server: (typeof servers)[0]) => {
@@ -215,6 +223,28 @@ export const RemoteServersScreen: React.FC = () => {
           </View>
         </View>
 
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Scan for</Text>
+          {SCAN_KINDS.map(item => (
+            <View key={item.kind} style={styles.scanKindRow}>
+              <Text style={styles.cardDesc}>{item.label} ({item.port})</Text>
+              <Switch
+                testID={`scan-kind-${item.kind}`}
+                accessibilityLabel={`Scan for ${item.label}`}
+                value={scanKinds.includes(item.kind)}
+                disabled={isScanning || (scanKinds.length === 1 && scanKinds.includes(item.kind))}
+                onValueChange={enabled => {
+                  const next = enabled
+                    ? [...scanKinds, item.kind]
+                    : scanKinds.filter(kind => kind !== item.kind);
+                  if (next.length > 0) updateSettings({ remoteScanKinds: next });
+                }}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+              />
+            </View>
+          ))}
+        </View>
+
         <View style={styles.actionRow}>
           {/* No `loading` prop: it swaps the label for the platform spinner, and on Android that
               glyph reads as a retry arrow - the same thing that made the chat loading bar look
@@ -237,10 +267,15 @@ export const RemoteServersScreen: React.FC = () => {
           />
         </View>
         {isScanning ? (
-          <ThinkingIndicator
-            text="Looking for servers on your Wi-Fi"
-            textStyle={styles.scanNote}
-          />
+          <View>
+            <ThinkingIndicator
+              text="Looking for servers on your Wi-Fi"
+              textStyle={styles.scanNote}
+            />
+            <Text style={styles.scanNote} accessibilityRole="text" testID="scan-progress">
+              {scanProgress.completed} / {scanProgress.total} checked. {scanFound} found.
+            </Text>
+          </View>
         ) : null}
         {!isScanning && scanNote ? (
           <Text style={styles.scanNote}>{scanNote}</Text>

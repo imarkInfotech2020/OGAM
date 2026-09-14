@@ -17,7 +17,11 @@ import { useRemoteServerStore } from '../stores/remoteServerStore';
 import { useAppStore } from '../stores/appStore';
 import { OpenAICompatibleProvider } from './providers/openAICompatibleProvider';
 import { providerRegistry } from './providers/registry';
-import { discoverLANServers, DiscoveredServer } from './networkDiscovery';
+import {
+  discoverLANServers,
+  type DiscoveredServer,
+  type DiscoveryOptions,
+} from './networkDiscovery';
 import { shouldAutoDiscoverRemoteModels } from '../utils/remoteAutoDiscovery';
 import logger from '../utils/logger';
 import {
@@ -29,10 +33,7 @@ import {
   setActiveRemoteImageModelImpl,
   initializeProvidersImpl,
 } from './remoteServerManagerUtils';
-import {
-  canReconcileCredentialedEndpoint,
-  remoteAuthorizationHeaders,
-} from './remoteTransportPolicy';
+import { remoteAuthorizationHeaders } from './remoteTransportPolicy';
 import { activateOffGridDesktopModel } from './offGridDesktopModels';
 
 /** Normalize an endpoint for identity comparison (lowercase, no trailing slashes). */
@@ -42,39 +43,13 @@ const trimSlash = (url: string): string => {
   return s;
 };
 
-/** Extract the port from an endpoint, or null if it cannot be parsed. */
-const portOf = (endpoint: string): string | null => {
-  try {
-    return new URL(endpoint).port;
-  } catch {
-    return null;
-  }
-};
-
-function uniqueSamePortServer(
-  discovered: DiscoveredServer,
-  missingExisting: RemoteServer[],
-  unmatchedDiscovered: DiscoveredServer[],
-): RemoteServer | null {
-  const port = portOf(discovered.endpoint);
-  if (!port) return null;
-  const existingOnPort = missingExisting.filter(
-    server => portOf(server.endpoint) === port,
-  );
-  const discoveredOnPort = unmatchedDiscovered.filter(
-    server => portOf(server.endpoint) === port,
-  );
-  return existingOnPort.length === 1 && discoveredOnPort.length === 1
-    ? existingOnPort[0]
-    : null;
-}
-
 class RemoteServerManager {
   /**
    * Add a new remote server
    */
   async addServer(
     config: Omit<RemoteServer, 'id' | 'createdAt'> & { apiKey?: string },
+    stableId?: string,
   ): Promise<RemoteServer> {
     const store = useRemoteServerStore.getState();
 
@@ -90,7 +65,7 @@ class RemoteServerManager {
 
     // Credentials belong only in Keychain. Never put them in the persisted Zustand server record.
     const { apiKey, ...publicConfig } = config;
-    const id = store.addServer(publicConfig);
+    const id = store.addServer(publicConfig, stableId);
     if (apiKey) {
       await this.storeApiKey(id, apiKey);
     }
@@ -308,19 +283,24 @@ class RemoteServerManager {
   }
 
   /**
-   * Scan the LAN and reconcile the result against saved servers. For each discovered endpoint that
-   * matches a saved server on the same port but a new IP, update it in place and re-select the active
-   * model. Returns the genuinely-new servers (not remaps) so a caller can surface them, plus the ids
-   * of servers that moved. Does NOT gate on settings — the caller decides whether a scan is allowed.
-   * This is the single owner of the "server moved to a new IP" reconciliation; UI callers delegate here.
+   * Scan the LAN and report endpoints not already saved. A matching port does not prove server
+   * identity, so a scan must never move a saved server or its credentials to a new host.
    */
-  async scanAndReconcile(): Promise<{
+  async scanAndReconcile(options: DiscoveryOptions = {}): Promise<{
     moved: string[];
     found: DiscoveredServer[];
   }> {
     let discovered: DiscoveredServer[];
+    const savedEndpoints = new Set(
+      useRemoteServerStore.getState().servers.map(server => trimSlash(server.endpoint)),
+    );
     try {
-      discovered = await discoverLANServers();
+      discovered = await discoverLANServers(undefined, {
+        ...options,
+        onFound: server => {
+          if (!savedEndpoints.has(trimSlash(server.endpoint))) options.onFound?.(server);
+        },
+      });
     } catch (error) {
       logger.warn(
         '[RemoteServerManager] LAN scan failed:',
@@ -328,98 +308,10 @@ class RemoteServerManager {
       );
       return { moved: [], found: [] };
     }
-    if (discovered.length === 0) return { moved: [], found: [] };
-
-    const store = useRemoteServerStore.getState();
-    const existingServers = store.servers;
-    const existingEndpoints = new Set(
-      existingServers.map(s => trimSlash(s.endpoint)),
-    );
-    const discoveredEndpoints = new Set(
-      discovered.map(server => trimSlash(server.endpoint)),
-    );
-    const unmatchedDiscovered = discovered.filter(
-      server => !existingEndpoints.has(trimSlash(server.endpoint)),
-    );
-    const missingExisting = existingServers.filter(
-      server => !discoveredEndpoints.has(trimSlash(server.endpoint)),
-    );
-    const moved: string[] = [];
-    const found: DiscoveredServer[] = [];
-
-    for (const d of unmatchedDiscovered) {
-      const samePortServer = uniqueSamePortServer(
-        d,
-        missingExisting,
-        unmatchedDiscovered,
-      );
-      if (
-        !samePortServer ||
-        !(await this.reconcileMovedServer(samePortServer, d))
-      ) {
-        found.push(d);
-        continue;
-      }
-      moved.push(samePortServer.id);
-    }
-
-    return { moved, found };
-  }
-
-  private async reconcileMovedServer(
-    server: RemoteServer,
-    discovered: DiscoveredServer,
-  ): Promise<boolean> {
-    let apiKey: string | null;
-    try {
-      apiKey = await this.getApiKey(server.id);
-    } catch {
-      // An unavailable Keychain is not proof that this server has no credential.
-      // Keep the discovery unclaimed until credential ownership can be confirmed.
-      return false;
-    }
-    const hasStoredCredential = apiKey !== null;
-    if (
-      !canReconcileCredentialedEndpoint(
-        discovered.endpoint,
-        hasStoredCredential,
-      )
-    ) {
-      return false;
-    }
-    await this.applyMovedServer(server, discovered.endpoint, discovered.name);
-    return true;
-  }
-
-  /** Update a saved server that has moved to a new endpoint, and re-select it if it was active. */
-  private async applyMovedServer(
-    server: RemoteServer,
-    endpoint: string,
-    name: string,
-  ): Promise<void> {
-    logger.log(
-      '[RemoteServerManager] Server moved to new IP, updating:',
-      server.name,
-      '->',
-      endpoint,
-    );
-    await this.updateServer(server.id, { endpoint, name });
-    try {
-      await this.discoverModels(server.id);
-    } catch {
-      /* offline — models repopulate on next reach */
-    }
-    const store = useRemoteServerStore.getState();
-    if (store.activeServerId === server.id && store.activeRemoteTextModelId) {
-      try {
-        await this.setActiveRemoteTextModel(
-          server.id,
-          store.activeRemoteTextModelId,
-        );
-      } catch {
-        /* user can re-select from the picker */
-      }
-    }
+    return {
+      moved: [],
+      found: discovered.filter(server => !savedEndpoints.has(trimSlash(server.endpoint))),
+    };
   }
 
   /**

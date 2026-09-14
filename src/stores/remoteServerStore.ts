@@ -46,7 +46,7 @@ interface RemoteServerState {
   >;
 
   // Server CRUD
-  addServer: (server: Omit<RemoteServer, 'id' | 'createdAt'>) => string;
+  addServer: (server: Omit<RemoteServer, 'id' | 'createdAt'>, id?: string) => string;
   updateServer: (id: string, updates: Partial<RemoteServer>) => void;
   removeServer: (id: string) => void;
 
@@ -128,8 +128,9 @@ export const useRemoteServerStore = create<RemoteServerState>()(
       activeRemoteMediaServerIds: {},
 
       // Server CRUD
-      addServer: serverData => {
-        const id = generateId();
+      addServer: (serverData, suppliedId) => {
+        const id = suppliedId ?? generateId();
+        if (get().servers.some(server => server.id === id)) return id;
         const { apiKey: _apiKey, ...publicData } = serverData;
         const server: RemoteServer = {
           ...publicData,

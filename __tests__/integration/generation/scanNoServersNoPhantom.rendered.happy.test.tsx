@@ -47,7 +47,7 @@ describe('T047 (rendered) — empty LAN scan shows the alert AND adds no phantom
 
     // The scan reports that nothing answered...
     await waitFor(
-      () => { expect(ui.queryByText(/Nothing answered on this network/)).not.toBeNull(); },
+      () => { expect(ui.queryByText(/No new servers answered/)).not.toBeNull(); },
       { timeout: 4000 },
     );
     // ...and the list AGREES: the "No servers yet" empty state still renders (a phantom server would have
