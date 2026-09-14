@@ -219,6 +219,9 @@ describe('Auto Setup release journey', () => {
 
     expect(ui.getAllByText('INCLUDES')).toHaveLength(1);
     expect(ui.getByText('Gemma 4 E4B')).toBeTruthy();
+    fireEvent.press(ui.getByTestId('auto-setup-plan-lean'));
+    expect(ui.getByText('Qwen 3.5 2B')).toBeTruthy();
+    expect(ui.queryByText('SmolVLM 2B')).toBeNull();
     fireEvent.press(ui.getByTestId('auto-setup-plan-extreme'));
     expect(ui.getByText('Qwen 3.5 9B')).toBeTruthy();
     expect(ui.queryByText('Gemma 4 E4B')).toBeNull();
