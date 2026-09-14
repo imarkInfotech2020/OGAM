@@ -21,7 +21,7 @@ describe('remote dictation in the chat composer', () => {
       global.fetch = (async (input, init) => {
         requests.push(String(input));
         expect(init?.method).toBe('POST');
-        return { ok: true, json: async () => ({ text: 'Set a timer for ten minutes' }) } as Response;
+        return { ok: true, json: async () => ({ text: 'Speaker 1: Set a timer\nSpeaker 2: For ten minutes' }) } as Response;
       }) as typeof fetch;
 
       view = rtl.render(React.createElement(ChatInput, { onSend: jest.fn() }));
@@ -36,8 +36,9 @@ describe('remote dictation in the chat composer', () => {
         ...event, nativeEvent: { ...event.nativeEvent, timestamp: 500 },
       });
 
-      await rtl.waitFor(() => expect(view!.getByTestId('chat-input').props.value).toContain('Set a timer for ten minutes'), { timeout: 5000 });
+      await rtl.waitFor(() => expect(view!.getByTestId('chat-input').props.value).toBe('Speaker 1: Set a timer\nSpeaker 2: For ten minutes'), { timeout: 5000 });
       expect(requests).toEqual(['http://192.168.1.50:7878/v1/audio/transcriptions']);
+
     } finally {
       view?.unmount();
       global.fetch = originalFetch;

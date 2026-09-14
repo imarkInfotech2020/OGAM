@@ -38,7 +38,10 @@ export function cleanTranscription(raw: string): string {
   const stripped = raw
     .replace(/\[[^\]]*\]/g, ' ') // [BLANK_AUDIO], [ Silence ], [MUSIC]
     .replace(/\([^)]*\)/g, ' ')  // (silence), (speaking foreign language)
-    .replace(/\s+/g, ' ')
+    .split(/\r?\n/)
+    .map(line => line.replace(/[^\S\r\n]+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
     .trim();
   // Only markers / punctuation left → no real speech.
   // Unicode letters/numbers are speech too. The old Latin-only check discarded
