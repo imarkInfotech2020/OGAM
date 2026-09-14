@@ -18,8 +18,10 @@ describe('Model download pause and resume', () => {
 
     const screen = render(React.createElement(DownloadManagerScreen, {}));
     const pause = await waitFor(() => screen.getByLabelText('Pause model.gguf'));
+    expect(screen.queryByText('Pause')).toBeNull();
     fireEvent.press(pause);
     await waitFor(() => { expect(screen.getByLabelText('Resume model.gguf')).toBeTruthy(); });
+    expect(screen.queryByText('Resume')).toBeNull();
     expect(boundary.download!.active()[0].bytesDownloaded).toBe(64 * MB);
     expect(boundary.download!.active()[0].status).toBe('paused');
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { LoadingDots } from '../../components/LoadingDots';
+import { DenseModelCardContent } from '../../components/ModelCardContent';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
 import { useTheme, useThemedStyles } from '../../theme';
@@ -9,7 +10,6 @@ import { BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { getDownloadStatusLabel, isRetryable } from '../../utils/downloadErrors';
 import { downloadStatusIcon } from '../../utils/downloadStatusIcon';
-import { formatBytes } from '../../utils/formatBytes';
 import { createStyles } from './styles';
 import { presentProgress } from '../../utils/progressPresentation';
 import { SPACING } from '../../constants';
@@ -111,8 +111,12 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
     <Card style={styles.downloadCard}>
       <View style={styles.downloadHeader}>
         <View style={styles.downloadInfo}>
-          <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
-          <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
+          <DenseModelCardContent
+            model={{ name: item.fileName, author: item.author, modelType: item.isVisionModel ? 'vision' : item.modelType === 'text' ? 'text' : undefined }}
+            fileSize={item.fileSize}
+            quantization={item.quantization}
+            isVisionModel={!!item.isVisionModel}
+          />
         </View>
         {item.status === 'failed' ? (
           <View style={styles.failedActionsRow}>
@@ -141,13 +145,12 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           <View style={styles.failedActionsRow}>
             {(item.canPause || item.canResume) && (
               <TouchableOpacity
-                style={styles.retryButton}
+                style={[styles.retryButton, styles.transferIconButton]}
                 accessibilityRole="button"
                 accessibilityLabel={`${item.canResume ? 'Resume' : 'Pause'} ${item.fileName}`}
                 onPress={() => item.canResume ? onResume(item) : onPause(item)}
               >
                 <Icon name={item.canResume ? 'play' : 'pause'} size={14} color={colors.primary} />
-                <Text style={styles.retryButtonText}>{item.canResume ? 'Resume' : 'Pause'}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -169,11 +172,6 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
         </Text>
       </View>
       <View style={styles.downloadMeta}>
-        {!!item.quantization && (
-          <View style={styles.quantBadge}>
-            <Text style={styles.quantText}>{item.quantization}</Text>
-          </View>
-        )}
         {(!!getStatusLabel(item) || !!getStatusIcon()) && (
           <View style={styles.statusIconRow}>
             {getStatusIcon() && (
@@ -235,15 +233,6 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
     bytesPerSecond: repairEntry.bytesPerSecond,
     status: repairEntry.status,
   }) : undefined;
-  const completedMeta = [
-    item.author,
-    formatBytes(item.fileSize),
-    item.quantization,
-    item.downloadedAt
-      ? new Date(item.downloadedAt).toLocaleDateString()
-      : undefined,
-  ].filter(Boolean).join(' · ');
-
   return (
     <Card style={styles.downloadCard}>
       <View style={[styles.downloadHeader, styles.completedHeader]}>
@@ -255,8 +244,17 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           />
         </View>
         <View style={styles.downloadInfo}>
-          <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
-          <Text style={styles.modelId} numberOfLines={1}>{completedMeta}</Text>
+          <DenseModelCardContent
+            model={{
+              name: item.fileName,
+              author: item.author,
+              modelType: item.isVisionModel ? 'vision' : item.modelType === 'text' ? 'text' : undefined,
+              description: item.downloadedAt ? new Date(item.downloadedAt).toLocaleDateString() : undefined,
+            }}
+            fileSize={item.fileSize}
+            quantization={item.quantization}
+            isVisionModel={!!item.isVisionModel}
+          />
         </View>
         {needsVisionRepair && !isRepairingVision && onRepairVision && (
           <TouchableOpacity
