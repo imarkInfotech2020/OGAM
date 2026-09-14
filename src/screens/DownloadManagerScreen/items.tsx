@@ -118,60 +118,55 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             isVisionModel={!!item.isVisionModel}
           />
         </View>
-        {item.status === 'failed' ? (
-          <View style={styles.failedActionsRow}>
-            {isRetryable(item.reasonCode) && (
-              <TouchableOpacity
-                style={styles.retryButton}
-                hitSlop={SPACING.md}
-                testID="failed-retry-button"
-                onPress={() => onRetry(item)}
-              >
-                <Icon name="refresh-cw" size={14} color={colors.primary} />
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.removeButton}
-              hitSlop={SPACING.md}
-              testID="failed-remove-button"
-              onPress={() => onRemove(item)}
-            >
-              <Icon name="trash-2" size={14} color={colors.error} />
-              <Text style={styles.removeButtonText}>Remove</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.failedActionsRow}>
-            {(item.canPause || item.canResume) && (
-              <TouchableOpacity
-                style={styles.transferIconButton}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.canResume ? 'Resume' : 'Pause'} ${item.fileName}`}
-                hitSlop={6}
-                onPress={() => item.canResume ? onResume(item) : onPause(item)}
-              >
-                <Icon name={item.canResume ? 'play' : 'pause'} size={14} color={colors.primary} />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.cancelButton}
-              testID="remove-download-button"
-              hitSlop={6}
-              onPress={() => onRemove(item)}
-            >
-              <Icon name="x" size={16} color={colors.error} />
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
       <View style={styles.progressContainer}>
-        <View style={styles.progressBarBackground}>
-          <View style={[styles.progressBarFill, { width: `${percentage}%` as const, backgroundColor: progressColor }]} />
+        <View style={styles.transferRow}>
+          <View style={[styles.progressBarBackground, styles.transferProgressBar]}>
+            <View style={[styles.progressBarFill, { width: `${percentage}%` as const, backgroundColor: progressColor }]} />
+          </View>
+          <View style={styles.transferActions}>
+            {item.status === 'failed' ? (
+              <>
+                {isRetryable(item.reasonCode) && (
+                  <TouchableOpacity style={styles.transferIconButton} hitSlop={SPACING.md} testID="failed-retry-button" accessibilityRole="button" accessibilityLabel={`Retry ${item.fileName}`} onPress={() => onRetry(item)}>
+                    <Icon name="refresh-cw" size={14} color={colors.primary} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.transferIconButton} hitSlop={SPACING.md} testID="failed-remove-button" accessibilityRole="button" accessibilityLabel={`Remove ${item.fileName}`} onPress={() => onRemove(item)}>
+                  <Icon name="trash-2" size={14} color={colors.error} />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+              {(item.canPause || item.canResume) && (
+                <TouchableOpacity
+                  style={styles.transferIconButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.canResume ? 'Resume' : 'Pause'} ${item.fileName}`}
+                  hitSlop={6}
+                  onPress={() => item.canResume ? onResume(item) : onPause(item)}
+                >
+                  <Icon name={item.canResume ? 'play' : 'pause'} size={14} color={colors.primary} />
+                </TouchableOpacity>
+              )}
+                <TouchableOpacity
+                  style={styles.transferIconButton}
+                  testID="remove-download-button"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${item.fileName}`}
+                  hitSlop={6}
+                  onPress={() => onRemove(item)}
+                >
+                  <Icon name="x" size={16} color={colors.error} />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
-        <Text style={styles.progressText} testID="download-progress-detail">
-          {[presented.percentageText, presented.detailText].filter(Boolean).join(' · ')}
-        </Text>
+        <View style={styles.transferCaptionRow}>
+          <Text style={styles.progressText} testID="download-progress-detail">{presented.detailText}</Text>
+          <Text style={styles.progressText}>{presented.percentageText}</Text>
+        </View>
       </View>
       <View style={styles.downloadMeta}>
         {(!!getStatusLabel(item) || !!getStatusIcon()) && (

@@ -145,7 +145,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
     if (progress && progress.status === 'completed' && progress.bytesDownloaded < item.size) {
       progress = undefined;
     }
-    const canCancel   = !!entry && isActiveStatus(entry.status);
+    const canCancel   = !!entry && (isActiveStatus(entry.status) || entry.status === 'paused');
     const hasFailed   = entry?.status === 'failed';
     const errorMessage = hasFailed ? (entry?.errorMessage ?? 'Download failed') : undefined;
     return { downloadKey: modelKey, progress, downloaded, downloadedModel, needsVisionRepair, repairingVision, canCancel, hasFailed, errorMessage };
@@ -177,8 +177,9 @@ const ModelDetailView: React.FC<DetailProps> = ({
     return <ModelCard
         model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
-        isDownloading={!!s.progress && !s.hasFailed && !isQueuedStatus(s.progress.status)}
+        isDownloading={!!s.progress && !s.hasFailed && s.progress.status !== 'paused' && !isQueuedStatus(s.progress.status)}
         isQueued={isQueuedStatus(s.progress?.status ?? 'completed')}
+        isPaused={s.progress?.status === 'paused'}
         downloadProgress={s.progress?.progress}
         downloadBytes={s.progress && !s.hasFailed ? {
           downloaded: s.progress.bytesDownloaded,
@@ -191,6 +192,16 @@ const ModelDetailView: React.FC<DetailProps> = ({
         onDelete={s.downloaded ? () => handleDeleteModel(`${selectedModel.id}/${item.name}`) : undefined}
         onRepairVision={s.needsVisionRepair && !s.progress && !s.repairingVision ? () => handleRepairMmProj(selectedModel, item) : undefined}
         onCancel={s.canCancel ? () => handleCancelDownload(s.downloadKey) : undefined}
+        onPause={storeEntry?.downloadId && s.progress?.status === 'running' ? () => {
+          modelDownloadService.pause(uniformDownloadId('text', s.downloadKey)).catch(error =>
+            setAlertState(showAlert('Pause failed', error instanceof Error ? error.message : 'Try again.')),
+          );
+        } : undefined}
+        onResume={storeEntry?.downloadId && s.progress?.status === 'paused' ? () => {
+          modelDownloadService.resume(uniformDownloadId('text', s.downloadKey)).catch(error =>
+            setAlertState(showAlert('Resume failed', error instanceof Error ? error.message : 'Try again.')),
+          );
+        } : undefined}
         compact
         recommended={recommended}
         supportsAcceleration={isAccelerableQuant(item.quantization) || !!liteRTMeta}

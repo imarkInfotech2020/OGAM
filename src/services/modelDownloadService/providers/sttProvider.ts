@@ -83,7 +83,7 @@ export const sttProvider: DownloadProvider = {
     const entry = findEntry(downloadId(id));
     if (!entry) return;
     await backgroundDownloadService.resumeDownload(entry.downloadId);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+    useDownloadStore.getState().setStatus(entry.downloadId, 'running');
     backgroundDownloadService.startProgressPolling();
   },
 

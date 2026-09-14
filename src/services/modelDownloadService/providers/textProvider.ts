@@ -126,10 +126,10 @@ export const textProvider: DownloadProvider = {
     const entry = findEntry(keyOf(id));
     if (!entry) return;
     await backgroundDownloadService.resumeDownload(entry.downloadId);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+    useDownloadStore.getState().setStatus(entry.downloadId, 'running');
     if (entry.mmProjDownloadId && entry.mmProjStatus === 'paused') {
       await backgroundDownloadService.resumeDownload(entry.mmProjDownloadId);
-      useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'pending');
+      useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'running');
     }
     backgroundDownloadService.startProgressPolling();
   },

@@ -34,6 +34,8 @@ import logger from '../../utils/logger';
 import { RemoteModelOptionsSection } from '../../components/models/RemoteModelOptionsSection';
 import { useActiveRemoteModelLabels } from '../../hooks/useActiveRemoteModelLabels';
 import { remoteServerManager } from '../../services/remoteServerManager';
+import { modelDownloadService } from '../../services/modelDownloadService';
+import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';
 
 const ENGLISH_MODELS = WHISPER_MODELS.filter(m => m.lang === 'en');
 const MULTI_MODELS = WHISPER_MODELS.filter(m => m.lang === 'multi');
@@ -48,6 +50,9 @@ interface WhisperCardProps {
   presentModelIds: string[];
   downloading: boolean;
   queued: boolean;
+  paused: boolean;
+  canPause: boolean;
+  canResume: boolean;
   downloadProgress: number;
   downloadBytes?: {
     downloaded: number;
@@ -57,6 +62,8 @@ interface WhisperCardProps {
   onDownload: (id: string) => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onPause: (id: string) => void;
+  onResume: (id: string) => void;
 }
 
 const WhisperCard: React.FC<WhisperCardProps> = ({
@@ -66,11 +73,16 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
   presentModelIds,
   downloading,
   queued,
+  paused,
+  canPause,
+  canResume,
   downloadProgress,
   downloadBytes,
   onDownload,
   onSelect,
   onDelete,
+  onPause,
+  onResume,
 }) => {
   const present = presentModelIds.includes(model.id);
   const active = downloadedModelId === model.id;
@@ -97,12 +109,13 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
       isActive={active}
       isDownloading={downloading}
       isQueued={queued}
+      isPaused={paused}
       downloadProgress={downloadProgress}
       downloadBytes={visibleDownloadBytes}
       testID={`transcription-model-card-${index}`}
       // Present but not active → tap to use; not present → tap to download.
       onPress={
-        downloading
+        downloading || paused
           ? undefined
           : present
           ? active
@@ -111,8 +124,10 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
           : () => onDownload(model.id)
       }
       onDownload={
-        !present && !downloading ? () => onDownload(model.id) : undefined
+        !present && !downloading && !paused ? () => onDownload(model.id) : undefined
       }
+      onPause={canPause ? () => onPause(model.id) : undefined}
+      onResume={canResume ? () => onResume(model.id) : undefined}
       onDelete={present ? () => onDelete(model.id) : undefined}
     />
   );
@@ -228,6 +243,9 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
         presentModelIds={presentModelIds}
         downloading={state?.downloading ?? false}
         queued={state?.queued ?? false}
+        paused={state?.paused ?? false}
+        canPause={state?.canPause ?? false}
+        canResume={state?.canResume ?? false}
         downloadProgress={state?.progress ?? 0}
         downloadBytes={
           state?.totalBytes
@@ -241,6 +259,8 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
         onDownload={handleDownload}
         onSelect={handleSelect}
         onDelete={handleDelete}
+        onPause={id => { modelDownloadService.pause(uniformDownloadId('stt', id)).catch(error => logger.error('[Transcription] pause failed:', error)); }}
+        onResume={id => { modelDownloadService.resume(uniformDownloadId('stt', id)).catch(error => logger.error('[Transcription] resume failed:', error)); }}
       />
     );
   };

@@ -297,6 +297,7 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
 interface ModelCardActionsProps {
   isDownloaded: boolean | undefined;
   isDownloading: boolean | undefined;
+  isPaused?: boolean;
   isActive: boolean | undefined;
   isCompatible: boolean;
   incompatibleReason: string | undefined;
@@ -307,6 +308,8 @@ interface ModelCardActionsProps {
   onRepairVision: (() => void) | undefined;
   isRepairingVision?: boolean;
   onCancel: (() => void) | undefined;
+  onPause?: () => void;
+  onResume?: () => void;
 }
 
 const HIT_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
@@ -352,15 +355,19 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
 }
 
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
-  isDownloaded, isDownloading, isActive, isCompatible,
-  testID, onDownload, onSelect, onDelete, onRepairVision, isRepairingVision, onCancel,
+  isDownloaded, isDownloading, isPaused, isActive, isCompatible,
+  testID, onDownload, onSelect, onDelete, onRepairVision, isRepairingVision, onCancel, onPause, onResume,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const tid = (suffix: string) => testID ? `${testID}-${suffix}` : undefined;
 
-  if (isDownloading && onCancel) {
-    return <ActionButton icon="x" color={colors.error} haptic="notificationWarning" onPress={onCancel} testID={tid('cancel')} styles={styles} />;
+  if (isDownloading || isPaused) {
+    return <>
+      {isPaused && onResume && <ActionButton icon="play" color={colors.primary} haptic="impactLight" onPress={onResume} testID={tid('resume')} accessibilityLabel="Resume download" styles={styles} />}
+      {isDownloading && onPause && <ActionButton icon="pause" color={colors.primary} haptic="impactLight" onPress={onPause} testID={tid('pause')} accessibilityLabel="Pause download" styles={styles} />}
+      {onCancel && <ActionButton icon="x" color={colors.error} haptic="notificationWarning" onPress={onCancel} testID={tid('cancel')} accessibilityLabel="Cancel download" styles={styles} />}
+    </>;
   }
   if (!isDownloaded && onDownload) {
     return <ActionButton icon="download" color={colors.primary} haptic="impactLight" onPress={onDownload} disabled={!isCompatible} testID={tid('download')} styles={styles} />;
