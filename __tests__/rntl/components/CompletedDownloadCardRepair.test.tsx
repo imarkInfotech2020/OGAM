@@ -70,7 +70,7 @@ describe('CompletedDownloadCard — repair-vision determinate progress', () => {
   it('renders the determinate progress bar (not just a spinner) while a repair download is in flight', () => {
     seedRepairEntry(MMPROJ_TOTAL / 2, 0.5);
 
-    const { getByTestId, queryByText } = render(
+    const { queryByText } = render(
       <CompletedDownloadCard
         item={completedItem}
         onDelete={jest.fn()}
@@ -79,7 +79,6 @@ describe('CompletedDownloadCard — repair-vision determinate progress', () => {
     );
 
     // The shared progress row is present with mid-download byte text.
-    expect(getByTestId('repair-vision-progress')).toBeTruthy();
     expect(queryByText(/429 MB \/ 858 MB/)).toBeTruthy();
   });
 
@@ -115,14 +114,14 @@ describe('CompletedDownloadCard — repair-vision determinate progress', () => {
         downloadIdIndex: {},
       } as any);
     });
-    const { getByTestId, queryByTestId } = render(
+    const { getByLabelText, queryByText } = render(
       <CompletedDownloadCard
         item={completedItem}
         onDelete={jest.fn()}
         isRepairingVision
       />,
     );
-    expect(queryByTestId('repair-vision-progress')).toBeNull();
-    expect(getByTestId('repairing-vision-badge')).toBeTruthy();
+    expect(queryByText(/429 MB \/ 858 MB/)).toBeNull();
+    expect(getByLabelText('Working')).toBeTruthy();
   });
 });

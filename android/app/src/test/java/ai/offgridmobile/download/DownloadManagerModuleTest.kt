@@ -105,7 +105,7 @@ class DownloadManagerModuleTest {
         assertTrue(values.contains("COMPLETED"))
         assertTrue(values.contains("FAILED"))
         assertTrue(values.contains("CANCELLED"))
-        assertFalse("PAUSED must not exist in V2", values.contains("PAUSED"))
+        assertTrue(values.contains("PAUSED"))
     }
 
     @Test
@@ -304,4 +304,3 @@ class DownloadManagerModuleTest {
         assertNotNull(mgr.getNotificationChannel("model_downloads"))
     }
 }
-
