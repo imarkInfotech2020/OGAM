@@ -89,5 +89,15 @@ export function serializeMessageContext(
 export function projectMessageTurn(
   input: SyncedMessageTurnInput,
 ): SyncedMessageTurnProjection | null {
-  return projectSyncedMessageTurn(input);
+  // Older desktop turns can carry text and media references as content parts. The shared-file
+  // materializer attaches the media once the message exists; keep its text in the chat projection.
+  const content = Array.isArray(input.content)
+    ? input.content
+        .filter((part): part is { type: 'text'; text: string } =>
+          typeof part === 'object' && part !== null &&
+          part.type === 'text' && typeof part.text === 'string')
+        .map(part => part.text)
+        .join('\n')
+    : input.content;
+  return projectSyncedMessageTurn({ ...input, content });
 }
