@@ -105,7 +105,7 @@ class ImageGenerationService {
   }
 
   /** Own the terminal error state and its retry actions. */
-  private _fail(error: string, opts?: { cause?: unknown }): null {
+  private _fail(error: string, opts?: { cause?: unknown; remote?: boolean }): null {
     this.updateState({
       phase: 'error',
       progress: null,
@@ -121,7 +121,7 @@ class ImageGenerationService {
     const memoryPressure = reasonFromLoadError(error) === 'insufficient-memory';
     const onRetry = this._lastParams
       ? async () => {
-          if (memoryPressure)
+          if (memoryPressure && !opts?.remote)
             await activeModelService.ejectAll().catch(() => {});
           await this.generateImage(this._lastParams as GenerateImageParams);
         }
@@ -142,6 +142,8 @@ class ImageGenerationService {
     // discriminant survives; `message` keeps the user-facing wrapped text.
     reportModelFailure('image', opts?.cause ?? error, {
       message: error,
+      title: opts?.remote ? 'Remote image error' : undefined,
+      remote: opts?.remote,
       onRetry,
       onLoadAnyway,
     });
@@ -356,12 +358,12 @@ class ImageGenerationService {
     if (remoteServer?.mediaModels?.image) {
       return runRemoteImageGeneration(params, remoteServer, {
         updateState: state => this.updateState(state),
-        fail: message => this._fail(message),
+        fail: (message, cause) => this._fail(message, { cause, remote: true }),
         isCancelled: () => this.cancelRequested,
         setRequest: controller => {
           this.remoteRequest = controller;
         },
-      });
+      }, opts);
     }
     const { settings, activeImageModelId, downloadedImageModels } =
       useAppStore.getState();

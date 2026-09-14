@@ -436,23 +436,11 @@ export async function handleImageGenerationFn(
   // The service reads imageSteps/imageGuidanceScale FRESH from useAppStore.getState() at gen time,
   // exactly as it already does for width/height (which is why size applied immediately and these
   // didn't). Passing nothing here makes all four tunables read from the one fresh source.
-  const result = await imageGenerationService.generateImage({
+  await imageGenerationService.generateImage({
     prompt,
     conversationId,
     previewInterval: 2,
   });
-  if (
-    !result &&
-    deps.imageGenState.error &&
-    !deps.imageGenState.error.includes('cancelled')
-  ) {
-    deps.setAlertState(
-      showAlert(
-        'Error',
-        `Image generation failed: ${deps.imageGenState.error}`,
-      ),
-    );
-  }
   // Image gen finishes outside generationService — release any queued messages.
   generationService.drainQueue();
 }

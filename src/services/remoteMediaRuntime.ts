@@ -1,6 +1,8 @@
 import { remoteServerManager } from './remoteServerManager';
 import type { RemoteMediaModelIds, RemoteServer } from '../types';
 import { REMOTE_FETCH_REDIRECT_POLICY, remoteAuthorizationHeaders } from './remoteTransportPolicy';
+import { remoteHttpErrorMessage } from './httpClient';
+import { OverridableMemoryError } from './modelLoadErrors';
 
 export interface RemoteImageResult {
   base64?: string;
@@ -14,12 +16,13 @@ export interface RemoteVoiceResult {
 
 export interface RemoteMediaRequestOptions {
   signal?: AbortSignal;
+  override?: boolean;
 }
 
 function endpoint(server: RemoteServer, path: string): string {
   let base = server.endpoint;
   while (base.endsWith('/')) base = base.slice(0, -1);
-  return `${base}${path}`;
+  return `${base}${base.endsWith('/v1') && path.startsWith('/v1/') ? path.slice(3) : path}`;
 }
 
 async function request<T>(
@@ -50,7 +53,17 @@ async function request<T>(
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      throw new Error(detail || `Remote server returned HTTP ${response.status}`);
+      const message = remoteHttpErrorMessage(detail, response.status);
+      try {
+        const body = JSON.parse(detail) as { error?: { code?: unknown }; code?: unknown };
+        const marker = 'OFFGRID_IMAGE_MEMORY_LIMIT:';
+        if ((body.error?.code ?? body.code) === 'OFFGRID_IMAGE_MEMORY_LIMIT' || message.includes(marker)) {
+          throw Object.assign(new OverridableMemoryError(message.replace(marker, '').trim()), { remote: true });
+        }
+      } catch (error) {
+        if (error instanceof OverridableMemoryError) throw error;
+      }
+      throw new Error(message);
     }
     // Keep caller cancellation attached until the response body is
     // consumed. A successful header is not a completed image/audio transfer.
@@ -79,26 +92,37 @@ export const remoteMediaRuntime = {
     input: { prompt: string; size?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteImageResult> {
+    const openRouter = new URL(server.endpoint).hostname === 'openrouter.ai';
     const payload = await request({
       server,
-      path: '/v1/images/generations',
+      path: openRouter ? '/v1/chat/completions' : '/v1/images/generations',
       init: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: requiredModel(server, 'image'),
-          prompt: input.prompt,
-          size: input.size ?? '1024x1024',
-          response_format: 'b64_json',
-        }),
+        body: JSON.stringify(openRouter
+          ? {
+              model: requiredModel(server, 'image'),
+              messages: [{ role: 'user', content: input.prompt }],
+              modalities: ['image', 'text'],
+              stream: false,
+            }
+          : {
+              model: requiredModel(server, 'image'),
+              prompt: input.prompt,
+              size: input.size ?? '1024x1024',
+              response_format: 'b64_json',
+              ...(options.override ? { allow_unsafe_memory_override: true } : {}),
+            }),
       },
       signal: options.signal,
     }, response => response.json() as Promise<{
       data?: Array<{ b64_json?: string; url?: string }>;
+      choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: string } }> } }>;
     }>);
     const image = payload.data?.[0];
-    if (!image?.b64_json && !image?.url) throw new Error('Remote server returned no image');
-    return { base64: image.b64_json, url: image.url };
+    const imageUrl = image?.url ?? payload.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!image?.b64_json && !imageUrl) throw new Error('Remote server returned no image');
+    return { base64: image?.b64_json, url: imageUrl };
   },
 
   async transcribe(

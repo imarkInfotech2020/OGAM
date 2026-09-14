@@ -23,7 +23,7 @@ const waveStyles = css.create({
 });
 
 interface LoadingDotsProps {
-  /** Dot colour. Defaults to the accent, which is what a surface uses on its own background. */
+  /** Kept for existing callers. The dots always use the theme accent. */
   color?: string;
   /** Diameter in points. The dots stay circular at any size. */
   size?: number;
@@ -39,7 +39,6 @@ interface LoadingDotsProps {
  * Every busy state renders this, and the animation is defined once.
  */
 export const LoadingDots: React.FC<LoadingDotsProps> = ({
-  color,
   size = 6,
   style,
   testID,
@@ -51,7 +50,7 @@ export const LoadingDots: React.FC<LoadingDotsProps> = ({
     width: size,
     height: size,
     borderRadius: size / 2,
-    backgroundColor: color ?? colors.primary,
+    backgroundColor: colors.primary,
   };
 
   return (

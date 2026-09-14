@@ -15,6 +15,12 @@ interface Props {
   onSelect?: () => void;
 }
 
+function isTransportFailure(reason: unknown): boolean {
+  if (!(reason instanceof Error)) return false;
+  return reason.name === 'AbortError' ||
+    /network request failed|failed to fetch|fetch failed|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH/i.test(reason.message);
+}
+
 /** Shared remote rows for image, transcription, and voice model pickers. */
 export const RemoteModelOptionsSection: React.FC<Props> = ({
   category,
@@ -62,8 +68,11 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
                 );
                 onSelect?.();
               } catch (reason) {
+                const serverName = servers.find(server => server.id === option.serverId)?.name ?? 'Remote server';
                 setError(
-                  reason instanceof Error
+                  isTransportFailure(reason)
+                    ? `Could not reach ${serverName}. Models on this phone still work. Check the server address and network.`
+                    : reason instanceof Error
                     ? reason.message
                     : 'The remote model could not be selected.',
                 );
