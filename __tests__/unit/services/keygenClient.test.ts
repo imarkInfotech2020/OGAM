@@ -39,7 +39,7 @@ describe('keygenClient', () => {
       expect(out).toEqual({
         valid: true,
         code: 'VALID',
-        license: { id: 'lic-1', expiry: null, metadata: { email: 'a@b.co' }, name: 'n' },
+        license: { id: 'lic-1', expiry: null, maxMachines: null, metadata: { email: 'a@b.co' }, name: 'n' },
       });
     });
 
