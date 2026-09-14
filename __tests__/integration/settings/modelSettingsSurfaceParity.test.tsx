@@ -122,14 +122,14 @@ describe('model settings surface parity', () => {
     expect(modelSettings.getByText('Auto (unrestricted)')).toBeTruthy();
   });
 
-  it('shows the same selected STT model on both settings surfaces', () => {
+  it('shows the selected STT model in Models, outside chat settings', () => {
     useWhisperStore.setState({ downloadedModelId: 'base.en' });
     const chatSettings = render(
       <GenerationSettingsModal visible onClose={() => {}} />,
     );
 
     fireEvent.press(chatSettings.getByTestId('modal-transcription-accordion'));
-    expect(chatSettings.getByText('Base')).toBeTruthy();
+    expect(chatSettings.queryByText('Base')).toBeNull();
     chatSettings.unmount();
 
     const modelSettings = renderModelSettings();

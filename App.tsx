@@ -81,7 +81,14 @@ const ensureRemoteServerStoreHydrated = async () => {
 export function DevSyncStrip() {
   const [showHistory, setShowHistory] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const logs = useDebugLogsStore(state => state.logs);
+  const latest = useDebugLogsStore(state => {
+    for (let i = state.logs.length - 1; i >= 0; i--) {
+      if (/\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]/i.test(state.logs[i].message)) {
+        return state.logs[i];
+      }
+    }
+    return undefined;
+  });
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -90,9 +97,6 @@ export function DevSyncStrip() {
     return () => clearInterval(timer);
   }, []);
 
-  const latest = [...logs].reverse().find(log =>
-    /\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]/i.test(log.message),
-  );
   const active = latest && now - latest.timestamp < 30000;
   const operation = active
     ? latest.message.replace(/^.*?\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]\s*/i, '')
