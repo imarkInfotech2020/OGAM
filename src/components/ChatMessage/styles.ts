@@ -11,9 +11,9 @@ import { TYPOGRAPHY, SPACING, FONTS } from '../../constants';
  */
 const MESSAGE_MAX_WIDTH = '85%' as const;
 
-const createBubbleStyles = (colors: ThemeColors) => ({
+const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
-    marginVertical: 8,
+    marginVertical: 6,
     paddingHorizontal: 16,
   },
   userContainer: {
@@ -130,6 +130,7 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     borderRadius: 8,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
+    ...shadows.small,
   },
   bubbleWithAttachments: {
     paddingHorizontal: 8,
@@ -440,8 +441,8 @@ const createActionStyles = (colors: ThemeColors) => ({
   },
 });
 
-export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
-  ...createBubbleStyles(colors),
+export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  ...createBubbleStyles(colors, shadows),
   ...createThinkingStyles(colors),
   ...createActionStyles(colors),
 });

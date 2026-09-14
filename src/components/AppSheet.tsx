@@ -310,7 +310,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   return (
     <Modal
-      visible={modalVisible}
+      visible={visible && modalVisible}
       transparent
       animationType="none"
       onRequestClose={dismiss}
@@ -326,6 +326,17 @@ export const AppSheet: React.FC<AppSheetProps> = ({
             style={[styles.backdrop, { opacity: backdropOpacity }]}
           />
         </TouchableWithoutFeedback>
+
+        {keyboardHeight > 0 && (
+          <View
+            testID="app-sheet-keyboard-underlay"
+            pointerEvents="none"
+            style={[
+              styles.keyboardUnderlay,
+              { height: keyboardHeight, backgroundColor: levelTokens.backgroundColor },
+            ]}
+          />
+        )}
 
         {/* Sheet */}
         <Animated.View
