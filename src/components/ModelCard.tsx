@@ -296,11 +296,12 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   const credibility = resolveCredibility(model, downloadedModel);
   const credibilityInfo = credibility ? CREDIBILITY_LABELS[credibility.source] : null;
   const quantization = file?.quantization ?? downloadedModel?.quantization;
-  const actionsInProgress = !!compact && (isDownloading || isPaused);
+  const actionsInProgress = !!compact && (isDownloading || isQueued || isPaused);
   const actionButtons = !failedState && (
     <ModelCardActions
       isDownloaded={isDownloaded}
       isDownloading={isDownloading}
+      isQueued={isQueued}
       isPaused={isPaused}
       isActive={isActive}
       isCompatible={isCompatible}

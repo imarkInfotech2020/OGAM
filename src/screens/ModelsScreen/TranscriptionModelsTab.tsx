@@ -15,7 +15,6 @@ import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { ModelCard } from '../../components';
-import { TranscriptionLanguageSelect } from '../../components/TranscriptionLanguageSelect';
 import {
   CustomAlert,
   showAlert,
@@ -53,6 +52,7 @@ interface WhisperCardProps {
   paused: boolean;
   canPause: boolean;
   canResume: boolean;
+  canCancel: boolean;
   downloadProgress: number;
   downloadBytes?: {
     downloaded: number;
@@ -64,6 +64,7 @@ interface WhisperCardProps {
   onDelete: (id: string) => void;
   onPause: (id: string) => void;
   onResume: (id: string) => void;
+  onCancel: (id: string) => void;
 }
 
 const WhisperCard: React.FC<WhisperCardProps> = ({
@@ -76,6 +77,7 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
   paused,
   canPause,
   canResume,
+  canCancel,
   downloadProgress,
   downloadBytes,
   onDownload,
@@ -83,6 +85,7 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
   onDelete,
   onPause,
   onResume,
+  onCancel,
 }) => {
   const present = presentModelIds.includes(model.id);
   const active = downloadedModelId === model.id;
@@ -90,7 +93,7 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
   // Text/Image cards ("X MB / Y MB"); for a queued model this reads "0 B / 142 MB".
   const totalBytes = model.size * 1024 * 1024;
   const visibleDownloadBytes =
-    downloading || queued
+    downloading || queued || paused
       ? downloadBytes ?? {
           downloaded: Math.round(downloadProgress * totalBytes),
           total: totalBytes,
@@ -115,7 +118,7 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
       testID={`transcription-model-card-${index}`}
       // Present but not active → tap to use; not present → tap to download.
       onPress={
-        downloading || paused
+        downloading || queued || paused
           ? undefined
           : present
           ? active
@@ -124,22 +127,21 @@ const WhisperCard: React.FC<WhisperCardProps> = ({
           : () => onDownload(model.id)
       }
       onDownload={
-        !present && !downloading && !paused ? () => onDownload(model.id) : undefined
+        !present && !downloading && !queued && !paused ? () => onDownload(model.id) : undefined
       }
       onPause={canPause ? () => onPause(model.id) : undefined}
       onResume={canResume ? () => onResume(model.id) : undefined}
+      onCancel={canCancel ? () => onCancel(model.id) : undefined}
       onDelete={present ? () => onDelete(model.id) : undefined}
     />
   );
 };
 
 interface TranscriptionModelsTabProps {
-  showLanguageSelector?: boolean;
   showRemoteModels?: boolean;
 }
 
 export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
-  showLanguageSelector = true,
   showRemoteModels = true,
 }) => {
   const { colors } = useTheme();
@@ -246,6 +248,7 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
         paused={state?.paused ?? false}
         canPause={state?.canPause ?? false}
         canResume={state?.canResume ?? false}
+        canCancel={state?.canCancel ?? false}
         downloadProgress={state?.progress ?? 0}
         downloadBytes={
           state?.totalBytes
@@ -261,6 +264,7 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
         onDelete={handleDelete}
         onPause={id => { modelDownloadService.pause(uniformDownloadId('stt', id)).catch(error => logger.error('[Transcription] pause failed:', error)); }}
         onResume={id => { modelDownloadService.resume(uniformDownloadId('stt', id)).catch(error => logger.error('[Transcription] resume failed:', error)); }}
+        onCancel={id => { modelDownloadService.cancel(uniformDownloadId('stt', id)).catch(error => logger.error('[Transcription] cancel failed:', error)); }}
       />
     );
   };
@@ -288,10 +292,6 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
         <TouchableOpacity onPress={clearError}>
           <Text style={styles.error}>{whisperError} (tap to dismiss)</Text>
         </TouchableOpacity>
-      )}
-
-      {showLanguageSelector && (
-        <TranscriptionLanguageSelect testID="models-transcription-language" />
       )}
 
       {showRemoteModels && (

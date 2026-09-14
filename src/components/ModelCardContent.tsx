@@ -297,6 +297,7 @@ export const ModelInfoBadges: React.FC<ModelInfoBadgesProps> = ({
 interface ModelCardActionsProps {
   isDownloaded: boolean | undefined;
   isDownloading: boolean | undefined;
+  isQueued?: boolean;
   isPaused?: boolean;
   isActive: boolean | undefined;
   isCompatible: boolean;
@@ -355,14 +356,14 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
 }
 
 export const ModelCardActions: React.FC<ModelCardActionsProps> = ({
-  isDownloaded, isDownloading, isPaused, isActive, isCompatible,
+  isDownloaded, isDownloading, isQueued, isPaused, isActive, isCompatible,
   testID, onDownload, onSelect, onDelete, onRepairVision, isRepairingVision, onCancel, onPause, onResume,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const tid = (suffix: string) => testID ? `${testID}-${suffix}` : undefined;
 
-  if (isDownloading || isPaused) {
+  if (isDownloading || isQueued || isPaused) {
     return <>
       {isPaused && onResume && <ActionButton icon="play" color={colors.primary} haptic="impactLight" onPress={onResume} testID={tid('resume')} accessibilityLabel="Resume download" styles={styles} />}
       {isDownloading && onPause && <ActionButton icon="pause" color={colors.primary} haptic="impactLight" onPress={onPause} testID={tid('pause')} accessibilityLabel="Pause download" styles={styles} />}

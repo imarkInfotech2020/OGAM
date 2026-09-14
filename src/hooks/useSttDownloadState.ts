@@ -28,6 +28,7 @@ interface SttDownloadEntry {
   paused: boolean;
   canPause: boolean;
   canResume: boolean;
+  canCancel: boolean;
   currentBytes?: number;
   totalBytes?: number;
   bytesPerSecond?: number;
@@ -59,6 +60,7 @@ function deriveSttDownloadState(
       paused: e.status === 'paused',
       canPause: !!e.downloadId && isDownloadingStatus(e.status),
       canResume: !!e.downloadId && e.status === 'paused',
+      canCancel: !!e.downloadId && (isActiveStatus(e.status) || e.status === 'paused'),
       currentBytes: e.bytesDownloaded + (e.mmProjBytesDownloaded ?? 0),
       totalBytes: e.combinedTotalBytes || e.totalBytes || undefined,
       bytesPerSecond: e.bytesPerSecond,
@@ -74,6 +76,7 @@ function deriveSttDownloadState(
       paused: false,
       canPause: false,
       canResume: false,
+      canCancel: false,
     };
   }
   const anyDownloading = Object.values(byId).some((s) => s.active);
