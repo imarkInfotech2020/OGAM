@@ -17,7 +17,8 @@ describe('development sync strip', () => {
     expect(screen.getByText(/Sync: chat repair start/)).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('dev-sync-strip'));
-    expect(screen.getByText('Sync Operations')).toBeTruthy();
+    expect(screen.getByText('Sync Debug Logs')).toBeTruthy();
+    fireEvent.press(screen.getByText('Startup'));
     expect(screen.getByText('[BOOT-SYNC] chat repair start')).toBeTruthy();
 
     view.unmount();
