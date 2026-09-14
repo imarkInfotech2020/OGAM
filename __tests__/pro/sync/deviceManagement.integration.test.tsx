@@ -405,6 +405,7 @@ describe('Pro mobile saved-device management journey', () => {
         ).toBeTruthy(),
       { timeout: 10_000 },
     );
+    expect(ui.getByTestId(`sync-send-model-${remoteDevice.id}`).props.accessibilityState.disabled).toBe(false);
     await waitFor(() => {
       const failure = ui!.queryByTestId('qr-scanner-status');
       if (failure) throw new Error(`scanner failed: ${failure.props.children}`);
