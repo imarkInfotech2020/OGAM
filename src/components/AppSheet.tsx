@@ -327,6 +327,17 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           />
         </TouchableWithoutFeedback>
 
+        {keyboardHeight > 0 && (
+          <View
+            testID="app-sheet-keyboard-underlay"
+            pointerEvents="none"
+            style={[
+              styles.keyboardUnderlay,
+              { height: keyboardHeight, backgroundColor: levelTokens.backgroundColor },
+            ]}
+          />
+        )}
+
         {/* Sheet */}
         <Animated.View
           style={[

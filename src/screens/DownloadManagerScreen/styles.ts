@@ -113,6 +113,24 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   progressContainer: {
     marginBottom: SPACING.sm,
   },
+  transferRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: SPACING.sm,
+  },
+  transferProgressBar: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  transferActions: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+  },
+  transferCaptionRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: SPACING.xs,
+  },
   progressBarBackground: {
     height: 6,
     backgroundColor: colors.surfaceLight,
@@ -240,39 +258,11 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     gap: SPACING.sm,
     marginLeft: SPACING.sm,
   },
-  retryButton: {
-    backgroundColor: `${colors.primary}15`,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 6,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: SPACING.xs,
-  },
   transferIconButton: {
     width: 32,
     height: 32,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-  },
-  retryButtonText: {
-    ...TYPOGRAPHY.meta,
-    color: colors.primary,
-    fontWeight: '400' as const,
-  },
-  removeButton: {
-    backgroundColor: `${colors.error}15`,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: 6,
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: SPACING.xs,
-  },
-  removeButtonText: {
-    ...TYPOGRAPHY.meta,
-    color: colors.error,
-    fontWeight: '400' as const,
   },
   statusIconRow: {
     flexDirection: 'row' as const,

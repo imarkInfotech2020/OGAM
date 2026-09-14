@@ -772,6 +772,7 @@ export interface DownloadRow {
   status?: string;
   bytesDownloaded?: number;
   totalBytes?: number;
+  reason?: string;
 }
 
 export interface DownloadFake {

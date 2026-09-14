@@ -183,18 +183,18 @@ describe('startRecording', () => {
     expect(audioRecorderService.isCurrentlyRecording()).toBe(true);
   });
 
-  it('swallows errors from stopping a prior recording (.catch branch)', async () => {
+  it('does not start another recorder when stopping the prior one fails', async () => {
     Platform.OS = 'ios';
     (audioRecorderService as any).isRecording = true;
-    // stop() throws synchronously -> stopRecording rejects -> .catch swallows it.
+    // Native stop throws, so a new recorder must not start.
     (audioRecorderService as any).recorder = {
       stop: jest.fn(() => {
         throw new Error('stop failed');
       }),
     };
 
-    await expect(audioRecorderService.startRecording()).resolves.toBeUndefined();
-    expect(mockStart).toHaveBeenCalledTimes(1);
+    await expect(audioRecorderService.startRecording()).rejects.toThrow('stop failed');
+    expect(mockStart).not.toHaveBeenCalled();
   });
 
   it('throws and resets state when native start reports a non-success status', async () => {
@@ -263,8 +263,8 @@ describe('stopRecording', () => {
     await expect(audioRecorderService.stopRecording()).rejects.toThrow(
       'Recording failed to save',
     );
-    // State is still reset even on the save-failure path.
-    expect(audioRecorderService.isCurrentlyRecording()).toBe(false);
+    // The native recorder may still be active after a failed stop.
+    expect(audioRecorderService.isCurrentlyRecording()).toBe(true);
   });
 });
 

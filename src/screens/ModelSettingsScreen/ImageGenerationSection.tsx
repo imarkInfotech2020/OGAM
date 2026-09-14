@@ -5,6 +5,7 @@ import { SliderSetting } from '../../components/SliderSetting';
 import { Button } from '../../components/Button';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
+import { DEFAULT_SETTINGS } from '../../stores/appStore';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
 import {
   defaultImageSteps,
@@ -217,7 +218,7 @@ export const ImageGenerationSection: React.FC = () => {
         // Single source of truth for the floor: SD-class models render garbage below the
         // sweet spot (256), so both this screen and the chat modal (ImageQualitySliders) share
         // the SAME min/fallback — the surfaces can't diverge and a sub-256 value is unreachable.
-        value={Math.max(SWEET_SPOT_SIZE, settings?.imageWidth ?? SWEET_SPOT_SIZE)}
+        value={Math.max(SWEET_SPOT_SIZE, settings?.imageWidth ?? DEFAULT_SETTINGS.imageWidth)}
         min={SWEET_SPOT_SIZE} max={512} step={64}
         formatValue={(v) => `${v}x${v}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}

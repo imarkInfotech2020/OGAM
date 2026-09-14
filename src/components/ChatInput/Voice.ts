@@ -70,7 +70,7 @@ function createWhisperReadiness(
 
 function useRemoteTranscriptionAvailable(): boolean {
   return useRemoteServerStore(state => {
-    const server = state.servers.find(item => item.id === state.activeServerId);
+    const server = state.servers.find(item => item.id === state.activeRemoteMediaServerIds.transcription);
     return !!server?.mediaModels?.transcription;
   });
 }

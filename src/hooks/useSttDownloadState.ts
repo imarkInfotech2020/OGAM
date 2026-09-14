@@ -25,6 +25,10 @@ interface SttDownloadEntry {
   downloading: boolean;
   /** Waiting for a concurrency slot (show a clock, not 0%). */
   queued: boolean;
+  paused: boolean;
+  canPause: boolean;
+  canResume: boolean;
+  canCancel: boolean;
   currentBytes?: number;
   totalBytes?: number;
   bytesPerSecond?: number;
@@ -53,6 +57,10 @@ function deriveSttDownloadState(
       active: isActiveStatus(e.status),
       downloading: isDownloadingStatus(e.status),
       queued: isQueuedStatus(e.status),
+      paused: e.status === 'paused',
+      canPause: !!e.downloadId && isDownloadingStatus(e.status),
+      canResume: !!e.downloadId && e.status === 'paused',
+      canCancel: !!e.downloadId && (isActiveStatus(e.status) || e.status === 'paused'),
       currentBytes: e.bytesDownloaded + (e.mmProjBytesDownloaded ?? 0),
       totalBytes: e.combinedTotalBytes || e.totalBytes || undefined,
       bytesPerSecond: e.bytesPerSecond,
@@ -65,6 +73,10 @@ function deriveSttDownloadState(
       active: true,
       downloading: p > 0,
       queued: p === 0,
+      paused: false,
+      canPause: false,
+      canResume: false,
+      canCancel: false,
     };
   }
   const anyDownloading = Object.values(byId).some((s) => s.active);

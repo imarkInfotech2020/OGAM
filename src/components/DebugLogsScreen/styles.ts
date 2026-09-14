@@ -49,6 +49,10 @@ export function createStyles(_colors: ThemeColors, _shadows: ThemeShadows) {
       borderRadius: 6,
       gap: 4,
     },
+    filterSelected: {
+      borderWidth: 1,
+      borderColor: colors.primary,
+    },
     actionIcon: {
       marginRight: 4,
     },

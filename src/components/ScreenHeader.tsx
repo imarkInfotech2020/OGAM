@@ -76,8 +76,8 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   tabHeader: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    minHeight: 0,
+    paddingVertical: SPACING.xs,
+    minHeight: 52,
   },
   backButton: { padding: SPACING.xs },
   title: { ...TYPOGRAPHY.h2, color: colors.text, flex: 1 },

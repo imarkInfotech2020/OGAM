@@ -152,7 +152,6 @@ class ImageGenerationService {
 
   private _setEnhancementState(
     params: GenerateImageParams,
-    steps: number,
     status: string,
   ): void {
     this.updateState({
@@ -161,7 +160,7 @@ class ImageGenerationService {
       conversationId: params.conversationId || null,
       status,
       previewPath: null,
-      progress: { step: 0, totalSteps: steps },
+      progress: null,
       error: null,
       result: null,
     });
@@ -169,10 +168,9 @@ class ImageGenerationService {
 
   private async _enhancePrompt(
     params: GenerateImageParams,
-    steps: number,
   ): Promise<string> {
     return enhanceImagePrompt(params, status =>
-      this._setEnhancementState(params, steps, status),
+      this._setEnhancementState(params, status),
     );
   }
 
@@ -356,12 +354,7 @@ class ImageGenerationService {
       .getState()
       .getActiveRemoteMediaServer('image');
     if (remoteServer?.mediaModels?.image) {
-      const remoteSteps = resolveMobileImageParameters(
-        { id: remoteServer.mediaModels.image },
-        useAppStore.getState().settings,
-        params,
-      ).steps;
-      const enhancedPrompt = await this._enhancePrompt(params, remoteSteps);
+      const enhancedPrompt = await this._enhancePrompt(params);
       if (this.cancelRequested) {
         this.resetState();
         return null;
@@ -402,12 +395,12 @@ class ImageGenerationService {
         ? 'Preparing prompt enhancement...'
         : 'Preparing image generation...',
       previewPath: null,
-      progress: { step: 0, totalSteps: steps },
+      progress: null,
       error: null,
       result: null,
     });
 
-    const enhancedPrompt = await this._enhancePrompt(params, steps);
+    const enhancedPrompt = await this._enhancePrompt(params);
     logger.log(
       '[ImageGen] enhanceImagePrompts setting:',
       settings.enhanceImagePrompts,
@@ -431,7 +424,7 @@ class ImageGenerationService {
       conversationId: params.conversationId || null,
       status: 'Preparing image generation...',
       previewPath: null,
-      progress: { step: 0, totalSteps: steps },
+      progress: null,
       error: null,
       result: null,
     });

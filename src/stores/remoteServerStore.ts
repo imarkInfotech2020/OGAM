@@ -355,6 +355,16 @@ export const useRemoteServerStore = create<RemoteServerState>()(
                   }
                   : candidate,
               ),
+              ...(result.modelManagement === 'offgrid-desktop-v1'
+                ? {
+                    ...(state.activeServerId === serverId
+                      ? { activeRemoteTextModelId: result.mediaModels?.text ?? null }
+                      : {}),
+                    ...(state.activeRemoteMediaServerIds.image === serverId
+                      ? { activeRemoteImageModelId: result.mediaModels?.image ?? null }
+                      : {}),
+                  }
+                : {}),
             }));
           }
 

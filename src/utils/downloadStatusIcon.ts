@@ -11,10 +11,11 @@ export type DownloadStatusIcon = 'clock' | 'alert-circle' | 'refresh-cw' | 'wifi
 
 /** The queued indicator, exported so a boolean-`queued` caller (ModelCard) uses the same glyph. */
 export const QUEUED_ICON: DownloadStatusIcon = 'clock';
+export const PAUSED_ICON: DownloadStatusIcon = 'pause';
 
 export function downloadStatusIcon(status: string): DownloadStatusIcon | null {
   if (status === 'pending') return QUEUED_ICON;
-  if (status === 'paused') return 'pause';
+  if (status === 'paused') return PAUSED_ICON;
   if (status === 'failed') return 'alert-circle';
   if (status === 'retrying') return 'refresh-cw';
   if (status === 'waiting_for_network') return 'wifi-off';

@@ -11,9 +11,9 @@ import { TYPOGRAPHY, SPACING, FONTS } from '../../constants';
  */
 const MESSAGE_MAX_WIDTH = '85%' as const;
 
-const createBubbleStyles = (colors: ThemeColors) => ({
+const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   container: {
-    marginVertical: 8,
+    marginVertical: 6,
     paddingHorizontal: 16,
   },
   userContainer: {
@@ -130,6 +130,7 @@ const createBubbleStyles = (colors: ThemeColors) => ({
     borderRadius: 8,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
+    ...shadows.small,
   },
   bubbleWithAttachments: {
     paddingHorizontal: 8,
@@ -217,7 +218,7 @@ const createBubbleStyles = (colors: ThemeColors) => ({
   },
 });
 
-const createThinkingStyles = (colors: ThemeColors) => ({
+const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   text: {
     ...TYPOGRAPHY.body,
     lineHeight: 20,
@@ -259,8 +260,10 @@ const createThinkingStyles = (colors: ThemeColors) => ({
   thinkingBlock: {
     backgroundColor: colors.surfaceLight,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.small,
     marginBottom: 8,
-    overflow: 'hidden' as const,
     width: '100%' as const,
   },
   /** Full-width ThinkingBlock when rendered outside a message bubble (e.g. ToolCallWithThinking).
@@ -440,8 +443,8 @@ const createActionStyles = (colors: ThemeColors) => ({
   },
 });
 
-export const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
-  ...createBubbleStyles(colors),
-  ...createThinkingStyles(colors),
+export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
+  ...createBubbleStyles(colors, shadows),
+  ...createThinkingStyles(colors, shadows),
   ...createActionStyles(colors),
 });

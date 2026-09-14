@@ -8,6 +8,7 @@ import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 import { useResidentRows, ejectResident, type ModelRowType } from './useResidentRows';
+import { remoteServerManager } from '../../services/remoteServerManager';
 import logger from '../../utils/logger';
 
 // Defined in useResidentRows (breaks the sheet<->hook import cycle); re-exported here so existing
@@ -56,6 +57,8 @@ export const ModelsManagerSheet: React.FC<Props> = ({
   // residency surface: a RAM chip + per-row eject on resident rows (agreed design 2026-07-14).
   const residentByRow = useResidentRows(visible);
   const [ejectingRow, setEjectingRow] = useState<ModelRowType | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const ejectRow = (row: ModelRowType) => {
     const resident = residentByRow[row];
     if (!resident || ejectingRow) return;
@@ -64,6 +67,29 @@ export const ModelsManagerSheet: React.FC<Props> = ({
     ejectResident(resident)
       .catch((err) => logger.log(`[MODEL-SM] sheet eject ${resident.key} failed:`, err))
       .finally(() => setEjectingRow(null));
+  };
+  const refreshModels = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setRefreshError(null);
+    try {
+      const servers = remoteServerManager.getServers();
+      if (servers.length === 0) {
+        setRefreshError('No remote servers saved.');
+        return;
+      }
+      const failed: string[] = [];
+      for (const server of servers) {
+        const result = await remoteServerManager.testConnection(server.id);
+        if (!result.success) failed.push(server.name);
+      }
+      if (failed.length > 0) setRefreshError(`Could not refresh ${failed.join(', ')}.`);
+    } catch (error) {
+      logger.log('[MODEL-SM] remote model refresh failed:', error);
+      setRefreshError('Could not refresh remote models.');
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   return (
@@ -119,19 +145,39 @@ export const ModelsManagerSheet: React.FC<Props> = ({
           );
         })}
 
-        {hasActiveModel && (
+        <View style={styles.actions}>
+          {hasActiveModel && (
+            <AnimatedPressable
+              style={styles.actionButton}
+              hapticType="impactMedium"
+              disabled={isEjecting || loadingState.isLoading || isRefreshing}
+              onPress={onEject}
+              accessibilityRole="button"
+              accessibilityLabel="Eject all models"
+            >
+              {isEjecting
+                ? <LoadingDots color={colors.error} />
+                : <Icon name="power" size={14} color={colors.error} />}
+              <Text style={styles.ejectText}>Eject All Models</Text>
+            </AnimatedPressable>
+          )}
+          {!hasActiveModel && <View style={styles.actionButton} />}
           <AnimatedPressable
-            style={styles.ejectButton}
-            hapticType="impactMedium"
-            disabled={isEjecting || loadingState.isLoading}
-            onPress={onEject}
+            style={styles.actionButton}
+            hapticType="selection"
+            disabled={isRefreshing || isEjecting}
+            onPress={refreshModels}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh remote models"
+            testID="models-refresh-remote"
           >
-            {isEjecting
-              ? <LoadingDots color={colors.error} />
-              : <Icon name="power" size={14} color={colors.error} />}
-            <Text style={styles.ejectText}>Eject All Models</Text>
+            {isRefreshing
+              ? <LoadingDots color={colors.primary} />
+              : <Icon name="refresh-cw" size={14} color={colors.primary} />}
+            <Text style={styles.refreshText}>Refresh Models</Text>
           </AnimatedPressable>
-        )}
+        </View>
+        {refreshError && <Text style={styles.refreshError}>{refreshError}</Text>}
       </View>
     </AppSheet>
   );
@@ -167,13 +213,20 @@ const createStyles = (colors: ThemeColors) => ({
   valueGroup: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'flex-end' as const, gap: SPACING.xs },
   value: { ...TYPOGRAPHY.body, color: colors.textMuted, flexShrink: 1, textAlign: 'right' as const },
   valueSet: { color: colors.text },
-  ejectButton: {
+  actions: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: SPACING.sm,
+  },
+  actionButton: {
+    flex: 1,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: SPACING.sm,
     paddingVertical: SPACING.md,
-    marginTop: SPACING.sm,
   },
   ejectText: { ...TYPOGRAPHY.bodySmall, color: colors.error },
+  refreshText: { ...TYPOGRAPHY.bodySmall, color: colors.primary },
+  refreshError: { ...TYPOGRAPHY.bodySmall, color: colors.error },
 });

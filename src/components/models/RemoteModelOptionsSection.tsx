@@ -68,6 +68,7 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
                 );
                 onSelect?.();
               } catch (reason) {
+                if (option.serverId === activeServerId && option.id === activeModelId) return;
                 const serverName = servers.find(server => server.id === option.serverId)?.name ?? 'Remote server';
                 setError(
                   isTransportFailure(reason)

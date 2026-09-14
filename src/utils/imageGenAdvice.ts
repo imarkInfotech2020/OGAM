@@ -35,7 +35,7 @@ export const SWEET_SPOT_SIZE = 256;
 /** Platform step counts. */
 export const MAX_IMAGE_STEPS = 50;
 const IMAGE_STEP_DEFAULTS = {
-  android: 8,
+  android: MAX_IMAGE_STEPS,
   ios: MAX_IMAGE_STEPS,
 } as const;
 

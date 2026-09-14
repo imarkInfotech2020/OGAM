@@ -76,12 +76,11 @@ describe('VoicePickerPopover', () => {
     expect(queryByText('Heart')).toBeNull();
   });
 
-  it('renders every voice label and its persona when visible', () => {
+  it('renders voices for the selected language and their persona', () => {
     useTTSStore.setState({ voices: VOICES, activeVoiceId: 'af_heart' });
     const { getByText } = render(<VoicePickerPopover {...baseProps} />);
     expect(getByText('Heart')).toBeTruthy();
     expect(getByText('Puck')).toBeTruthy();
-    expect(getByText('Ling')).toBeTruthy();
     expect(getByText('Warm narrator')).toBeTruthy();
     expect(getByText('Playful')).toBeTruthy();
   });
@@ -108,7 +107,7 @@ describe('VoicePickerPopover', () => {
     );
 
     // One user icon per voice row.
-    expect(queryAllByTestId('feather-user')).toHaveLength(3);
+    expect(queryAllByTestId('feather-user')).toHaveLength(2);
   });
 
   it('renders empty-string persona (no crash) when metadata has no persona', () => {
@@ -140,11 +139,11 @@ describe('VoicePickerPopover', () => {
     const { getByText } = render(<VoicePickerPopover {...baseProps} />);
 
     await act(async () => {
-      fireEvent.press(getByText('Ling'));
+      fireEvent.press(getByText('Puck'));
     });
 
     // The switch still happens, and the store is no longer left in a playing state.
-    expect(useTTSStore.getState().activeVoiceId).toBe('zh_1');
+    expect(useTTSStore.getState().activeVoiceId).toBe('am_puck');
     expect(useTTSStore.getState().playbackStatus).toBe('idle');
   });
 });

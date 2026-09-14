@@ -14,7 +14,7 @@ import {
   ModelCardActions,
   RecommendedConfig,
 } from './ModelCardContent';
-import { QUEUED_ICON } from '../utils/downloadStatusIcon';
+import { PAUSED_ICON, QUEUED_ICON } from '../utils/downloadStatusIcon';
 import { formatBytes } from '../utils/formatBytes';
 import { presentProgress } from '../utils/progressPresentation';
 
@@ -39,6 +39,7 @@ interface ModelCardProps {
   /** Accepted but waiting for a concurrency slot — shows a "Queued" label instead of a
    *  0% progress bar, so the user gets clear feedback the tap registered. */
   isQueued?: boolean;
+  isPaused?: boolean;
   downloadProgress?: number;
   downloadBytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   /** Concurrent downloads behind this card (main+mmproj / grouped) → "N downloads". */
@@ -54,6 +55,8 @@ interface ModelCardProps {
   onRepairVision?: () => void;
   isRepairingVision?: boolean;
   onCancel?: () => void;
+  onPause?: () => void;
+  onResume?: () => void;
   compact?: boolean;
   isTrending?: boolean;
   recommended?: RecommendedConfig;
@@ -147,9 +150,11 @@ const DownloadProgressSection: React.FC<{
   progress: number;
   bytes?: { downloaded: number; total: number; bytesPerSecond?: number };
   queued?: boolean;
+  paused?: boolean;
   /** Number of concurrent downloads behind this card (>1 → show "N downloads"). */
   count?: number;
-}> = ({ progress, bytes, queued, count }) => {
+  actions?: React.ReactNode;
+}> = ({ progress, bytes, queued, paused, count, actions }) => {
   const styles = useThemedStyles(createStyles);
   const { colors } = useTheme();
   const presented = presentProgress({
@@ -157,37 +162,43 @@ const DownloadProgressSection: React.FC<{
     bytesDownloaded: bytes?.downloaded,
     totalBytes: bytes?.total,
     bytesPerSecond: bytes?.bytesPerSecond,
-    status: queued ? 'pending' : 'running',
+    status: queued ? 'pending' : paused ? 'paused' : 'running',
   });
   const percentage = presented.progress.percentage ?? 0;
   // Cumulative download → note how many files are running so the total reads clearly.
   const countLabel = count && count > 1 ? `${count} downloads` : '';
   const caption = [
     presented.bytesText,
-    queued ? undefined : presented.rateText,
+    queued || paused ? undefined : presented.rateText,
     countLabel,
   ].filter(Boolean).join(' · ');
   return (
-  <View style={styles.progressSection}>
-    {/* Full-width bar so it uses the whole card width. Queued shows an EMPTY bar
-        (0 progress) so it reads as "not started yet". */}
-    <View style={styles.progressBar}>
-      <View style={[styles.progressFill, { width: `${queued ? 0 : percentage}%` }]} />
-    </View>
-    {/* Caption row under the bar: bytes (+ "N downloads") on the LEFT, status on the
-        RIGHT. "Queued" while waiting for a slot, otherwise the percent. */}
-    <View style={styles.progressCaptionRow}>
-      <Text style={styles.progressBytesText}>{caption}</Text>
-      {queued ? (
-        <View style={styles.progressLabelRow}>
-          <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
-          <Text style={[styles.progressText, styles.queuedText]}>Queued</Text>
+    <View style={styles.progressSection}>
+      <View style={styles.progressTransferRow}>
+        <View style={styles.progressDetails}>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${queued ? 0 : percentage}%` }]} />
+          </View>
+          <View style={styles.progressCaptionRow}>
+            <Text style={styles.progressBytesText}>{caption}</Text>
+            {queued ? (
+              <View style={styles.progressLabelRow}>
+                <Icon name={QUEUED_ICON} size={12} color={colors.textMuted} accessibilityLabel="Queued" />
+                <Text style={[styles.progressText, styles.queuedText]}>Queued</Text>
+              </View>
+            ) : paused ? (
+              <View style={styles.progressLabelRow}>
+                <Icon name={PAUSED_ICON} size={12} color={colors.textSecondary} accessibilityLabel="Paused" />
+                <Text style={styles.progressText}>Paused</Text>
+              </View>
+            ) : (
+              <Text style={styles.progressText}>{presented.percentageText ?? 'In progress'}</Text>
+            )}
+          </View>
         </View>
-      ) : (
-        <Text style={styles.progressText}>{presented.percentageText ?? 'In progress'}</Text>
-      )}
+        {actions && <View style={styles.progressActions}>{actions}</View>}
+      </View>
     </View>
-  </View>
   );
 };
 
@@ -208,27 +219,25 @@ const FailedSection: React.FC<{
   const progress = presented.progress.percentage ?? 0;
   return (
     <View style={styles.failedSection}>
-      <View style={styles.progressContainer}>
+      <View style={styles.failedDetails}>
         <View style={styles.progressBar}>
           <View style={[styles.failedProgressFill, { width: `${progress}%` }]} />
         </View>
-        <Text style={styles.progressText}>{presented.percentageText ?? 'Stopped'}</Text>
-      </View>
-      {totalBytes > 0 && (
-        <Text style={styles.progressBytesText}>{formatBytes(bytesDownloaded)} / {formatBytes(totalBytes)}</Text>
-      )}
-      <View style={styles.failedMessageRow}>
-        <Icon name="alert-circle" size={13} color={colors.error} />
-        <Text style={styles.failedMessageText}>{errorMessage}</Text>
+        <Text style={styles.failedProgressCaption}>
+          {presented.percentageText ?? 'Stopped'}
+          {totalBytes > 0 ? ` · ${formatBytes(bytesDownloaded)} / ${formatBytes(totalBytes)}` : ''}
+        </Text>
+        <View style={styles.failedMessageRow}>
+          <Icon name="alert-circle" size={13} color={colors.error} />
+          <Text style={styles.failedMessageText}>{errorMessage}</Text>
+        </View>
       </View>
       <View style={styles.failedActionsRow}>
-        <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+        <TouchableOpacity style={styles.iconButton} onPress={onRetry} hitSlop={14} accessibilityRole="button" accessibilityLabel="Retry download">
           <Icon name="refresh-cw" size={13} color={colors.primary} />
-          <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.removeButton} onPress={onRemove}>
+        <TouchableOpacity style={styles.iconButton} onPress={onRemove} hitSlop={14} accessibilityRole="button" accessibilityLabel="Remove download">
           <Icon name="trash-2" size={13} color={colors.error} />
-          <Text style={styles.removeButtonText}>Remove</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -242,6 +251,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   isDownloaded,
   isDownloading,
   isQueued,
+  isPaused,
   downloadProgress = 0,
   downloadBytes,
   downloadCount,
@@ -256,6 +266,8 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   onRepairVision,
   isRepairingVision,
   onCancel,
+  onPause,
+  onResume,
   compact,
   isTrending,
   recommended,
@@ -284,6 +296,27 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   const credibility = resolveCredibility(model, downloadedModel);
   const credibilityInfo = credibility ? CREDIBILITY_LABELS[credibility.source] : null;
   const quantization = file?.quantization ?? downloadedModel?.quantization;
+  const actionsInProgress = !!compact && (isDownloading || isQueued || isPaused);
+  const actionButtons = !failedState && (
+    <ModelCardActions
+      isDownloaded={isDownloaded}
+      isDownloading={isDownloading}
+      isQueued={isQueued}
+      isPaused={isPaused}
+      isActive={isActive}
+      isCompatible={isCompatible}
+      incompatibleReason={incompatibleReason}
+      testID={testID}
+      onDownload={onDownload}
+      onSelect={onSelect}
+      onDelete={onDelete}
+      onRepairVision={onRepairVision}
+      isRepairingVision={isRepairingVision}
+      onCancel={onCancel}
+      onPause={onPause}
+      onResume={onResume}
+    />
+  );
 
   return (
     <TouchableOpacity
@@ -331,8 +364,8 @@ export const ModelCard: React.FC<ModelCardProps> = ({
 
           <ModelDownloadStats compact={compact} downloads={model.downloads} likes={model.likes} styles={styles} />
 
-          {(isDownloading || isQueued) && (
-            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} count={downloadCount} />
+          {(isDownloading || isQueued || isPaused) && (
+            <DownloadProgressSection progress={downloadProgress} bytes={downloadBytes} queued={isQueued} paused={isPaused} count={downloadCount} actions={actionsInProgress && (onPause || onResume || onCancel) ? actionButtons : undefined} />
           )}
           {failedState && (
             <FailedSection
@@ -345,22 +378,7 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           )}
         </View>
 
-        {!failedState && (
-          <ModelCardActions
-            isDownloaded={isDownloaded}
-            isDownloading={isDownloading}
-            isActive={isActive}
-            isCompatible={isCompatible}
-            incompatibleReason={incompatibleReason}
-            testID={testID}
-            onDownload={onDownload}
-            onSelect={onSelect}
-            onDelete={onDelete}
-            onRepairVision={onRepairVision}
-            isRepairingVision={isRepairingVision}
-            onCancel={onCancel}
-          />
-        )}
+        {!actionsInProgress && actionButtons}
       </View>
     </TouchableOpacity>
   );

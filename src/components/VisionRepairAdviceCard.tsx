@@ -75,7 +75,7 @@ export const VisionRepairAdviceCard: React.FC<{ onRepaired?: () => void }> = ({
           color={colors.warning}
           style={styles.leadIcon}
         />
-        <Text style={styles.title}>This model can&apos;t see images</Text>
+        <Text style={styles.title}>Vision file needed</Text>
         <AnimatedPressable
           onPress={() => setDismissed(true)}
           hitSlop={8}
@@ -86,7 +86,8 @@ export const VisionRepairAdviceCard: React.FC<{ onRepaired?: () => void }> = ({
         </AnimatedPressable>
       </View>
       <Text style={styles.intro}>
-        Its vision file is missing. Get it without re-downloading the model.
+        This model supports images, but its vision file is missing or not linked.
+        Get it without re-downloading the model.
       </Text>
       {result ? (
         <Text style={styles.result} testID="vision-repair-advice-result">

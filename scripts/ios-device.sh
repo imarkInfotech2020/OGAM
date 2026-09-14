@@ -16,6 +16,7 @@
 #   IOS_DEVICE_ID  — target a specific device UDID
 #   IOS_TEAM       — development team id
 #   IOS_PROFILE    — set to force MANUAL signing with a named profile (fallback)
+#   IOS_METRO_HOST (or METRO_HOST) — address the phone uses to reach Metro
 set -euo pipefail
 
 # Pick a target device, then make sure it is actually reachable. These are two
@@ -175,7 +176,7 @@ APP="build/device/Build/Products/Debug-iphoneos/OffgridMobile.app"
 # clients even when both devices are on the same subnet. Prefer an explicit host;
 # otherwise use this Mac's Tailscale address when Metro is reachable there. The
 # Debug builds load from this Metro address so Fast Refresh remains available after installation.
-METRO_HOST="${IOS_METRO_HOST:-}"
+METRO_HOST="${IOS_METRO_HOST:-${METRO_HOST:-}}"
 if [ -z "$METRO_HOST" ] && command -v tailscale >/dev/null 2>&1; then
   TAILSCALE_HOST="$(tailscale ip -4 2>/dev/null | head -1 || true)"
   if [ -n "$TAILSCALE_HOST" ] && [ "$(curl -fsS --max-time 2 "http://$TAILSCALE_HOST:8081/status" 2>/dev/null || true)" = "packager-status:running" ]; then

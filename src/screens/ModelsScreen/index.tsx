@@ -250,7 +250,6 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) 
       {/* Transcription Models Tab (speech-to-text, core). */}
       {vm.activeTab === 'transcription' && (
         <TranscriptionModelsTab
-          showLanguageSelector={!embedded}
           showRemoteModels={false}
         />
       )}

@@ -95,6 +95,7 @@ function enhancementTokenWriter(
   return token => {
     streamed += token;
     if (!conversationId || !tempMessageId) return;
+    if (/^\s*(?:<think>[\s\S]*?<\/think>\s*)?Generated image for:/i.test(streamed)) return;
     const chatStore = useChatStore.getState();
     if (!renderingAsCard) {
       renderingAsCard = true;

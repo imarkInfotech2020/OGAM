@@ -45,10 +45,11 @@ export const ImageTab: React.FC<ImageTabProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createAllStyles);
+  const hasRemoteSelection = !!activeRemoteImageModelId && !!activeRemoteImageServerId;
   const hasLoaded = !!activeImageModelId || !!activeRemoteImageModelId;
-  const activeModel = downloadedImageModels.find(
-    m => m.id === activeImageModelId,
-  );
+  const activeModel = hasRemoteSelection
+    ? undefined
+    : downloadedImageModels.find(m => m.id === activeImageModelId);
 
   // Find active remote vision model info
   const activeRemoteModelInfo = useMemo(() => {
@@ -160,7 +161,7 @@ export const ImageTab: React.FC<ImageTabProps> = ({
           {downloadedImageModels.map(model => {
             const estimatedMemory = hardwareService.estimateImageModelRam(model);
             const memoryFits = !fileExceedsBudget(model.size, hardwareService.getTotalMemoryGB());
-            const isCurrent = activeImageModelId === model.id;
+            const isCurrent = !hasRemoteSelection && activeImageModelId === model.id;
             // While a load is in flight, the highlight + spinner follow the row being loaded, not the
             // model still resident — so tapping B moves the selection to B at once (device 2026-07-14).
             const isLoadingThis = loadingModelId === model.id;
@@ -206,6 +207,9 @@ export const ImageTab: React.FC<ImageTabProps> = ({
                 ]}
                 onPress={() => onSelectRemoteVisionModel(model, serverId)}
                 disabled={isAnyLoading || isCurrent}
+                accessibilityRole="button"
+                accessibilityLabel={model.name}
+                accessibilityState={{ selected: isCurrent }}
               >
                 <View style={styles.modelInfo}>
                   <Text

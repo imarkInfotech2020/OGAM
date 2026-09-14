@@ -13,6 +13,7 @@ import { downloadStatusIcon } from '../../utils/downloadStatusIcon';
 import { createStyles } from './styles';
 import { presentProgress } from '../../utils/progressPresentation';
 import { SPACING } from '../../constants';
+import { isMMProjFile } from '../../services/mmproj';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -118,60 +119,55 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             isVisionModel={!!item.isVisionModel}
           />
         </View>
-        {item.status === 'failed' ? (
-          <View style={styles.failedActionsRow}>
-            {isRetryable(item.reasonCode) && (
-              <TouchableOpacity
-                style={styles.retryButton}
-                hitSlop={SPACING.md}
-                testID="failed-retry-button"
-                onPress={() => onRetry(item)}
-              >
-                <Icon name="refresh-cw" size={14} color={colors.primary} />
-                <Text style={styles.retryButtonText}>Retry</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.removeButton}
-              hitSlop={SPACING.md}
-              testID="failed-remove-button"
-              onPress={() => onRemove(item)}
-            >
-              <Icon name="trash-2" size={14} color={colors.error} />
-              <Text style={styles.removeButtonText}>Remove</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.failedActionsRow}>
-            {(item.canPause || item.canResume) && (
-              <TouchableOpacity
-                style={styles.transferIconButton}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.canResume ? 'Resume' : 'Pause'} ${item.fileName}`}
-                hitSlop={6}
-                onPress={() => item.canResume ? onResume(item) : onPause(item)}
-              >
-                <Icon name={item.canResume ? 'play' : 'pause'} size={14} color={colors.primary} />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.cancelButton}
-              testID="remove-download-button"
-              hitSlop={6}
-              onPress={() => onRemove(item)}
-            >
-              <Icon name="x" size={16} color={colors.error} />
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
       <View style={styles.progressContainer}>
-        <View style={styles.progressBarBackground}>
-          <View style={[styles.progressBarFill, { width: `${percentage}%` as const, backgroundColor: progressColor }]} />
+        <View style={styles.transferRow}>
+          <View style={[styles.progressBarBackground, styles.transferProgressBar]}>
+            <View style={[styles.progressBarFill, { width: `${percentage}%` as const, backgroundColor: progressColor }]} />
+          </View>
+          <View style={styles.transferActions}>
+            {item.status === 'failed' ? (
+              <>
+                {isRetryable(item.reasonCode) && (
+                  <TouchableOpacity style={styles.transferIconButton} hitSlop={SPACING.md} testID="failed-retry-button" accessibilityRole="button" accessibilityLabel={`Retry ${item.fileName}`} onPress={() => onRetry(item)}>
+                    <Icon name="refresh-cw" size={14} color={colors.primary} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.transferIconButton} hitSlop={SPACING.md} testID="failed-remove-button" accessibilityRole="button" accessibilityLabel={`Remove ${item.fileName}`} onPress={() => onRemove(item)}>
+                  <Icon name="trash-2" size={14} color={colors.error} />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+              {(item.canPause || item.canResume) && (
+                <TouchableOpacity
+                  style={styles.transferIconButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.canResume ? 'Resume' : 'Pause'} ${item.fileName}`}
+                  hitSlop={6}
+                  onPress={() => item.canResume ? onResume(item) : onPause(item)}
+                >
+                  <Icon name={item.canResume ? 'play' : 'pause'} size={14} color={colors.primary} />
+                </TouchableOpacity>
+              )}
+                <TouchableOpacity
+                  style={styles.transferIconButton}
+                  testID="remove-download-button"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${item.fileName}`}
+                  hitSlop={6}
+                  onPress={() => onRemove(item)}
+                >
+                  <Icon name="x" size={16} color={colors.error} />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
-        <Text style={styles.progressText} testID="download-progress-detail">
-          {[presented.percentageText, presented.detailText].filter(Boolean).join(' · ')}
-        </Text>
+        <View style={styles.transferCaptionRow}>
+          <Text style={styles.progressText} testID="download-progress-detail">{presented.detailText}</Text>
+          <Text style={styles.progressText}>{presented.percentageText}</Text>
+        </View>
       </View>
       <View style={styles.downloadMeta}>
         {(!!getStatusLabel(item) || !!getStatusIcon()) && (
@@ -197,17 +193,21 @@ interface CompletedDownloadCardProps {
   item: DownloadItem;
   onDelete: (item: DownloadItem) => void;
   onRepairVision?: (item: DownloadItem) => void;
+  onPauseRepair?: (item: DownloadItem) => void;
+  onResumeRepair?: (item: DownloadItem) => void;
+  onCancelRepair?: (item: DownloadItem) => void;
   isRepairingVision?: boolean;
 }
 
-export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, isRepairingVision = false }) => {
+export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, onPauseRepair, onResumeRepair, onCancelRepair, isRepairingVision = false }) => {
   const needsVisionRepair = checkNeedsVisionRepair(item);
   // A vision repair drives a live download-store row keyed on the completed
   // model's modelKey (`repo/file` = item.modelId). Read it so the SAME
   // determinate progress bar the normal download shows lights up during the
   // ~900MB mmproj re-download, instead of a bare indeterminate spinner (OD2).
   const repairEntry = useDownloadStore(s => s.downloads[item.modelId]);
-  const showRepairProgress = isRepairingVision && !!repairEntry;
+  const repairActive = isRepairingVision || !!repairEntry && isMMProjFile(repairEntry.fileName);
+  const showRepairProgress = repairActive && !!repairEntry;
   return (
     <View style={{ marginHorizontal: SPACING.md }}>
       <ModelCard
@@ -221,11 +221,15 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
         }}
         file={{ name: item.fileName, size: item.fileSize, quantization: item.quantization, downloadUrl: '' }}
         isDownloaded
-        isDownloading={showRepairProgress}
-        isRepairingVision={isRepairingVision}
+        isDownloading={showRepairProgress && repairEntry.status !== 'paused'}
+        isPaused={showRepairProgress && repairEntry.status === 'paused'}
+        isRepairingVision={repairActive}
         downloadProgress={repairEntry?.progress}
         downloadBytes={repairEntry ? { downloaded: repairEntry.bytesDownloaded, total: repairEntry.totalBytes, bytesPerSecond: repairEntry.bytesPerSecond } : undefined}
         onRepairVision={needsVisionRepair && onRepairVision ? () => onRepairVision(item) : undefined}
+        onPause={showRepairProgress && repairEntry.status === 'running' && onPauseRepair ? () => onPauseRepair(item) : undefined}
+        onResume={showRepairProgress && repairEntry.status === 'paused' && onResumeRepair ? () => onResumeRepair(item) : undefined}
+        onCancel={showRepairProgress && onCancelRepair ? () => onCancelRepair(item) : undefined}
         onDelete={() => onDelete(item)}
       />
     </View>

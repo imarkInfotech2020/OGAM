@@ -17,6 +17,7 @@ export interface RemoteVoiceResult {
 export interface RemoteMediaRequestOptions {
   signal?: AbortSignal;
   override?: boolean;
+  onImageProgress?: (step: number, total: number) => void;
 }
 
 function endpoint(server: RemoteServer, path: string): string {
@@ -93,6 +94,11 @@ export const remoteMediaRuntime = {
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteImageResult> {
     const openRouter = new URL(server.endpoint).hostname === 'openrouter.ai';
+    const desktop = server.modelManagement === 'offgrid-desktop-v1';
+    type ImagePayload = {
+      data?: Array<{ b64_json?: string; url?: string }>;
+      choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: string } }> } }>;
+    };
     const payload = await request({
       server,
       path: openRouter ? '/v1/chat/completions' : '/v1/images/generations',
@@ -111,16 +117,48 @@ export const remoteMediaRuntime = {
               prompt: input.prompt,
               size: input.size ?? '1024x1024',
               response_format: 'b64_json',
+              ...(desktop ? { async: true } : {}),
               ...(options.override ? { allow_unsafe_memory_override: true } : {}),
             }),
       },
       signal: options.signal,
-    }, response => response.json() as Promise<{
-      data?: Array<{ b64_json?: string; url?: string }>;
-      choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: string } }> } }>;
-    }>);
-    const image = payload.data?.[0];
-    const imageUrl = image?.url ?? payload.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    }, response => response.json() as Promise<ImagePayload & { request_id?: string }>);
+    let result: ImagePayload = payload;
+    if (desktop && payload.request_id) {
+      while (true) {
+        if (options.signal?.aborted) throw new Error('Remote request cancelled');
+        const state = await request({
+          server,
+          path: `/v1/requests/${encodeURIComponent(payload.request_id)}`,
+          init: { method: 'GET' },
+          signal: options.signal,
+        }, response => response.json() as Promise<{
+          status: string;
+          result?: ImagePayload;
+          error?: { message?: string };
+          progress?: { step: number; total: number };
+        }>);
+        if (state.progress) options.onImageProgress?.(state.progress.step, state.progress.total);
+        if (state.status === 'completed') {
+          result = state.result ?? {};
+          break;
+        }
+        if (state.status === 'failed') throw new Error(state.error?.message ?? 'Remote image generation failed');
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            options.signal?.removeEventListener('abort', abort);
+            resolve();
+          }, 1000);
+          const abort = () => {
+            clearTimeout(timer);
+            reject(new Error('Remote request cancelled'));
+          };
+          options.signal?.addEventListener('abort', abort, { once: true });
+        });
+      }
+    }
+    const image = result.data?.[0];
+    const imageUrl = image?.url ?? result.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     if (!image?.b64_json && !imageUrl) throw new Error('Remote server returned no image');
     return { base64: image?.b64_json, url: imageUrl };
   },
@@ -155,6 +193,11 @@ export const remoteMediaRuntime = {
     input: { text: string; voice?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteVoiceResult> {
+    const openRouter = new URL(server.endpoint).hostname === 'openrouter.ai';
+    const voice = input.voice || (openRouter
+      ? (await remoteMediaRuntime.listVoices(server, options))[0]
+      : undefined);
+    if (openRouter && !voice) throw new Error('This remote model has no available speakers.');
     return request({
       server,
       path: '/v1/audio/speech',
@@ -164,8 +207,8 @@ export const remoteMediaRuntime = {
         body: JSON.stringify({
           model: requiredModel(server, 'voice'),
           input: input.text,
-          voice: input.voice ?? 'alloy',
-          response_format: 'mp3',
+          ...(voice ? { voice } : {}),
+          ...(openRouter ? { response_format: 'mp3' } : {}),
         }),
       },
       signal: options.signal,
@@ -173,5 +216,35 @@ export const remoteMediaRuntime = {
       audio: await response.arrayBuffer(),
       contentType: response.headers.get('content-type') ?? 'audio/mpeg',
     }));
+  },
+
+  async listVoices(server: RemoteServer, options: RemoteMediaRequestOptions = {}): Promise<string[]> {
+    try {
+      const modelId = requiredModel(server, 'voice');
+      const catalog = await request({
+        server,
+        path: '/v1/models?output_modalities=speech',
+        init: { method: 'GET' },
+        signal: options.signal,
+      }, response => response.json() as Promise<{
+        data?: Array<{ id?: string; supported_voices?: unknown; voices?: unknown }>;
+      }>);
+      const model = catalog.data?.find(entry => entry.id === modelId);
+      const listed = model?.supported_voices ?? model?.voices;
+      if (Array.isArray(listed)) {
+        return listed.filter((voice): voice is string => typeof voice === 'string');
+      }
+    } catch (error) {
+      if (options.signal?.aborted) throw error;
+    }
+    const payload = await request({
+      server,
+      path: '/v1/audio/voices',
+      init: { method: 'GET' },
+      signal: options.signal,
+    }, response => response.json() as Promise<{ voices?: unknown }>);
+    return Array.isArray(payload.voices)
+      ? payload.voices.filter((voice): voice is string => typeof voice === 'string')
+      : [];
   },
 };

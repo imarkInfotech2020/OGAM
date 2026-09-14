@@ -69,7 +69,7 @@ const gatewayCategory = (kind: unknown): RemoteModelCategory | null => {
 function modelCategories(model: {
   kind?: unknown;
   architecture?: { input_modalities?: unknown; output_modalities?: unknown };
-}): RemoteModelCategory[] {
+}, isOpenRouter = false): RemoteModelCategory[] {
   const declared = gatewayCategory(model.kind);
   if (declared) return [declared];
   const outputs = Array.isArray(model.architecture?.output_modalities)
@@ -77,6 +77,9 @@ function modelCategories(model: {
   const inputs = Array.isArray(model.architecture?.input_modalities)
     ? model.architecture.input_modalities : [];
   if (outputs.includes('image')) return ['image'];
+  if (outputs.includes('transcription')) return ['transcription'];
+  if (outputs.includes('speech')) return ['voice'];
+  if (isOpenRouter) return outputs.includes('text') ? ['text'] : [];
   if (outputs.includes('audio')) return ['voice'];
   if (inputs.includes('audio') && outputs.includes('text')) return ['transcription'];
   return outputs.includes('text') ? ['text'] : [];
@@ -94,6 +97,7 @@ async function fetchGatewayModelCatalog(
   server: RemoteServer,
 ): Promise<RemoteModelCatalog> {
   const url = trimTrailingSlashes(server.endpoint);
+  const isOpenRouter = new URL(url).hostname === 'openrouter.ai';
   const headers: Record<string, string> = { Accept: 'application/json' };
   Object.assign(
     headers,
@@ -106,7 +110,7 @@ async function fetchGatewayModelCatalog(
     DISCOVERY_FETCH_TIMEOUT_MS,
   );
   try {
-    const modelListUrl = `${url}${url.endsWith('/v1') ? '' : '/v1'}/models${new URL(url).hostname === 'openrouter.ai' ? '?output_modalities=text,image,transcription,speech' : ''}`;
+    const modelListUrl = `${url}${url.endsWith('/v1') ? '' : '/v1'}/models${isOpenRouter ? '?output_modalities=text,image,transcription,speech' : ''}`;
     const response = await fetch(modelListUrl, {
       headers,
       signal: controller.signal,
@@ -124,7 +128,7 @@ async function fetchGatewayModelCatalog(
       architecture?: { input_modalities?: unknown; output_modalities?: unknown };
     }>) {
       if (typeof model.id !== 'string') continue;
-      for (const category of modelCategories(model)) {
+      for (const category of modelCategories(model, isOpenRouter)) {
         const options = result[category] ?? [];
         options.push({
           id: model.id,

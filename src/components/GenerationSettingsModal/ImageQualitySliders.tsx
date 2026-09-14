@@ -3,6 +3,7 @@ import { View, Text, Switch, Platform, TouchableOpacity } from 'react-native';
 import { SliderSetting } from '../SliderSetting';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useAppStore } from '../../stores';
+import { DEFAULT_SETTINGS } from '../../stores/appStore';
 import { useClearGpuCache } from '../../hooks/useImageGenerationSettings';
 import {
   defaultImageSteps,
@@ -48,7 +49,7 @@ export const ImageQualityBasicSliders: React.FC = () => {
         testID="image-size"
         label="Image Size"
         description="Output resolution. 256 is fastest with coherent results; 512 is most detailed but slow on GPU-only devices."
-        value={Math.max(SWEET_SPOT_SIZE, settings.imageWidth ?? SWEET_SPOT_SIZE)}
+        value={Math.max(SWEET_SPOT_SIZE, settings.imageWidth ?? DEFAULT_SETTINGS.imageWidth)}
         min={SWEET_SPOT_SIZE} max={512} step={64}
         formatValue={(v) => `${v}x${v}`}
         onChange={(value) => updateSettings({ imageWidth: value, imageHeight: value })}

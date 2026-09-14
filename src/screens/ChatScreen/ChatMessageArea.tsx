@@ -34,6 +34,7 @@ import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
+import { SPACING } from '../../constants';
 
 export type ChatMessageAreaProps = {
   flatListRef: React.RefObject<FlatList | null>;
@@ -57,6 +58,7 @@ export type ChatMessageAreaProps = {
 // nav buttons. We distinguish by the inset size (not Platform.OS): anything above
 // the overlay threshold is a real nav bar, so honor the full inset and clear it.
 const FOOTER_SAFE_CAP = 4;
+const IOS_COMPOSER_LIFT = SPACING.sm;
 // Home-indicator / gesture-nav overlays sit at ~24px or below on the devices we
 // target; a 3-button nav bar is taller. Above this, treat the inset as opaque.
 const OVERLAY_INSET_MAX = 24;
@@ -65,6 +67,7 @@ export const computeFooterPaddingBottom = (
   insetBottom: number,
 ): number => {
   if (keyboardVisible) return 0;
+  if (Platform.OS === 'ios') return IOS_COMPOSER_LIFT + Math.min(insetBottom, FOOTER_SAFE_CAP);
   // Opaque nav bar (tall inset): pad the full inset so controls clear it.
   if (insetBottom > OVERLAY_INSET_MAX) return insetBottom;
   // Thin overlay inset: keep the symmetric-with-top cap.

@@ -111,7 +111,7 @@ export const imageProvider: DownloadProvider = {
     if (!entry) return;
     if (isMultifile(entry)) { await resumeSyntheticImageDownload(modelIdOf(id)); return; }
     await backgroundDownloadService.resumeDownload(entry.downloadId);
-    useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+    useDownloadStore.getState().setStatus(entry.downloadId, 'running');
     backgroundDownloadService.startProgressPolling();
   },
 

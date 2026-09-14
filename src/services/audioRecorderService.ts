@@ -139,7 +139,7 @@ class AudioRecorderService {
 
   async startRecording(): Promise<void> {
     if (this.isRecording) {
-      await this.stopRecording().catch(() => {});
+      await this.stopRecording();
     }
     const hasPermission = await this.requestPermissions();
     if (!hasPermission) {
@@ -187,13 +187,20 @@ class AudioRecorderService {
       throw new Error('No active recording');
     }
     const result = this.recorder.stop();
+    if (result.status !== 'success') {
+      // A file-save error can arrive after native capture stopped. Release only
+      // when native confirms it is idle; otherwise the next start must retry stop.
+      if (this.recorder.isRecording?.() === false) {
+        this.isRecording = false;
+        this.recorder = null;
+        await audioSessionManager.restorePlaybackAfterRecording();
+      }
+      throw new Error('Recording failed to save');
+    }
     this.isRecording = false;
     this.recorder = null;
     // Hand the session back to playback so a voice note played next is audible.
     await audioSessionManager.restorePlaybackAfterRecording();
-    if (result.status !== 'success') {
-      throw new Error('Recording failed to save');
-    }
     const path = result.path;
     const durationSeconds = (result as any).duration ?? 0;
     logger.log(`[WIRE-RECORDER] ${JSON.stringify({ platform: Platform.OS, path, durationSeconds, status: result.status })}`); // [WIRE] real recorder output (voice-note file/duration)

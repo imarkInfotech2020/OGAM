@@ -14,8 +14,8 @@ import {
 } from '../../../src/utils/imageGenAdvice';
 
 describe('defaultImageSteps', () => {
-  it('keeps Android at 8 steps and moves iOS to the slider maximum', () => {
-    expect(defaultImageSteps('android')).toBe(8);
+  it('uses the slider maximum on Android and iOS', () => {
+    expect(defaultImageSteps('android')).toBe(MAX_IMAGE_STEPS);
     expect(defaultImageSteps('ios')).toBe(MAX_IMAGE_STEPS);
   });
 });

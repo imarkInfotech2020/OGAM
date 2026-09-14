@@ -15,6 +15,9 @@ import { ModelsScreenViewModel } from './useModelsScreen';
 import { ImageFilterBar } from './ImageFilterBar';
 import { BackendFilter, ImageFilterDimension } from './types';
 import { formatBytes, getImageModelCompatibility, hfModelToDescriptor } from './utils';
+import { modelDownloadService } from '../../services/modelDownloadService';
+import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';
+import logger from '../../utils/logger';
 
 type Props = Pick<ModelsScreenViewModel,
   | 'imageSearchQuery' | 'setImageSearchQuery'
@@ -65,6 +68,7 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   const isActive = !!entry && isActiveStatus(entry.status);
   const isQueued = !!entry && isQueuedStatus(entry.status);
   const isDownloading = !!entry && isDownloadingStatus(entry.status);
+  const isPaused = entry?.status === 'paused';
   const progressValue = entry?.progress ?? 0;
   const authorLabel = model._coreml ? 'Core ML' : imageBackendLabel(model.backend);
   const variantSuffix = model.variant ? ` \u00B7 ${getVariantLabel(model.variant)}` : '';
@@ -80,6 +84,7 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
           description: `${formatBytes(model.size)}${variantSuffix}`,
         }}
         isDownloading={isDownloading}
+        isPaused={isPaused}
         isQueued={isQueued}
         downloadProgress={progressValue}
         downloadBytes={entry ? {
@@ -90,8 +95,14 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
         isCompatible={isCompatible}
         incompatibleReason={incompatibleReason}
         testID={`image-model-card-${index}`}
-        onDownload={isActive ? undefined : () => handleDownloadImageModel(hfModelToDescriptor(model))}
-        onCancel={isActive ? () => handleCancelImageDownload(model.id) : undefined}
+        onDownload={isActive || isPaused ? undefined : () => handleDownloadImageModel(hfModelToDescriptor(model))}
+        onCancel={isActive || isPaused ? () => handleCancelImageDownload(model.id) : undefined}
+        onPause={isDownloading && entry?.downloadId ? () => {
+          modelDownloadService.pause(uniformDownloadId('image', model.id)).catch(error => logger.error('Failed to pause image download:', error));
+        } : undefined}
+        onResume={isPaused && entry?.downloadId ? () => {
+          modelDownloadService.resume(uniformDownloadId('image', model.id)).catch(error => logger.error('Failed to resume image download:', error));
+        } : undefined}
       />
     </View>
   );

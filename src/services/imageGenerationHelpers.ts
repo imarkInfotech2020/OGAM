@@ -140,6 +140,7 @@ function readableText(message: Message): string {
     return '';
   // `resolution` is written by the image generator alone: this is the caption under a picture.
   if (message.generationMeta?.resolution) return '';
+  if (/^Generated image for:\s*["“]/i.test(message.content.trim())) return '';
   const { answer, reasoning, reasoningLabel } = parseModelOutput(
     message.content,
     message.reasoningContent,
@@ -154,7 +155,8 @@ export function cleanEnhancedPrompt(raw: string): string {
     .replace(/(^["'])|(["']$)/g, '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .trim();
-  return isRuntimeOnlyMessage({ role: 'assistant', content: clean })
+  return /^Generated image for:\s*["“]/i.test(clean) ||
+    isRuntimeOnlyMessage({ role: 'assistant', content: clean })
     ? ''
     : clean;
 }

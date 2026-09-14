@@ -1,0 +1,41 @@
+diff --git a/node_modules/@react-native-async-storage/async-storage/android/src/main/java/com/reactnativecommunity/asyncstorage/AsyncStorageModule.java b/node_modules/@react-native-async-storage/async-storage/android/src/main/java/com/reactnativecommunity/asyncstorage/AsyncStorageModule.java
+index a66e802..8e8d3e6 100644
+--- a/node_modules/@react-native-async-storage/async-storage/android/src/main/java/com/reactnativecommunity/asyncstorage/AsyncStorageModule.java
++++ b/node_modules/@react-native-async-storage/async-storage/android/src/main/java/com/reactnativecommunity/asyncstorage/AsyncStorageModule.java
+@@ -7,9 +7,12 @@
+ 
+ package com.reactnativecommunity.asyncstorage;
+ 
++import android.database.AbstractWindowedCursor;
+ import android.database.Cursor;
++import android.database.CursorWindow;
+ import android.database.sqlite.SQLiteStatement;
+ import android.os.AsyncTask;
++import android.os.Build;
+ 
+ import com.facebook.common.logging.FLog;
+ import com.facebook.react.bridge.Arguments;
+@@ -39,6 +42,7 @@ public final class AsyncStorageModule extends NativeAsyncStorageModuleSpec {
+   // SQL variable number limit, defined by SQLITE_LIMIT_VARIABLE_NUMBER:
+   // https://raw.githubusercontent.com/android/platform_external_sqlite/master/dist/sqlite3.c
+   private static final int MAX_SQL_KEYS = 999;
++  private static final long CHAT_CURSOR_WINDOW_BYTES = 8L * 1024L * 1024L;
+ 
+   private ReactDatabaseSupplier mReactDatabaseSupplier;
+   private boolean mShuttingDown = false;
+@@ -118,6 +122,15 @@ public final class AsyncStorageModule extends NativeAsyncStorageModuleSpec {
+               null,
+               null,
+               null);
++          // The chat projection can exceed Android's default 2 MiB cursor window.
++          // Limit the larger window to this one app key; keep the SQLite row format.
++          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
++              keyCount == 1 &&
++              "local-llm-chat-storage".equals(keys.getString(keyStart)) &&
++              cursor instanceof AbstractWindowedCursor) {
++            ((AbstractWindowedCursor) cursor).setWindow(
++                new CursorWindow("AsyncStorageChat", CHAT_CURSOR_WINDOW_BYTES));
++          }
+           keysRemaining.clear();
+           try {
+             if (cursor.getCount() != keys.size()) {

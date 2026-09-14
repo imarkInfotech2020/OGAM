@@ -137,7 +137,7 @@ describe('model settings surface parity', () => {
     expect(modelSettings.getByText('Base')).toBeTruthy();
   });
 
-  it('uses one STT language setting in chat settings and the Models screen', () => {
+  it('keeps the selected STT language in chat settings', () => {
     useWhisperStore.setState({ downloadedModelId: 'base', transcriptionLanguage: 'auto' });
     const chatSettings = render(
       <GenerationSettingsModal visible onClose={() => {}} />,
@@ -148,10 +148,6 @@ describe('model settings surface parity', () => {
     expect(useWhisperStore.getState().transcriptionLanguage).toBe('fr');
     chatSettings.unmount();
 
-    const { TranscriptionModelsTab } = require('../../../src/screens/ModelsScreen/TranscriptionModelsTab');
-    const models = render(<TranscriptionModelsTab />);
-    expect(models.getByTestId('models-transcription-language').props.accessibilityLabel)
-      .toBe('Language: French');
   });
 
   it('renders the same TTS settings owner in both UI containers', () => {
