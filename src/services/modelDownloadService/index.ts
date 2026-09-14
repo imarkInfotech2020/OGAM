@@ -226,7 +226,7 @@ class ModelDownloadService {
     try {
       const action = provider[op];
       if (!action) throw new Error(`${op} is unavailable for ${download.modelType}`);
-      await action(id);
+      await action.call(provider, id);
     } catch (err) {
       logger.log(`[DL-SM] ${op} ${id} FAILED err=${err instanceof Error ? err.message : String(err)}`);
       throw err;
