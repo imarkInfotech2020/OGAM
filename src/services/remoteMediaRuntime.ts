@@ -155,6 +155,11 @@ export const remoteMediaRuntime = {
     input: { text: string; voice?: string },
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteVoiceResult> {
+    const openRouter = new URL(server.endpoint).hostname === 'openrouter.ai';
+    const voice = input.voice || (openRouter
+      ? (await remoteMediaRuntime.listVoices(server, options))[0]
+      : undefined);
+    if (openRouter && !voice) throw new Error('This remote model has no available speakers.');
     return request({
       server,
       path: '/v1/audio/speech',
@@ -164,7 +169,8 @@ export const remoteMediaRuntime = {
         body: JSON.stringify({
           model: requiredModel(server, 'voice'),
           input: input.text,
-          ...(input.voice ? { voice: input.voice } : {}),
+          ...(voice ? { voice } : {}),
+          ...(openRouter ? { response_format: 'mp3' } : {}),
         }),
       },
       signal: options.signal,
@@ -175,6 +181,24 @@ export const remoteMediaRuntime = {
   },
 
   async listVoices(server: RemoteServer, options: RemoteMediaRequestOptions = {}): Promise<string[]> {
+    try {
+      const modelId = requiredModel(server, 'voice');
+      const catalog = await request({
+        server,
+        path: '/v1/models?output_modalities=speech',
+        init: { method: 'GET' },
+        signal: options.signal,
+      }, response => response.json() as Promise<{
+        data?: Array<{ id?: string; supported_voices?: unknown; voices?: unknown }>;
+      }>);
+      const model = catalog.data?.find(entry => entry.id === modelId);
+      const listed = model?.supported_voices ?? model?.voices;
+      if (Array.isArray(listed)) {
+        return listed.filter((voice): voice is string => typeof voice === 'string');
+      }
+    } catch (error) {
+      if (options.signal?.aborted) throw error;
+    }
     const payload = await request({
       server,
       path: '/v1/audio/voices',
