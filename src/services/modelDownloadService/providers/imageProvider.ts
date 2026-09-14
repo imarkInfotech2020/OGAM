@@ -25,6 +25,7 @@ import logger from '../../../utils/logger';
 import { mapStoreStatus } from '../storeStatus';
 import { uniformDownloadId } from '../uniformId';
 import { startImageModelDownload } from '../../imageModelDownloadOwner';
+import { pauseSyntheticImageDownload, resumeSyntheticImageDownload } from '../../imageDownloadActions';
 import type { DownloadProvider, ModelDownload } from '../types';
 
 /**
@@ -79,7 +80,7 @@ export const imageProvider: DownloadProvider = {
         id: uniformDownloadId('image', e.modelId), modelType: 'image', name: e.fileName || id,
         sizeBytes: e.combinedTotalBytes || e.totalBytes, bytesDownloaded: e.bytesDownloaded,
         progress: e.progress, status: mapStoreStatus(e.status),
-        capabilities: { cancel: true, retry: true, remove: true, resumable, determinateProgress: true },
+        capabilities: { cancel: true, retry: true, remove: true, pause: isActiveStatus(e.status) && e.status !== 'processing', resume: e.status === 'paused', resumable, determinateProgress: true },
         error: e.errorMessage,
       });
     }
@@ -95,6 +96,23 @@ export const imageProvider: DownloadProvider = {
       });
     }
     return out;
+  },
+
+  async pause(id: string): Promise<void> {
+    const entry = findEntry(modelIdOf(id));
+    if (!entry) return;
+    if (isMultifile(entry)) { await pauseSyntheticImageDownload(modelIdOf(id)); return; }
+    await backgroundDownloadService.pauseDownload(entry.downloadId);
+    useDownloadStore.getState().setStatus(entry.downloadId, 'paused');
+  },
+
+  async resume(id: string): Promise<void> {
+    const entry = findEntry(modelIdOf(id));
+    if (!entry) return;
+    if (isMultifile(entry)) { await resumeSyntheticImageDownload(modelIdOf(id)); return; }
+    await backgroundDownloadService.resumeDownload(entry.downloadId);
+    useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+    backgroundDownloadService.startProgressPolling();
   },
 
   async cancel(id: string): Promise<void> {

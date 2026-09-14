@@ -10,9 +10,8 @@
  *
  *  - retry / dismiss a membership revocation THROW "Sync is not running." The caller renders that, so the user
  *    learns why the tap did nothing instead of tapping it again.
- *  - disconnect returns FALSE for a device that is not connected, and must not leave that device marked as
- *    manually disconnected - otherwise it would stay excluded from reconnection after Sync comes back, and the
- *    user would have a device that silently never returns.
+ *  - disconnect rejects a device that is not paired, and must not leave that device marked as
+ *    manually disconnected - otherwise it would stay excluded from reconnection after Sync comes back.
  *  - retrying a pairing attempt whose own projection says retry is disabled does nothing: the projection is the
  *    authority on whether that button is live.
  *  - rescan while not running warns and resolves rather than throwing, because it is also called on a timer.
@@ -66,17 +65,20 @@ describePro('the Devices screen while Sync is not running', () => {
     );
   });
 
-  it('reports that it did not disconnect a device it was never connected to', () => {
+  it('reports that it did not disconnect a device it was never connected to', async () => {
     const { syncService } = load();
 
-    // False, not a throw: the row is stale, not broken. The caller uses this to leave the row alone.
-    expect(syncService.disconnectDevice('a-device-that-is-not-connected')).toBe(false);
+    await expect(syncService.disconnectDevice('a-device-that-is-not-connected')).rejects.toThrow(
+      'This device is no longer paired.',
+    );
   });
 
-  it('does not leave an un-disconnected device marked as manually disconnected', () => {
+  it('does not leave an un-disconnected device marked as manually disconnected', async () => {
     const { syncService } = load();
 
-    syncService.disconnectDevice('the-mac');
+    await expect(syncService.disconnectDevice('the-mac')).rejects.toThrow(
+      'This device is no longer paired.',
+    );
 
     // The flag exists to keep a device the user deliberately disconnected from reconnecting on its own. Setting
     // it on a FAILED disconnect would strand that device: Sync comes back and it never returns, with nothing on

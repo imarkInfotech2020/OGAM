@@ -1,13 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { DownloadedModel, RemoteModel } from '../../types';
 import { hardwareService } from '../../services';
 import { textOverheadMultiplier } from '../../services/activeModelService/types';
+import { estimateTextModelMemoryMB } from '../../services/activeModelService/memory';
 import { useAppStore } from '../../stores';
 import { ModelRow } from '../ModelRow';
 import { createAllStyles } from './styles';
+import { fileExceedsBudget } from '../../services/memoryBudget';
+import { useResidentRows } from '../models/useResidentRows';
 import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
 
 export interface TextTabProps {
@@ -51,9 +54,20 @@ export const TextTab: React.FC<TextTabProps> = ({
   // activeModelService uses to register the resident's sizeMB, so this label and the residency
   // chip on the manager sheet agree for the identical loaded model (they diverged: fixed 1.5×
   // here vs 2.2× on a GPU/NPU backend there — device 2026-07-14).
-  const ramMultiplier = textOverheadMultiplier(
-    useAppStore(s => s.settings?.inferenceBackend),
-  );
+  const inferenceBackend = useAppStore(s => s.settings?.inferenceBackend);
+  const ramMultiplier = textOverheadMultiplier(inferenceBackend);
+  const [estimatedRamMB, setEstimatedRamMB] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let current = true;
+    Promise.all(downloadedModels.map(async model => [
+      model.id,
+      await estimateTextModelMemoryMB(model),
+    ] as const)).then(estimates => {
+      if (current) setEstimatedRamMB(Object.fromEntries(estimates));
+    });
+    return () => { current = false; };
+  }, [downloadedModels, inferenceBackend]);
+  const textResident = useResidentRows(true).text;
   // "Loaded" drives the Currently-Loaded + Unload section (only meaningful once a model
   // is actually in memory). "Active" also counts the selected-but-not-yet-loaded model
   // so the switcher reads "Switch Model" and highlights the active choice under deferred
@@ -103,10 +117,9 @@ export const TextTab: React.FC<TextTabProps> = ({
                       activeLocalModel.quantization
                     } • ${hardwareService.formatModelSize(
                       activeLocalModel,
-                    )} • ${hardwareService.formatModelRam(
-                      activeLocalModel,
-                      ramMultiplier,
-                    )} RAM`
+                    )} • ${textResident
+                      ? `${(textResident.sizeMB / 1024).toFixed(1)} GB`
+                      : hardwareService.formatModelRam(activeLocalModel, ramMultiplier)} RAM`
                   : `Remote • ${activeRemoteModelInfo?.serverName ?? 'Model'}`}
               </Text>
             </View>
@@ -181,6 +194,8 @@ export const TextTab: React.FC<TextTabProps> = ({
             <Text style={styles.sectionSubTitle}>Local Models</Text>
           </View>
           {downloadedModels.map(model => {
+            const fileSize = (model.fileSize || 0) + ('mmProjFileSize' in model ? (model.mmProjFileSize || 0) : 0);
+            const memoryFits = !fileExceedsBudget(fileSize, hardwareService.getTotalMemoryGB());
             const isLoaded = currentModelPath === model.filePath;
             // The selected-but-not-loaded model is highlighted as active, but stays
             // tappable so tapping it actually loads it (load-on-tap).
@@ -205,6 +220,9 @@ export const TextTab: React.FC<TextTabProps> = ({
                 name={model.name}
                 size={hardwareService.formatModelSize(model)}
                 quant={model.quantization}
+                ramHint={`${estimatedRamMB[model.id] != null
+                  ? `~${(estimatedRamMB[model.id] / 1024).toFixed(1)} GB`
+                  : hardwareService.formatModelRam(model, ramMultiplier)} RAM${memoryFits ? '' : ' (may not fit)'}`}
                 isVision={
                   model.engine === 'llama' &&
                   predictGgufCapabilities(model).vision

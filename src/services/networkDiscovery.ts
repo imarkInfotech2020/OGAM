@@ -15,6 +15,14 @@ export interface DiscoveredServer {
   name: string;
 }
 
+export type DiscoverableServerKind = DiscoveredServer['type'];
+
+export interface DiscoveryOptions {
+  kinds?: readonly DiscoverableServerKind[];
+  onFound?: (server: DiscoveredServer) => void;
+  onProgress?: (completed: number, total: number) => void;
+}
+
 // Probe paths match exactly where the app later reads models from
 // (see fetchModelsFromServer): OpenAI-compatible servers expose /v1/models,
 // Ollama answers its native /api/tags. So a successful probe means the data the
@@ -144,7 +152,10 @@ async function findReachableSubnet(subnets: string[], log: (msg: string) => void
  * Throws with a human-readable message if setup fails (no WiFi IP, non-private network).
  * Errors during probing are swallowed — only setup errors propagate.
  */
-export async function discoverLANServers(onLog?: (msg: string) => void): Promise<DiscoveredServer[]> {
+export async function discoverLANServers(
+  onLog?: (msg: string) => void,
+  options: DiscoveryOptions = {},
+): Promise<DiscoveredServer[]> {
   const log = (msg: string) => {
     logger.warn('[Discovery]', msg);
     onLog?.(msg);
@@ -201,7 +212,13 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
     subnetsToScan = [base];
   }
 
-  log(`Scanning ${subnetsToScan.length} subnet(s): ${subnetsToScan.map(s => `${s}.0/24`).join(', ')} | ${subnetsToScan.length * 254 * PROVIDERS.length} total probes | in flight: ${MAX_IN_FLIGHT} | timeout: ${TIMEOUT_MS}ms`);
+  const selectedProviders = options.kinds?.length
+    ? PROVIDERS.filter(provider => options.kinds?.includes(provider.type))
+    : PROVIDERS;
+  const total = subnetsToScan.length * 254 * selectedProviders.length;
+  let completed = 0;
+  options.onProgress?.(completed, total);
+  log(`Scanning ${subnetsToScan.length} subnet(s): ${subnetsToScan.map(s => `${s}.0/24`).join(', ')} | ${total} total probes | in flight: ${MAX_IN_FLIGHT} | timeout: ${TIMEOUT_MS}ms`);
 
   try {
     const discovered: DiscoveredServer[] = [];
@@ -213,7 +230,9 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
       if (!seenEndpoints.has(endpoint)) {
         seenEndpoints.add(endpoint);
         log(`Found ${provider.name} at ${target}:${provider.port}`);
-        discovered.push({ endpoint, type: provider.type, name: `${provider.name} (${target})` });
+        const server = { endpoint, type: provider.type, name: `${provider.name} (${target})` };
+        discovered.push(server);
+        options.onFound?.(server);
       }
     };
 
@@ -224,15 +243,20 @@ export async function discoverLANServers(onLog?: (msg: string) => void): Promise
     //
     // Off Grid's own port goes first, so the server this app exists to find is the earliest thing
     // reported rather than the last.
-    const ordered = [...PROVIDERS].sort(
+    const ordered = [...selectedProviders].sort(
       (a, b) => Number(b.type === 'gateway') - Number(a.type === 'gateway'),
     );
     const tasks = subnetsToScan.flatMap((base) =>
       ordered.flatMap((provider) =>
         Array.from({ length: 254 }, (_, i) => {
           const target = `${base}.${i + 1}`;
-          return () =>
-            probe(target, provider.port, provider.probePath).then(recordIfFound(target, provider));
+          return async () => {
+            try {
+              recordIfFound(target, provider)(await probe(target, provider.port, provider.probePath));
+            } finally {
+              options.onProgress?.(++completed, total);
+            }
+          };
         }),
       ),
     );

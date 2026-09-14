@@ -111,11 +111,12 @@ describe('sharing a file to another device without being asked', () => {
       getFile: (syncId: string) => files.get(syncId),
       // Made on this device, so there is no origin to keep it away from.
       originOf: () => undefined,
-      scheduleDelivery: (
+      scheduleDelivery: async (
         deviceId: string,
         file: SharedFileDescriptor,
-        lifecycle: { completed(): Promise<void>; failed(error: Error): Promise<void> },
+        lifecycle: { started?(): Promise<void>; completed(): Promise<void>; failed(error: Error): Promise<void> },
       ) => {
+        await lifecycle.started?.();
         scheduled.push({ deviceId, file, ...lifecycle });
       },
     });
@@ -600,7 +601,7 @@ describe('sharing a file to another device without being asked', () => {
       expect(harness.scheduled[1]!.file.syncId).toBe(idOf('shot-2'));
     });
 
-    it('retries a file whose transfer had failed', async () => {
+    it('keeps a failed transfer for manual retry after reconnect', async () => {
       const harness = await launch();
       await harness.service.setRule({
         source: 'screenshot',
@@ -613,7 +614,7 @@ describe('sharing a file to another device without being asked', () => {
 
       await harness.service.connected(THE_MAC);
 
-      expect(harness.scheduled).toHaveLength(2);
+      expect(harness.scheduled).toHaveLength(1);
     });
 
     it('forgets a queued file that has since been deleted', async () => {
@@ -1319,7 +1320,7 @@ describe('sharing a file to another device without being asked', () => {
       expect(harness.service.approvals().items).toEqual([
         expect.objectContaining({
           deviceId: THE_MAC,
-          title: 'Share shot-1.png with Paired device?',
+          title: 'shot-1.png with Paired device',
         }),
       ]);
     });

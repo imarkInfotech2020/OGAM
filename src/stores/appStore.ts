@@ -120,6 +120,8 @@ export type AppSettings = {
    *  migration turns it ON for users who already had a gateway. `undefined` = never set (reads OFF).
    *  Optional so the migration can distinguish "never set" from an explicit choice. */
   autoDiscoverRemoteModels?: boolean;
+  /** LAN server types to probe when Scan network is used. */
+  remoteScanKinds?: Array<'gateway' | 'ollama' | 'lmstudio'>;
 };
 
 type ThemeMode = 'system' | 'light' | 'dark';

@@ -12,7 +12,7 @@
  */
 import { useAppStore, useWhisperStore } from '../stores';
 import { activeModelService } from './activeModelService';
-import { hardwareService } from './hardware';
+import { estimateTextModelMemoryMB } from './activeModelService/memory';
 import { WHISPER_MODELS } from './whisperService';
 import { modelResidencyManager } from './modelResidency';
 import { generationService } from './generationService';
@@ -40,8 +40,6 @@ function isGenerationActive(): boolean {
   );
 }
 
-const toMB = (bytes: number) => Math.round(bytes / (1024 * 1024));
-
 async function preloadText(): Promise<void> {
   const { downloadedModels } = useAppStore.getState();
   // Same owner, same answer as chat and image generation.
@@ -49,7 +47,7 @@ async function preloadText(): Promise<void> {
   if (!id || activeModelService.getActiveModels().text.isLoaded) return;
   const model = downloadedModels.find(m => m.id === id);
   if (!model) return;
-  const sizeMB = toMB(hardwareService.estimateModelRam(model));
+  const sizeMB = await estimateTextModelMemoryMB(model);
   if (!modelResidencyManager.canLoadWithoutEviction({ key: 'text', sizeMB })) return;
   await activeModelService.loadTextModel(id);
 }
@@ -69,7 +67,7 @@ async function preloadStt(): Promise<void> {
   await whisper.loadModel();
 }
 
-/** Warm selected models in priority order. Safe to call once at app launch. */
+/** @public Optional warm-up entry point; startup intentionally leaves it dormant. */
 export async function preloadSelectedModels(): Promise<void> {
   if (started) return;
   started = true;
@@ -96,7 +94,7 @@ export async function preloadSelectedModels(): Promise<void> {
   }
 }
 
-/** Test helper. */
+/** @public Test helper for an opt-in warm-up journey. */
 export function _resetPreloaderForTesting(): void {
   started = false;
   aborted = false;

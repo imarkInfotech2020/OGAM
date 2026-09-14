@@ -134,13 +134,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setModelsManagerOpen(false);
   };
 
+  const presentModelSheet = (type: ModelRowType) => {
+    if (type === 'text') setPickerType('text');
+    else if (type === 'image') setPickerType('image');
+    else if (type === 'speech') setWhisperOpen(true);
+    else setVoiceOpen(true);
+  };
   const openModelRow = (type: ModelRowType) => {
-    closeManagerThen(() => {
-      if (type === 'text') setPickerType('text');
-      else if (type === 'image') setPickerType('image');
-      else if (type === 'speech') setWhisperOpen(true);
-      else setVoiceOpen(true);
-    });
+    closeManagerThen(() => presentModelSheet(type));
   };
 
   const runPendingAfterClose = () => {
@@ -195,6 +196,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               counts={modelCounts}
               isLoading={loadingState.isLoading}
               onPress={() => setModelsManagerOpen(true)}
+              onPressType={presentModelSheet}
             />
           </AnimatedEntry>
 

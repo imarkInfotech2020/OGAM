@@ -49,6 +49,13 @@ export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
     cardTextCol: {
       flex: 1,
     },
+    scanKindRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'space-between' as const,
+      minHeight: 44,
+      gap: SPACING.md,
+    },
     cardTitle: {
       ...TYPOGRAPHY.h3,
       color: colors.text,

@@ -51,6 +51,24 @@ export interface StreamRequestConfig extends StreamRequestOptions {
 const INSECURE_CREDENTIAL_REDIRECT =
   'Remote server redirected credentials to an insecure endpoint';
 
+/** Keep a provider's useful refusal without rendering a JSON envelope or an unbounded body. */
+export function remoteHttpErrorMessage(body: string, status: number): string {
+  let message = '';
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: string | { message?: unknown };
+      message?: unknown;
+    };
+    const candidate = typeof parsed.error === 'string'
+      ? parsed.error
+      : parsed.error?.message ?? parsed.message;
+    if (typeof candidate === 'string') message = candidate.trim();
+  } catch {
+    message = body.trim();
+  }
+  return (message || `Remote server returned HTTP ${status}`).slice(0, 500);
+}
+
 function rejectCredentialDowngrade(input: {
   xhr: XMLHttpRequest;
   requestUrl: string;
@@ -106,8 +124,8 @@ export async function fetchWithTimeout<T = unknown>(
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        const errorText = await response.text().catch(() => '');
+        throw new Error(remoteHttpErrorMessage(errorText, response.status));
       }
 
       // Try to parse as JSON, fall back to text
@@ -213,15 +231,10 @@ export async function createStreamingRequest(
         } else {
           // Log the full server error body — a bare "HTTP 400" is undiagnosable; the body
           // (e.g. llama.cpp's "failed to parse grammar") is what tells you what to fix.
-          logger.error(
-            `[HttpClient] HTTP ${xhr.status} error body: ${
-              xhr.responseText || '(empty)'
-            }`,
-          );
+          const detail = remoteHttpErrorMessage(xhr.responseText, xhr.status);
+          logger.error(`[HttpClient] HTTP ${xhr.status}: ${detail}`);
           reject(
-            new Error(
-              `HTTP ${xhr.status}: ${xhr.responseText || 'Unknown error'}`,
-            ),
+            new Error(detail),
           );
         }
       }
@@ -435,12 +448,9 @@ function completeNDJSONRequest({
     resolve();
     return;
   }
-  logger.error(
-    `[HttpClient] HTTP ${xhr.status} error body: ${
-      xhr.responseText || '(empty)'
-    }`,
-  );
+  const detail = remoteHttpErrorMessage(xhr.responseText, xhr.status);
+  logger.error(`[HttpClient] HTTP ${xhr.status}: ${detail}`);
   reject(
-    new Error(`HTTP ${xhr.status}: ${xhr.responseText || 'Unknown error'}`),
+    new Error(detail),
   );
 }

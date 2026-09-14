@@ -108,7 +108,7 @@ describe('NetworkSection', () => {
 
   it('renders "Network Models" title', () => {
     const { getByText } = render(<NetworkSection {...defaultNetworkProps} />);
-    expect(getByText('Network')).toBeTruthy();
+    expect(getByText('Network Models')).toBeTruthy();
   });
 
   it('shows scanning spinner when isCheckingNetwork=true and no servers', () => {
@@ -143,7 +143,7 @@ describe('NetworkSection', () => {
   it('shows empty text when no servers and not checking', () => {
     const { getByText } = render(<NetworkSection {...defaultNetworkProps} />);
     expect(
-      getByText('No model servers found. Scan again or add one.'),
+      getByText('No Off Grid AI Desktop, Ollama, or LM Studio server found. Scan again or add one.'),
     ).toBeTruthy();
   });
 

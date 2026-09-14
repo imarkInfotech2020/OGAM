@@ -1,15 +1,15 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { LoadingDots } from '../../components/LoadingDots';
+import { DenseModelCardContent } from '../../components/ModelCardContent';
 import Icon from 'react-native-vector-icons/Feather';
 import { Card } from '../../components';
+import { ModelCard } from '../../components/ModelCard';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { BackgroundDownloadReasonCode } from '../../types';
 import { needsVisionRepair as checkNeedsVisionRepair } from '../../utils/visionRepair';
 import { getDownloadStatusLabel, isRetryable } from '../../utils/downloadErrors';
 import { downloadStatusIcon } from '../../utils/downloadStatusIcon';
-import { formatBytes } from '../../utils/formatBytes';
 import { createStyles } from './styles';
 import { presentProgress } from '../../utils/progressPresentation';
 import { SPACING } from '../../constants';
@@ -30,6 +30,8 @@ export type DownloadItem = {
   progress: number;
   bytesPerSecond?: number;
   status: string;
+  canPause?: boolean;
+  canResume?: boolean;
   downloadedAt?: string;
   filePath?: string;
   isVisionModel?: boolean;
@@ -72,9 +74,11 @@ interface ActiveDownloadCardProps {
   item: DownloadItem;
   onRemove: (item: DownloadItem) => void;
   onRetry: (item: DownloadItem) => void;
+  onPause: (item: DownloadItem) => void;
+  onResume: (item: DownloadItem) => void;
 }
 
-export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry }) => {
+export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry, onPause, onResume }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const progressColor =
@@ -107,8 +111,12 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
     <Card style={styles.downloadCard}>
       <View style={styles.downloadHeader}>
         <View style={styles.downloadInfo}>
-          <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
-          <Text style={styles.modelId} numberOfLines={1}>{item.author}</Text>
+          <DenseModelCardContent
+            model={{ name: item.fileName, author: item.author, modelType: item.isVisionModel ? 'vision' : item.modelType === 'text' ? 'text' : undefined }}
+            fileSize={item.fileSize}
+            quantization={item.quantization}
+            isVisionModel={!!item.isVisionModel}
+          />
         </View>
         {item.status === 'failed' ? (
           <View style={styles.failedActionsRow}>
@@ -134,13 +142,27 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.cancelButton}
-            testID="remove-download-button"
-            onPress={() => onRemove(item)}
-          >
-            <Icon name="x" size={20} color={colors.error} />
-          </TouchableOpacity>
+          <View style={styles.failedActionsRow}>
+            {(item.canPause || item.canResume) && (
+              <TouchableOpacity
+                style={styles.transferIconButton}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.canResume ? 'Resume' : 'Pause'} ${item.fileName}`}
+                hitSlop={6}
+                onPress={() => item.canResume ? onResume(item) : onPause(item)}
+              >
+                <Icon name={item.canResume ? 'play' : 'pause'} size={14} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.cancelButton}
+              testID="remove-download-button"
+              hitSlop={6}
+              onPress={() => onRemove(item)}
+            >
+              <Icon name="x" size={16} color={colors.error} />
+            </TouchableOpacity>
+          </View>
         )}
       </View>
       <View style={styles.progressContainer}>
@@ -152,11 +174,6 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
         </Text>
       </View>
       <View style={styles.downloadMeta}>
-        {!!item.quantization && (
-          <View style={styles.quantBadge}>
-            <Text style={styles.quantText}>{item.quantization}</Text>
-          </View>
-        )}
         {(!!getStatusLabel(item) || !!getStatusIcon()) && (
           <View style={styles.statusIconRow}>
             {getStatusIcon() && (
@@ -183,27 +200,7 @@ interface CompletedDownloadCardProps {
   isRepairingVision?: boolean;
 }
 
-/** Feather icon for a completed model row. A vision model missing its projector reads as
- *  "needs repair" (wrench), not "has vision" (eye) — actionable-broken, not a working capability. */
-function modelTypeIconName(item: DownloadItem, needsVisionRepair: boolean): string {
-  if (item.modelType === 'image') return 'image';
-  if (item.modelType === 'tts') return 'volume-2';
-  if (item.modelType === 'stt') return 'mic';
-  if (needsVisionRepair) return 'tool';
-  if (item.isVisionModel) return 'eye';
-  return 'message-square';
-}
-
-function modelTypeIconColor(item: DownloadItem, needsVisionRepair: boolean, colors: ReturnType<typeof useTheme>['colors']): string {
-  if (item.modelType === 'image') return colors.info;
-  if (item.modelType === 'tts' || item.modelType === 'stt') return colors.success;
-  if (needsVisionRepair || item.isVisionModel) return colors.warning;
-  return colors.primary;
-}
-
 export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, isRepairingVision = false }) => {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(createStyles);
   const needsVisionRepair = checkNeedsVisionRepair(item);
   // A vision repair drives a live download-store row keyed on the completed
   // model's modelKey (`repo/file` = item.modelId). Read it so the SAME
@@ -211,69 +208,26 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
   // ~900MB mmproj re-download, instead of a bare indeterminate spinner (OD2).
   const repairEntry = useDownloadStore(s => s.downloads[item.modelId]);
   const showRepairProgress = isRepairingVision && !!repairEntry;
-  const repairProgress = repairEntry ? presentProgress({
-    progress: repairEntry.progress,
-    bytesDownloaded: repairEntry.bytesDownloaded,
-    totalBytes: repairEntry.totalBytes,
-    bytesPerSecond: repairEntry.bytesPerSecond,
-    status: repairEntry.status,
-  }) : undefined;
-  const completedMeta = [
-    item.author,
-    formatBytes(item.fileSize),
-    item.quantization,
-    item.downloadedAt
-      ? new Date(item.downloadedAt).toLocaleDateString()
-      : undefined,
-  ].filter(Boolean).join(' · ');
-
   return (
-    <Card style={styles.downloadCard}>
-      <View style={[styles.downloadHeader, styles.completedHeader]}>
-        <View style={styles.modelTypeIcon}>
-          <Icon
-            name={modelTypeIconName(item, needsVisionRepair)}
-            size={16}
-            color={modelTypeIconColor(item, needsVisionRepair, colors)}
-          />
-        </View>
-        <View style={styles.downloadInfo}>
-          <Text style={styles.fileName} numberOfLines={1}>{item.fileName}</Text>
-          <Text style={styles.modelId} numberOfLines={1}>{completedMeta}</Text>
-        </View>
-        {needsVisionRepair && !isRepairingVision && onRepairVision && (
-          <TouchableOpacity
-            style={styles.repairButton}
-            testID="repair-vision-button"
-            onPress={() => onRepairVision(item)}
-          >
-            <Icon name="tool" size={18} color={colors.warning} />
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={styles.deleteButton}
-          testID="delete-model-button"
-          onPress={() => onDelete(item)}
-        >
-          <Icon name="trash-2" size={18} color={colors.error} />
-        </TouchableOpacity>
-      </View>
-      {showRepairProgress && (
-        <View style={styles.progressContainer} testID="repair-vision-progress">
-          <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: `${Math.round(repairEntry.progress * 100)}%` as const, backgroundColor: colors.primary }]} />
-          </View>
-          <Text style={styles.progressText}>
-            {[repairProgress?.percentageText, repairProgress?.detailText].filter(Boolean).join(' · ')}
-          </Text>
-        </View>
-      )}
-      {isRepairingVision && (
-        <View style={styles.repairingBadge} testID="repairing-vision-badge">
-          <LoadingDots color={colors.primary} />
-          <Text style={styles.repairingBadgeText}>Repairing</Text>
-        </View>
-      )}
-    </Card>
+    <View style={{ marginHorizontal: SPACING.md }}>
+      <ModelCard
+        compact
+        model={{
+          id: item.modelId,
+          name: item.fileName,
+          author: item.author,
+          modelType: item.isVisionModel ? 'vision' : item.modelType === 'text' ? 'text' : undefined,
+          description: item.downloadedAt ? new Date(item.downloadedAt).toLocaleDateString() : undefined,
+        }}
+        file={{ name: item.fileName, size: item.fileSize, quantization: item.quantization, downloadUrl: '' }}
+        isDownloaded
+        isDownloading={showRepairProgress}
+        isRepairingVision={isRepairingVision}
+        downloadProgress={repairEntry?.progress}
+        downloadBytes={repairEntry ? { downloaded: repairEntry.bytesDownloaded, total: repairEntry.totalBytes, bytesPerSecond: repairEntry.bytesPerSecond } : undefined}
+        onRepairVision={needsVisionRepair && onRepairVision ? () => onRepairVision(item) : undefined}
+        onDelete={() => onDelete(item)}
+      />
+    </View>
   );
 };

@@ -95,7 +95,7 @@ export const textProvider: DownloadProvider = {
         sizeBytes: e.combinedTotalBytes || e.totalBytes,
         bytesDownloaded: e.bytesDownloaded + (e.mmProjBytesDownloaded ?? 0),
         progress: e.progress, status: mapStoreStatus(e.status),
-        capabilities: TEXT_CAPABILITIES, error: e.errorMessage,
+        capabilities: { ...TEXT_CAPABILITIES, pause: isActiveStatus(e.status) && e.status !== 'processing', resume: e.status === 'paused' }, error: e.errorMessage,
       });
     }
     const inflight = new Set(out.map(d => d.id));
@@ -109,6 +109,29 @@ export const textProvider: DownloadProvider = {
       });
     }
     return out;
+  },
+
+  async pause(id: string): Promise<void> {
+    const entry = findEntry(keyOf(id));
+    if (!entry) return;
+    await backgroundDownloadService.pauseDownload(entry.downloadId);
+    useDownloadStore.getState().setStatus(entry.downloadId, 'paused');
+    if (entry.mmProjDownloadId && isActiveStatus(entry.mmProjStatus ?? 'completed')) {
+      await backgroundDownloadService.pauseDownload(entry.mmProjDownloadId);
+      useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'paused');
+    }
+  },
+
+  async resume(id: string): Promise<void> {
+    const entry = findEntry(keyOf(id));
+    if (!entry) return;
+    await backgroundDownloadService.resumeDownload(entry.downloadId);
+    useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+    if (entry.mmProjDownloadId && entry.mmProjStatus === 'paused') {
+      await backgroundDownloadService.resumeDownload(entry.mmProjDownloadId);
+      useDownloadStore.getState().setStatus(entry.mmProjDownloadId, 'pending');
+    }
+    backgroundDownloadService.startProgressPolling();
   },
 
   async cancel(id: string): Promise<void> {

@@ -67,6 +67,12 @@ function chooseText(
   candidates: AutoSetupCompatibleCatalog['text'],
 ): AutoSetupCompatibleCatalog['text'][number] | null {
   if (candidates.length === 0) return null;
+  if (tier === 'lean') {
+    const qwen2b = candidates.find(candidate =>
+      candidate.id.startsWith('unsloth/Qwen3.5-2B-GGUF/'),
+    );
+    if (qwen2b) return qwen2b;
+  }
   const target = AUTO_SETUP_TEXT_TARGET_BILLIONS[tier];
   return [...candidates].sort((a, b) => {
     const aDistance = Math.abs((a.parameterCountB ?? 0) - target);

@@ -362,7 +362,7 @@ describe('httpClient', () => {
 
       await expect(
         fetchWithTimeout('http://test.com/missing', { timeout: 5000 }),
-      ).rejects.toThrow('HTTP 404');
+      ).rejects.toThrow('Not Found');
     });
 
     it('should timeout after specified duration', async () => {
@@ -425,7 +425,7 @@ describe('httpClient', () => {
       expect(result).toBe('plain text response');
     });
 
-    it('should fallback to "Unknown error" when response.text() fails', async () => {
+    it('should fall back to the HTTP status when response.text() fails', async () => {
       jest.spyOn(global, 'fetch').mockResolvedValue({
         ok: false,
         status: 500,
@@ -434,7 +434,7 @@ describe('httpClient', () => {
 
       await expect(
         fetchWithTimeout('http://test.com/error', { timeout: 5000 }),
-      ).rejects.toThrow('HTTP 500: Unknown error');
+      ).rejects.toThrow('Remote server returned HTTP 500');
     });
 
     it('should handle non-Error thrown values', async () => {
@@ -1000,7 +1000,7 @@ describe('httpClient', () => {
       mockXHR.readyState = 4;
       if (onReadyStateChange) onReadyStateChange();
 
-      await expect(promise).rejects.toThrow('HTTP 500');
+      await expect(promise).rejects.toThrow('Internal Server Error');
     });
 
     it('should reject on network error', async () => {
@@ -1342,7 +1342,7 @@ describe('httpClient', () => {
       mockXHR.readyState = 4;
       mockXHR.status = 500;
       mockXHR.onreadystatechange?.();
-      await expect(promise).rejects.toThrow('HTTP 500');
+      await expect(promise).rejects.toThrow('Internal Server Error');
     });
 
     it('rejects on network error', async () => {

@@ -10,7 +10,6 @@ import { validateImageModelDir } from '../../utils/imageModelIntegrity';
 import { remoteServerManager } from '../remoteServerManager';
 import { useAppStore, useRemoteServerStore } from '../../stores';
 import logger from '../../utils/logger';
-import { textOverheadMultiplier } from './types';
 import {
   createSelectedTextModelResolver,
   selectedTextModelIdOf,
@@ -28,6 +27,7 @@ import {
   checkMemoryForModel as _checkMemoryForModel,
   checkMemoryForDualModel as _checkMemoryForDualModel,
   getCurrentlyLoadedMemoryGB as _getCurrentlyLoadedMemoryGB,
+  estimateTextModelMemoryMB,
 } from './memory';
 import { doLoadTextModel, doLoadImageModel, checkImageModelCanLoad } from './loaders';
 import {
@@ -171,7 +171,7 @@ class ActiveModelService {
     // Use estimated runtime RAM (file size + overhead), not just file size,
     // so the residency budget reflects the model's real memory footprint.
     // GPU-aware overhead: a GPU/NPU backend adds working buffers in system RAM the flat CPU 1.5× misses.
-    const textSizeMB = Math.round((hardwareService.estimateModelRam(model, textOverheadMultiplier(store.settings.inferenceBackend)) || 0) / (1024 * 1024));
+    const textSizeMB = await estimateTextModelMemoryMB(model);
     // LiteRT weights + KV are dirty/accelerator memory → gated on REAL free RAM (mmap GGUF
     // stays clean/physical-cap). Derived once so makeRoomFor and register agree.
     const textIsDirty = model.engine === 'litert';
@@ -458,7 +458,7 @@ class ActiveModelService {
     const s = useAppStore.getState();
     return { downloadedModels: s.downloadedModels, downloadedImageModels: s.downloadedImageModels };
   }
-  private getCurrentlyLoadedMemoryGB(): number {
+  private getCurrentlyLoadedMemoryGB(): Promise<number> {
     return _getCurrentlyLoadedMemoryGB(this.getIds(), this.getLists());
   }
   async checkMemoryForModel(modelId: string, modelType: ModelType): Promise<MemoryCheckResult> {

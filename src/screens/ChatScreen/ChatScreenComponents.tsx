@@ -208,7 +208,11 @@ export const ImageProgressIndicator: React.FC<{
                 the real image (device 2026-07-16). */}
             {!imagePreviewPath && (
               <View style={styles.imageProgressIconContainer} testID="image-progress-placeholder-icon">
-                <Icon name="image" size={18} color={colors.primary} />
+                {imageGenerationProgress ? (
+                  <Icon name="image" size={18} color={colors.primary} />
+                ) : (
+                  <LoadingDots testID="image-generation-working-indicator" />
+                )}
               </View>
             )}
             <View style={styles.imageProgressInfo}>

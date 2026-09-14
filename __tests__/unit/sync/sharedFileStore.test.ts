@@ -121,12 +121,12 @@ describe('the phone s record of files the mesh put on it', () => {
         .spyOn(AsyncStorage, 'setItem')
         .mockRejectedValueOnce(new Error('the disk is full'));
 
-      await expect(store.put(record())).rejects.toThrow('the disk is full');
+      await store.put(record());
+      expect(await AsyncStorage.getItem(STORAGE_KEY)).toBeNull();
       jest.restoreAllMocks();
       await store.put(record({ name: 'contract-v2.pdf' }));
 
-      // The write queue is serial, so one failure must not poison it - otherwise a single full-disk moment
-      // silently stops every later file from being recorded.
+      // A failed snapshot is reported by the writer. It must not prevent the next snapshot from reaching disk.
       expect(await stored()).toEqual([record({ name: 'contract-v2.pdf' })]);
     });
   });

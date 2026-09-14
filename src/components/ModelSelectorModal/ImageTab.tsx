@@ -5,6 +5,8 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ONNXImageModel, RemoteModel } from '../../types';
 import { hardwareService } from '../../services';
+import { ModelRow } from '../ModelRow';
+import { fileExceedsBudget } from '../../services/memoryBudget';
 import { createAllStyles } from './styles';
 
 export interface ImageTabProps {
@@ -156,6 +158,8 @@ export const ImageTab: React.FC<ImageTabProps> = ({
             <Text style={styles.sectionSubTitle}>Local Models</Text>
           </View>
           {downloadedImageModels.map(model => {
+            const estimatedMemory = hardwareService.estimateImageModelRam(model);
+            const memoryFits = !fileExceedsBudget(model.size, hardwareService.getTotalMemoryGB());
             const isCurrent = activeImageModelId === model.id;
             // While a load is in flight, the highlight + spinner follow the row being loaded, not the
             // model still resident — so tapping B moves the selection to B at once (device 2026-07-14).
@@ -163,46 +167,20 @@ export const ImageTab: React.FC<ImageTabProps> = ({
             const loadInProgress = loadingModelId != null;
             const highlight = loadInProgress ? isLoadingThis : isCurrent;
             return (
-              <TouchableOpacity
+              <ModelRow
                 key={model.id}
                 testID={`image-model-row-${model.id}`}
-                style={[
-                  styles.modelItem,
-                  highlight && styles.modelItemSelectedImage,
-                ]}
+                name={model.name}
+                size={hardwareService.formatBytes(model.size)}
+                quant={model.style || 'Image'}
+                ramHint={`~${(estimatedMemory / (1024 * 1024 * 1024)).toFixed(1)} GB RAM${memoryFits ? '' : ' (may not fit)'}`}
+                isActive={highlight}
+                isLoaded={isCurrent && !loadInProgress}
+                loading={isLoadingThis}
+                variant="image"
                 onPress={() => onSelectImageModel(model)}
                 disabled={isAnyLoading || isCurrent}
-              >
-                <View style={styles.modelInfo}>
-                  <Text
-                    style={[
-                      styles.modelName,
-                      highlight && styles.modelNameSelectedImage,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {model.name}
-                  </Text>
-                  <View style={styles.modelMeta}>
-                    <Text style={styles.modelSize}>
-                      {hardwareService.formatBytes(model.size)}
-                    </Text>
-                    {!!model.style && (
-                      <>
-                        <Text style={styles.metaSeparator}>•</Text>
-                        <Text style={styles.modelStyle}>{model.style}</Text>
-                      </>
-                    )}
-                  </View>
-                </View>
-                {isLoadingThis ? (
-                  <LoadingDots color={colors.info} testID="model-row-loading" />
-                ) : isCurrent && !loadInProgress ? (
-                  <View style={[styles.checkmark, styles.checkmarkImage]}>
-                    <Icon name="check" size={16} color={colors.background} />
-                  </View>
-                ) : null}
-              </TouchableOpacity>
+              />
             );
           })}
         </>

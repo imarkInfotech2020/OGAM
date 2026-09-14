@@ -196,7 +196,7 @@ export const TranscriptionModelsTab: React.FC<TranscriptionModelsTabProps> = ({
       setAlertState(
         showAlert(
           'Remove Transcription Model',
-          'This deletes the model files for this language/size.',
+          `Delete "${WHISPER_MODELS.find(model => model.id === id)?.name ?? id}"? This will free up about ${formatSize(WHISPER_MODELS.find(model => model.id === id)?.size ?? 0)}.`,
           [
       { text: 'Cancel', style: 'cancel' },
             {

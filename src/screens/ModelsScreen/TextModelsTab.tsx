@@ -3,6 +3,7 @@ import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Plat
 import { LoadingDots } from '../../components/LoadingDots';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
+import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { fileExceedsBudget } from '../../services/memoryBudget';
 import { Card, ModelCard } from '../../components';
@@ -55,6 +56,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'alertState' | 'setAlertState'
   | 'focusTrigger'
   | 'handleSearch' | 'handleRefresh'
+  | 'handleImportLocalModel' | 'isImporting'
   | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
   | 'clearFilters'
   | 'toggleFilterDimension' | 'toggleOrg'
@@ -206,11 +208,17 @@ const ModelDetailView: React.FC<DetailProps> = ({
       <Card style={styles.modelInfoCard}>
         <View style={styles.authorRow}>
           <Text style={styles.modelAuthor}>{selectedModel.author}</Text>
-          {selectedModel.credibility && (
+          {selectedModel.credibility && (selectedModel.credibility.source === 'official' || selectedModel.credibility.source === 'verified-quantizer') && (
+            <MaterialIcon
+              name="verified"
+              size={14}
+              color={colors.primary}
+              accessibilityLabel={CREDIBILITY_LABELS[selectedModel.credibility.source].label}
+            />
+          )}
+          {selectedModel.credibility && selectedModel.credibility.source !== 'official' && selectedModel.credibility.source !== 'verified-quantizer' && (
             <View style={[styles.credibilityBadge, { backgroundColor: `${CREDIBILITY_LABELS[selectedModel.credibility.source].color}25` }]}>
               {selectedModel.credibility.source === 'lmstudio' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>★</Text>}
-              {selectedModel.credibility.source === 'official' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>✓</Text>}
-              {selectedModel.credibility.source === 'verified-quantizer' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>◆</Text>}
               <Text style={[styles.credibilityText, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>
                 {CREDIBILITY_LABELS[selectedModel.credibility.source].label}
               </Text>
@@ -325,7 +333,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     filteredResults, recommendedAsModelInfo, trendingAsModelInfo, ramGB, deviceRecommendation,
     hasActiveFilters, downloadedModels,
     alertState, setAlertState, focusTrigger,
-    handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
+    handleSearch, handleRefresh, handleImportLocalModel, isImporting, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
     isModelDownloaded, getDownloadedModel, isRepairingVisionModel, onboarding = false,
@@ -413,7 +421,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
 
   return (
     <>
-      <View style={styles.searchContainer}>
+      <View style={styles.searchContainer} testID="text-model-search-row">
         <TextInput
           style={styles.searchInput}
           placeholder="Search Hugging Face models..."
@@ -442,6 +450,18 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           <Icon name="sliders" size={14} color={filterToggleActive ? colors.primary : colors.textMuted} />
           {hasNonSortActiveFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
+        {!onboarding && (
+          <TouchableOpacity
+            style={styles.filterToggle}
+            onPress={handleImportLocalModel}
+            disabled={isImporting}
+            accessibilityRole="button"
+            accessibilityLabel="Import local file"
+            testID="import-local-model"
+          >
+            <Icon name="upload" size={14} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {filterState.expandedDimension === 'sort' && <SortPanel filterState={filterState} setSortOption={setSortOption} styles={styles} colors={colors} />}

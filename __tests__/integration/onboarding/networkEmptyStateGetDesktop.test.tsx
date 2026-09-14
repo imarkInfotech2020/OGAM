@@ -61,7 +61,7 @@ describe('Onboarding network empty state — leads with Off Grid AI Desktop + Ge
     const ui = renderEmptyNetworkSection();
 
     // Terminal artifact 1: the user sees the honest empty state.
-    expect(ui.getByText('No model servers found. Scan again or add one.')).toBeTruthy();
+    expect(ui.getByText('No Off Grid AI Desktop, Ollama, or LM Studio server found. Scan again or add one.')).toBeTruthy();
 
     // Terminal artifact 2: a tappable link is present.
     const link = ui.getByTestId('onboarding-get-desktop');

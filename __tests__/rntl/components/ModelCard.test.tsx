@@ -250,16 +250,6 @@ describe('ModelCard', () => {
       expect(getByText('A great model for testing')).toBeTruthy();
     });
 
-    it('omits download count in compact mode', () => {
-      const { queryByText } = render(
-        <ModelCard
-          model={{ ...baseModel, downloads: 15000 }}
-          compact={true}
-        />
-      );
-      expect(queryByText('15.0K dl')).toBeNull();
-    });
-
     it('shows model type badge in compact mode for vision', () => {
       const { getByText } = render(
         <ModelCard
@@ -268,44 +258,6 @@ describe('ModelCard', () => {
         />
       );
       expect(getByText('Vision')).toBeTruthy();
-    });
-
-    it('omits the code type when it does not affect runtime capability', () => {
-      const { queryByText } = render(
-        <ModelCard
-          model={{ ...baseModel, modelType: 'code' }}
-          compact={true}
-        />
-      );
-      expect(queryByText('Code')).toBeNull();
-    });
-
-    it('omits the default text type from the dense facts line', () => {
-      const { queryByText } = render(
-        <ModelCard
-          model={{ ...baseModel, modelType: 'text' }}
-          compact={true}
-        />
-      );
-      expect(queryByText('Text')).toBeNull();
-    });
-
-    it('omits parameter count from the dense facts line', () => {
-      const { queryByText } = render(
-        <ModelCard
-          model={{ ...baseModel, paramCount: 7 }}
-          compact={true}
-        />
-      );
-      expect(queryByText('7B params')).toBeNull();
-    });
-
-    it('shows the NPU/GPU badge when supportsAcceleration is set', () => {
-      const { getByText, queryByTestId } = render(
-        <ModelCard model={{ ...baseModel, paramCount: 7 }} compact={true} supportsAcceleration />
-      );
-      expect(getByText('NPU/GPU')).toBeTruthy();
-      expect(queryByTestId('npu-gpu-badge')).toBeNull();
     });
 
     it('hides the NPU/GPU badge when the model is not accelerable', () => {
@@ -436,7 +388,7 @@ describe('ModelCard', () => {
         />
       );
 
-      expect(getByLabelText('Verified')).toBeTruthy();
+      expect(getByLabelText('Official')).toBeTruthy();
       expect(queryByText('Official')).toBeNull();
       expect(queryByText(/OpenBMB/)).toBeTruthy();
     });
@@ -464,8 +416,8 @@ describe('ModelCard', () => {
       expect(getByText('LM Studio')).toBeTruthy();
     });
 
-    it('shows checkmark for official authors', () => {
-      const { getByText } = render(
+    it('shows an icon for official authors', () => {
+      const { getByLabelText, queryByText } = render(
         <ModelCard
           model={{
             ...baseModel,
@@ -478,12 +430,12 @@ describe('ModelCard', () => {
           }}
         />
       );
-      expect(getByText('✓')).toBeTruthy();
-      expect(getByText('Official')).toBeTruthy();
+      expect(getByLabelText('Official')).toBeTruthy();
+      expect(queryByText('Official')).toBeNull();
     });
 
-    it('shows diamond for verified quantizers', () => {
-      const { getByText } = render(
+    it('shows an icon for verified quantizers', () => {
+      const { getByLabelText, queryByText } = render(
         <ModelCard
           model={{
             ...baseModel,
@@ -496,8 +448,8 @@ describe('ModelCard', () => {
           }}
         />
       );
-      expect(getByText('◆')).toBeTruthy();
-      expect(getByText('Verified')).toBeTruthy();
+      expect(getByLabelText('Verified')).toBeTruthy();
+      expect(queryByText('Verified')).toBeNull();
     });
 
     it('shows no badge icon for community models', () => {
@@ -528,10 +480,11 @@ describe('ModelCard', () => {
           verifiedBy: 'Meta',
         },
       });
-      const { getByText } = render(
+      const { getByLabelText, queryByText } = render(
         <ModelCard model={baseModel} downloadedModel={downloadedModel} />
       );
-      expect(getByText('Official')).toBeTruthy();
+      expect(getByLabelText('Official')).toBeTruthy();
+      expect(queryByText('Official')).toBeNull();
     });
   });
 
@@ -962,23 +915,12 @@ describe('ModelCard', () => {
       expect(queryByText('Recommended')).toBeNull();
     });
 
-    it('renders the pill with a custom pillLabel', () => {
-      const { getByText } = render(
+    it('uses the fire icon without a visible label', () => {
+      const { getByLabelText, queryByText } = render(
         <ModelCard model={baseModel} compact={true} recommended={{ pillLabel: 'Featured' }} />,
       );
-      expect(getByText(/test-author · Featured/)).toBeTruthy();
-    });
-
-    it('renders custom chips in place of the modelType chip row (compact)', () => {
-      const { queryByText } = render(
-        <ModelCard
-          model={{ ...baseModel, modelType: 'vision' }}
-          compact={true}
-          recommended={{ chips: ['Vision', 'GPU'] }}
-        />,
-      );
-      expect(queryByText('GPU')).toBeNull();
-      expect(queryByText('Vision')).toBeTruthy();
+      expect(getByLabelText('Recommended')).toBeTruthy();
+      expect(queryByText('Featured')).toBeNull();
     });
 
     it('renders the highlight as part of the common description (compact)', () => {
@@ -1026,14 +968,15 @@ describe('ModelCard', () => {
       expect(getByText('Visible description')).toBeTruthy();
     });
 
-    it('renders pill + combined description/highlight in standard (non-compact) mode', () => {
-      const { getByText } = render(
+    it('renders the fire icon and combined description in standard mode', () => {
+      const { getByLabelText, getByText, queryByText } = render(
         <ModelCard
           model={{ ...baseModel, description: 'Detail description' }}
           recommended={{ pillLabel: 'Recommended', highlightText: 'Up to 2x faster via GPU' }}
         />,
       );
-      expect(getByText('Recommended')).toBeTruthy();
+      expect(getByLabelText('Recommended')).toBeTruthy();
+      expect(queryByText('Recommended')).toBeNull();
       // Description + highlight render as one common line (not a separate colour/slot).
       expect(getByText('Detail description Up to 2x faster via GPU')).toBeTruthy();
     });

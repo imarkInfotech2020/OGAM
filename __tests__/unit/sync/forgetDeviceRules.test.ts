@@ -45,17 +45,17 @@ beforeEach(async () => {
 
 describe('a device leaving the mesh', () => {
   it('takes both its sharing rule and its receive rule with it', async () => {
-    // The user had set this phone up specifically: send it screenshots, but do not accept its files.
+    // The user had set this phone up specifically: send it screenshots, but do not accept its screenshots.
     await ambientShareService.setRule({
       source: 'screenshot',
       destinationId: THE_PHONE,
       mode: 'auto'
     } as never);
-    await receivePreferences.setDeviceCategory(THE_PHONE, 'files', false);
+    await receivePreferences.setDeviceCategory(THE_PHONE, 'screenshot', false);
     expect(
       ambientShareService.snapshot().rules.some(rule => rule.destinationId === THE_PHONE)
     ).toBe(true);
-    expect(receivePreferences.accepts(THE_PHONE, 'files')).toBe(false);
+    expect(receivePreferences.accepts(THE_PHONE, 'screenshot')).toBe(false);
 
     await forgetDeviceRules(THE_PHONE);
 
@@ -64,22 +64,22 @@ describe('a device leaving the mesh', () => {
     expect(
       ambientShareService.snapshot().rules.some(rule => rule.destinationId === THE_PHONE)
     ).toBe(false);
-    expect(receivePreferences.accepts(THE_PHONE, 'files')).toBe(true);
+    expect(receivePreferences.accepts(THE_PHONE, 'screenshot')).toBe(true);
   });
 
   it('leaves every other device\'s rules alone', async () => {
-    await receivePreferences.setDeviceCategory(THE_PHONE, 'chats', false);
-    await receivePreferences.setDeviceCategory('the-ipad', 'files', false);
+    await receivePreferences.setDeviceCategory(THE_PHONE, 'clipboard', false);
+    await receivePreferences.setDeviceCategory('the-ipad', 'screenshot', false);
 
     await forgetDeviceRules(THE_PHONE);
 
     // Forgetting one device must not reset the mesh. Someone who unpairs a lost phone would otherwise silently
     // start accepting everything from every other device they own.
-    expect(receivePreferences.accepts('the-ipad', 'files')).toBe(false);
+    expect(receivePreferences.accepts('the-ipad', 'screenshot')).toBe(false);
   });
 
   it('completes the eviction even when the rule cannot be written away', async () => {
-    await receivePreferences.setDeviceCategory(THE_PHONE, 'chats', false);
+    await receivePreferences.setDeviceCategory(THE_PHONE, 'clipboard', false);
     jest
       .spyOn(AsyncStorage, 'setItem')
       .mockRejectedValue(new Error('ENOSPC: no space left on device'));

@@ -102,6 +102,8 @@ export function entryToActiveItem(entry: DownloadEntry): DownloadItem {
     progress: entry.progress,
     bytesPerSecond: entry.bytesPerSecond,
     status: entry.status,
+    canPause: !!entry.downloadId && (entry.status === 'running' || entry.status === 'pending' || entry.status === 'waiting_for_network'),
+    canResume: !!entry.downloadId && entry.status === 'paused',
     reason: entry.errorMessage,
     reasonCode: entry.errorCode as
       | import('../../types').BackgroundDownloadReasonCode

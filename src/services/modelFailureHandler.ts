@@ -51,6 +51,8 @@ export interface ReportFailureContext {
    *  errors and for warnings — so a caller can pass it unconditionally and it only
    *  surfaces when the gate is actually overridable. */
   onLoadAnyway?: () => void;
+  /** Remote refusals must not advise freeing this phone's memory. */
+  remote?: boolean;
   /** Stable id so repeated reports for the same surface replace, not stack.
    *  Defaults to the modelType (one card per subsystem). */
   id?: string;
@@ -83,7 +85,7 @@ export function reportModelFailure(
     title: ctx.title ?? (copy ? `${TYPE_LABEL[modelType]}: ${copy.title}` : `${TYPE_LABEL[modelType]} notice`),
     message: ctx.message ?? copy?.message ?? (detail ?? 'Something went wrong.'),
     onRetry: severity === 'error' ? ctx.onRetry : undefined,
-    memoryPressure: reason === 'insufficient-memory',
+    memoryPressure: !ctx.remote && reason === 'insufficient-memory',
     overridable,
     onLoadAnyway: overridable ? ctx.onLoadAnyway : undefined,
   };

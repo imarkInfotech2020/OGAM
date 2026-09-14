@@ -23,9 +23,7 @@ export interface RecommendedConfig {
    *  faster than CPU via GPU"). Rendered as part of the SAME common description
    *  line as every other card — not a separately coloured/positioned highlight. */
   highlightText?: string;
-  // When provided, replaces the default modelType/paramCount/RAM chips in
-  // compact mode. Lets curated entries surface custom badges (e.g. "Vision",
-  // "GPU") instead of the auto-derived ones.
+  // Additional curated facts shown with the model facts in compact mode.
   chips?: string[];
 }
 
@@ -34,7 +32,10 @@ interface DenseModelCardContentProps {
     name: string;
     author: string;
     description?: string;
+    downloads?: number;
     modelType?: 'text' | 'vision' | 'code';
+    paramCount?: number;
+    minRamGB?: number;
   };
   fileSize: number;
   quantization?: string;
@@ -66,19 +67,23 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const description = cardDescription(model.description, recommended?.highlightText);
-  const facts = [
+  const modelType = isVisionModel || model.modelType === 'vision' ? 'Vision'
+    : model.modelType === 'code' ? 'Code' : model.modelType === 'text' ? 'Text' : undefined;
+  const facts = [...new Set([
     fileSize > 0 ? huggingFaceService.formatFileSize(fileSize) : undefined,
-    quantization,
-    isVisionModel || model.modelType === 'vision' ? 'Vision' : undefined,
+    quantization, modelType,
+    model.paramCount ? `${model.paramCount}B params` : undefined,
+    model.minRamGB ? `${model.minRamGB}GB+ RAM` : undefined,
     supportsAcceleration ? 'NPU/GPU' : undefined,
+    ...(recommended?.chips ?? []),
+    model.downloads ? `${formatCompactNumber(model.downloads)} dl` : undefined,
     incompatibleReason,
-  ].filter((value): value is string => !!value);
+  ].filter((value): value is string => !!value))];
   const hasVerifiedMark =
     credibilitySource === 'verified-quantizer' || credibilitySource === 'official';
   const sourceLabels = [
     model.author,
     hasVerifiedMark ? undefined : credibilityLabel,
-    recommended?.pillLabel ?? (isTrending ? 'Trending' : undefined),
   ].filter((value): value is string => !!value);
 
   return (
@@ -91,14 +96,14 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
               name="verified"
               size={12}
               color={colors.primary}
-              accessibilityLabel="Verified"
+              accessibilityLabel={credibilitySource === 'official' ? 'Official' : 'Verified'}
             />
           )}
           <Text style={styles.denseSource} numberOfLines={1}>
             {sourceLabels.join(' · ')}
           </Text>
           {(recommended || isTrending) && (
-            <MaterialIcon name="whatshot" size={14} color={colors.trending} />
+            <MaterialIcon name="whatshot" size={14} color={colors.trending} accessibilityLabel={isTrending ? 'Trending' : 'Recommended'} />
           )}
         </View>
       </View>
@@ -106,11 +111,17 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
         <Text style={styles.denseDescription} numberOfLines={1}>{description}</Text>
       )}
       {facts.length > 0 && (
-        <Text style={styles.denseMeta} numberOfLines={1}>{facts.join(' · ')}</Text>
+        <Text style={styles.denseMeta} numberOfLines={2}>{facts.join(' · ')}</Text>
       )}
     </>
   );
 };
+
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(value);
+}
 
 /**
  * The ONE description string a card shows: the model's description plus any
@@ -159,16 +170,13 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
         <View style={styles.authorTag}>
           <Text style={styles.authorTagText}>{model.author}</Text>
         </View>
-        {credibilityInfo && (
+        {credibilityInfo && (credibility?.source === 'official' || credibility?.source === 'verified-quantizer') && (
+          <MaterialIcon name="verified" size={14} color={colors.primary} accessibilityLabel={credibilityInfo.label} />
+        )}
+        {credibilityInfo && credibility?.source !== 'official' && credibility?.source !== 'verified-quantizer' && (
           <View style={[styles.credibilityBadge, { backgroundColor: `${credibilityInfo.color}25` }]}>
             {credibility?.source === 'lmstudio' && (
               <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>★</Text>
-            )}
-            {credibility?.source === 'official' && (
-              <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>✓</Text>
-            )}
-            {credibility?.source === 'verified-quantizer' && (
-              <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>◆</Text>
             )}
             <Text style={[styles.credibilityText, { color: credibilityInfo.color }]}>
               {credibilityInfo.label}
@@ -180,14 +188,7 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
             <Text style={styles.activeBadgeText}>Active</Text>
           </View>
         )}
-        {recommended && (
-          <>
-            <MaterialIcon name="whatshot" size={14} color={colors.trending} />
-            <View style={styles.recommendedPill}>
-              <Text style={styles.recommendedPillText}>{recommended.pillLabel ?? 'Recommended'}</Text>
-            </View>
-          </>
-        )}
+        {recommended && <MaterialIcon name="whatshot" size={14} color={colors.trending} accessibilityLabel="Recommended" />}
         {/* GPU/NPU capability badge — a LiteRT or Q4_0/Q8_0 quant this device can accelerate. */}
         {supportsAcceleration && (
           <View style={styles.accelBadge} testID="npu-gpu-badge">
@@ -310,9 +311,9 @@ interface ModelCardActionsProps {
 
 const HIT_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
 
-function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }: {
+function ActionButton({ icon, color, haptic, onPress, disabled, testID, accessibilityLabel, styles }: {
   icon: string; color: string; haptic: string; onPress: () => void;
-  disabled?: boolean; testID?: string; styles: ReturnType<typeof createStyles>;
+  disabled?: boolean; testID?: string; accessibilityLabel?: string; styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <TouchableOpacity
@@ -321,6 +322,8 @@ function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }
       disabled={disabled}
       hitSlop={HIT_SLOP}
       testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
     >
       <Icon name={icon} size={16} color={color} />
     </TouchableOpacity>
@@ -343,7 +346,7 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
         onRepairVision && <ActionButton icon="tool" color={colors.warning} haptic="impactLight" onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />
       )}
       {!isActive && onSelect && <ActionButton icon="check-circle" color={colors.primary} haptic="selection" onPress={onSelect} styles={styles} />}
-      {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} styles={styles} />}
+      {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} testID={tid('delete') ?? 'delete-model-button'} accessibilityLabel="Delete model" styles={styles} />}
     </>
   );
 }

@@ -66,6 +66,22 @@ const gatewayCategory = (kind: unknown): RemoteModelCategory | null => {
   return null;
 };
 
+function modelCategories(model: {
+  kind?: unknown;
+  architecture?: { input_modalities?: unknown; output_modalities?: unknown };
+}): RemoteModelCategory[] {
+  const declared = gatewayCategory(model.kind);
+  if (declared) return [declared];
+  const outputs = Array.isArray(model.architecture?.output_modalities)
+    ? model.architecture.output_modalities : [];
+  const inputs = Array.isArray(model.architecture?.input_modalities)
+    ? model.architecture.input_modalities : [];
+  if (outputs.includes('image')) return ['image'];
+  if (outputs.includes('audio')) return ['voice'];
+  if (inputs.includes('audio') && outputs.includes('text')) return ['transcription'];
+  return outputs.includes('text') ? ['text'] : [];
+}
+
 function declaredCapability(
   capabilities: unknown,
   capability: 'vision' | 'tools',
@@ -90,7 +106,8 @@ async function fetchGatewayModelCatalog(
     DISCOVERY_FETCH_TIMEOUT_MS,
   );
   try {
-    const response = await fetch(`${url}/v1/models`, {
+    const modelListUrl = `${url}${url.endsWith('/v1') ? '' : '/v1'}/models${new URL(url).hostname === 'openrouter.ai' ? '?output_modalities=text,image,transcription,speech' : ''}`;
+    const response = await fetch(modelListUrl, {
       headers,
       signal: controller.signal,
       redirect: REMOTE_FETCH_REDIRECT_POLICY,
@@ -104,20 +121,20 @@ async function fetchGatewayModelCatalog(
       id?: unknown;
       name?: unknown;
       kind?: unknown;
+      architecture?: { input_modalities?: unknown; output_modalities?: unknown };
     }>) {
-      if (typeof model.id !== 'string' || typeof model.kind !== 'string')
-        continue;
-      const category = gatewayCategory(model.kind);
-      if (!category) continue;
-      const options = result[category] ?? [];
-      options.push({
-        id: model.id,
-        name:
-          typeof model.name === 'string' && model.name.trim()
-            ? displayModelName(model.name)
-            : displayModelName(model.id),
-      });
-      result[category] = options;
+      if (typeof model.id !== 'string') continue;
+      for (const category of modelCategories(model)) {
+        const options = result[category] ?? [];
+        options.push({
+          id: model.id,
+          name:
+            typeof model.name === 'string' && model.name.trim()
+              ? displayModelName(model.name)
+              : displayModelName(model.id),
+        });
+        result[category] = options;
+      }
     }
     return result;
   } catch {
@@ -146,9 +163,12 @@ function isTextModel(model: {
   id?: string;
   name?: string;
   kind?: unknown;
+  architecture?: { output_modalities?: unknown };
 }): boolean {
   const kind = typeof model.kind === 'string' ? model.kind : null;
   if (kind) return kind === 'chat' || kind === 'vision';
+  const outputs = model.architecture?.output_modalities;
+  if (Array.isArray(outputs)) return outputs.includes('text') && !outputs.includes('image') && !outputs.includes('audio');
   return isGenerativeModel(model.id ?? model.name ?? '');
 }
 
@@ -337,7 +357,7 @@ export async function fetchModelsFromServer(
 
   // Try OpenAI-compatible endpoint first
   try {
-    const response = await fetchForDiscovery(`${url}/v1/models`, {
+    const response = await fetchForDiscovery(`${url}${url.endsWith('/v1') ? '' : '/v1'}/models`, {
       method: 'GET',
       headers,
     });

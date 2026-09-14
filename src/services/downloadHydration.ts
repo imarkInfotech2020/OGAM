@@ -37,6 +37,7 @@ export function isMmProjFileName(fileName: string): boolean {
 function mapNativeStatus(status: BackgroundDownloadStatus): DownloadStatus {
   switch (status) {
     case 'running': return 'running';
+    case 'paused': return 'paused';
     case 'retrying': return 'failed';
     case 'waiting_for_network': return 'waiting_for_network';
     case 'completed': return 'completed';

@@ -249,6 +249,12 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     gap: SPACING.xs,
   },
+  transferIconButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   retryButtonText: {
     ...TYPOGRAPHY.meta,
     color: colors.primary,

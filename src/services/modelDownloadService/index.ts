@@ -32,13 +32,15 @@ import {
 } from './types';
 
 type Listener = () => void;
-type Op = 'retry' | 'cancel' | 'remove';
+type Op = 'retry' | 'cancel' | 'remove' | 'pause' | 'resume';
 
 /** Coalesce a burst of provider changes into one self-list (transition logging). */
 const SELF_REFRESH_MS = 300;
 
 /** Which capability flag gates each control op. */
 const OP_CAPABILITY: Record<Op, keyof ModelDownload['capabilities']> = {
+  pause: 'pause',
+  resume: 'resume',
   retry: 'retry',
   cancel: 'cancel',
   remove: 'remove',
@@ -181,6 +183,8 @@ class ModelDownloadService {
     }
   }
 
+  pause(id: string): Promise<void> { return this.dispatch('pause', id); }
+  resume(id: string): Promise<void> { return this.dispatch('resume', id); }
   retry(id: string): Promise<void> { return this.dispatch('retry', id); }
   cancel(id: string): Promise<void> { return this.dispatch('cancel', id); }
   remove(id: string): Promise<void> { return this.dispatch('remove', id); }
@@ -193,6 +197,7 @@ class ModelDownloadService {
    * fall-through that dispatches.
    */
   private async dispatch(op: Op, id: string): Promise<void> {
+    if (op === 'pause' || op === 'resume') await this.list();
     let download = this.lastList.find(d => d.id === id);
     if (!download) { await this.list(); download = this.lastList.find(d => d.id === id); }
     if (!download) {
@@ -219,7 +224,9 @@ class ModelDownloadService {
     }
     logger.log(`[DL-SM] ${op} ${id} → dispatch type=${download.modelType}`);
     try {
-      await provider[op](id);
+      const action = provider[op];
+      if (!action) throw new Error(`${op} is unavailable for ${download.modelType}`);
+      await action.call(provider, id);
     } catch (err) {
       logger.log(`[DL-SM] ${op} ${id} FAILED err=${err instanceof Error ? err.message : String(err)}`);
       throw err;

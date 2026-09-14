@@ -46,6 +46,8 @@ export type ModelDownloadStartRequest =
  *    download surfaces as needing a manual retry, not a phantom "resuming".
  */
 interface DownloadCapabilities {
+  pause?: boolean;     // can an in-progress transfer stop without removing its bytes?
+  resume?: boolean;    // can the paused transfer continue?
   cancel: boolean;     // can an in-progress transfer be aborted + cleaned up?
   retry: boolean;      // can a failed/stuck download be restarted?
   remove: boolean;     // can the on-disk model be deleted?
@@ -93,6 +95,9 @@ export interface DownloadProvider {
   list(): Promise<ModelDownload[]>;
 
   /** Cancel an in-progress download (and clean up partial files). */
+  pause?(id: string): Promise<void>;
+  resume?(id: string): Promise<void>;
+
   cancel(id: string): Promise<void>;
 
   /** Retry a failed/stuck download. */

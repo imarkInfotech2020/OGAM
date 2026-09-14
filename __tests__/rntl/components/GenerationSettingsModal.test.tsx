@@ -36,13 +36,13 @@ jest.mock('../../../src/components/AppSheet', () => ({
 
 // Mock action fns defined outside factory for access in tests
 const mockUpdateSettings = jest.fn();
-const mockSetActiveImageModelId = jest.fn();
 const mockResetSettings = jest.fn();
 
 let mockStoreValues: any = {};
 
 jest.mock('../../../src/stores', () => ({
   useAppStore: jest.fn((sel?: any) => typeof sel === 'function' ? sel(mockStoreValues) : mockStoreValues),
+  useRemoteServerStore: jest.requireActual('../../../src/stores/remoteServerStore').useRemoteServerStore,
   selectIsLiteRT: (state: any) =>
     state.downloadedModels?.find((m: any) => m.id === state.activeModelId)?.engine === 'litert',
 }));
@@ -110,7 +110,6 @@ describe('GenerationSettingsModal', () => {
       downloadedModels: [],
       downloadedImageModels: [],
       activeImageModelId: null,
-      setActiveImageModelId: mockSetActiveImageModelId,
     };
   });
 
@@ -193,13 +192,11 @@ describe('GenerationSettingsModal', () => {
       <GenerationSettingsModal {...defaultProps} />,
     );
 
-    // Image settings should be collapsed initially
-    expect(queryByText('Image Model')).toBeNull();
+    expect(queryByText('Auto-detect image requests')).toBeNull();
 
     fireEvent.press(getByText('IMAGE GENERATION'));
 
-    // Now image settings content should be visible
-    expect(getByText('Image Model')).toBeTruthy();
+    expect(getByText('Auto-detect image requests')).toBeTruthy();
   });
 
   it('opens text settings section when tapping "TEXT GENERATION"', () => {
@@ -256,17 +253,16 @@ describe('GenerationSettingsModal', () => {
     expect(mockResetSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the shared STT model setting in chat settings', () => {
-    const { getByText, getByTestId, queryByText } = render(
+  it('keeps transcription model selection out of chat settings', () => {
+    const { getByTestId, queryByText } = render(
       <GenerationSettingsModal {...defaultProps} />,
     );
 
     expect(queryByText('Transcription model')).toBeNull();
     fireEvent.press(getByTestId('modal-transcription-accordion'));
 
-    expect(getByText('Transcription model')).toBeTruthy();
-    expect(getByText('No model selected. Tap to choose.')).toBeTruthy();
-    expect(getByTestId('modal-stt-open-picker')).toBeTruthy();
+    expect(queryByText('Transcription model')).toBeNull();
+    expect(queryByText('No model selected. Tap to choose.')).toBeNull();
   });
 
   it('calls updateSettings when image gen mode Auto/Manual is pressed', () => {
@@ -484,94 +480,17 @@ describe('GenerationSettingsModal', () => {
     expect(mockUpdateSettings).toHaveBeenCalledWith({ classifierModelId: null });
   });
 
-  // ============================================================================
-  // NEW TESTS: Image model picker
-  // ============================================================================
-  it('shows image model picker with "None selected" when no image model', () => {
-    const { getByText } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    fireEvent.press(getByText('IMAGE GENERATION'));
-
-    expect(getByText('None selected')).toBeTruthy();
-  });
-
-  it('shows active image model name when one is selected', () => {
-    mockStoreValues.downloadedImageModels = [
-      { id: 'img1', name: 'Stable Diffusion', style: 'creative' },
-    ];
-    mockStoreValues.activeImageModelId = 'img1';
-
-    const { getByText } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    fireEvent.press(getByText('IMAGE GENERATION'));
-
-    expect(getByText('Stable Diffusion')).toBeTruthy();
-  });
-
-  it('opens image model picker and shows "No image models downloaded" when empty', () => {
-    const { getByText } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    fireEvent.press(getByText('IMAGE GENERATION'));
-    // Click the image model picker button
-    fireEvent.press(getByText('None selected'));
-
-    expect(getByText(/No image models downloaded/)).toBeTruthy();
-  });
-
-  it('opens image model picker and shows downloaded image models', () => {
+  it('keeps image model selection out of chat settings', () => {
     mockStoreValues.downloadedImageModels = [
       { id: 'img1', name: 'SD Model', style: 'creative' },
     ];
-
-    const { getByText } = render(
+    const { getByText, queryByText } = render(
       <GenerationSettingsModal {...defaultProps} />,
     );
 
     fireEvent.press(getByText('IMAGE GENERATION'));
-    fireEvent.press(getByText('None selected'));
-
-    expect(getByText('SD Model')).toBeTruthy();
-    expect(getByText('None (disable image gen)')).toBeTruthy();
-  });
-
-  it('selects image model from picker', () => {
-    mockStoreValues.downloadedImageModels = [
-      { id: 'img1', name: 'SD Model', style: 'creative' },
-    ];
-
-    const { getByText } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    fireEvent.press(getByText('IMAGE GENERATION'));
-    fireEvent.press(getByText('None selected'));
-    fireEvent.press(getByText('SD Model'));
-
-    expect(mockSetActiveImageModelId).toHaveBeenCalledWith('img1');
-  });
-
-  it('selects "None" to disable image model', () => {
-    mockStoreValues.downloadedImageModels = [
-      { id: 'img1', name: 'SD Model', style: 'creative' },
-    ];
-    mockStoreValues.activeImageModelId = 'img1';
-
-    const { getByText } = render(
-      <GenerationSettingsModal {...defaultProps} />,
-    );
-
-    fireEvent.press(getByText('IMAGE GENERATION'));
-    // Press the Image Model picker button to open the dropdown
-    fireEvent.press(getByText('Image Model'));
-    fireEvent.press(getByText('None (disable image gen)'));
-
-    expect(mockSetActiveImageModelId).toHaveBeenCalledWith(null);
+    expect(queryByText('Image Model')).toBeNull();
+    expect(queryByText('SD Model')).toBeNull();
   });
 
   // ============================================================================
@@ -783,11 +702,11 @@ describe('GenerationSettingsModal', () => {
 
     // Open
     fireEvent.press(getByText('IMAGE GENERATION'));
-    expect(getByText('Image Model')).toBeTruthy();
+    expect(getByText('Auto-detect image requests')).toBeTruthy();
 
     // Close
     fireEvent.press(getByText('IMAGE GENERATION'));
-    expect(queryByText('Image Model')).toBeNull();
+    expect(queryByText('Auto-detect image requests')).toBeNull();
   });
 
   it('collapses text settings when tapped twice', () => {

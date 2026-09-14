@@ -1,11 +1,10 @@
 /**
  * VoiceModelsPanel tests
  *
- * The Voice picker (Models screen tab + home/chat Voice sheet). With a single
- * engine it is a VOICE picker, not an engine picker. Verifies:
+ * The Voice model picker (Models screen tab + home/chat Voice sheet). Verifies:
  *  - the RAM privacy banner
- *  - not-downloaded → a single "Download voice" action (opt-in)
- *  - downloaded → a selectable list of voices; tapping one selects it
+ *  - not-downloaded → a single model download action (opt-in)
+ *  - downloaded → the local model appears without speaker choices
  */
 import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
@@ -97,37 +96,35 @@ describe('VoiceModelsPanel', () => {
     expect(getByText(/nothing is sent anywhere/)).toBeTruthy();
   });
 
-  it('filters voices by language and selects the first voice when language changes', async () => {
-    const { getByTestId } = await renderPanel();
-    expect(getByTestId('voice-af_heart')).toBeTruthy();
-    expect(() => getByTestId('voice-bf_emma')).toThrow();
-
-    fireEvent.press(getByTestId('models-tts-language'));
-    await act(async () => { fireEvent.press(getByTestId('models-tts-language-en-GB')); });
-    expect(actions.setVoice).toHaveBeenCalledWith('bf_emma');
+  it('shows the installed model without speaker choices', async () => {
+    const { getByTestId, getByText, queryByTestId } = await renderPanel();
+    expect(getByTestId('voice-model-kokoro')).toBeTruthy();
+    expect(getByText('Kokoro TTS')).toBeTruthy();
+    expect(queryByTestId('voice-af_heart')).toBeNull();
+    expect(queryByTestId('models-tts-language')).toBeNull();
   });
 
   it('shows an opt-in download when the model is not downloaded', async () => {
     mockDownloads = []; // service has no tts entry → not downloaded / not downloading
     mockStoreState.isReady = false;
-    const { getByText } = await renderPanel();
+    const { getByTestId } = await renderPanel();
 
-    const cta = getByText('Download voice');
+    const cta = getByTestId('voice-model-kokoro-download');
     expect(cta).toBeTruthy();
     await act(async () => { fireEvent.press(cta); });
     await waitFor(() => expect(actions.downloadModels).toHaveBeenCalled());
   });
 
-  it('shows the model as DOWNLOADED (voices) when the service reports completed, even if the engine is not loaded — the mismatch fix', async () => {
+  it('shows the model as downloaded when the service reports completed, even if the engine is not loaded', async () => {
     // Regression for the Download-Manager-vs-Voice-panel mismatch: the service is
-    // the single source. When it says 'completed', the panel shows voices — never a
+    // the single source. When it says 'completed', the panel shows the model — never a
     // stale 0% progress bar — regardless of the engine being loaded or any store flag.
     mockDownloads = [ttsDl('completed')];
     mockStoreState.isReady = false;
     mockStoreState.settings = { modelDownloaded: {} };
     const { getByTestId, queryByText } = await renderPanel();
-    expect(getByTestId('voice-af_heart')).toBeTruthy();
-    expect(queryByText('Download voice')).toBeNull();
+    expect(getByTestId('voice-model-kokoro')).toBeTruthy();
+    expect(queryByText('Download voice model')).toBeNull();
     expect(queryByText('0%')).toBeNull();
   });
 
@@ -159,7 +156,7 @@ describe('VoiceModelsPanel', () => {
       mockStoreState.isReady = false;
       const { getByText, queryByText } = await renderPanel();
       expect(getByText('40%')).toBeTruthy();
-      expect(queryByText('Download voice')).toBeNull();
+      expect(queryByText('Download voice model')).toBeNull();
     }
   });
 

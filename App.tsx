@@ -5,10 +5,10 @@
 
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { ActivityIndicator, View, StyleSheet, LogBox } from 'react-native';
+import { ActivityIndicator, View, Text, Pressable, StyleSheet, LogBox } from 'react-native';
 import { SystemBars } from 'react-native-edge-to-edge';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from './src/navigation';
 import {
@@ -36,6 +36,7 @@ import { LockScreen } from './src/screens';
 import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { DebugLogsScreen } from './src/components/DebugLogsScreen';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 
@@ -76,6 +77,48 @@ const ensureRemoteServerStoreHydrated = async () => {
     await persistApi.rehydrate();
   }
 };
+
+export function DevSyncStrip() {
+  const [showHistory, setShowHistory] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const latest = useDebugLogsStore(state => {
+    for (let i = state.logs.length - 1; i >= 0; i--) {
+      if (/\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]/i.test(state.logs[i].message)) {
+        return state.logs[i];
+      }
+    }
+    return undefined;
+  });
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const active = latest && now - latest.timestamp < 30000;
+  const operation = active
+    ? latest.message.replace(/^.*?\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]\s*/i, '')
+    : 'Idle';
+
+  return (
+    <>
+      <Pressable
+        testID="dev-sync-strip"
+        accessibilityRole="button"
+        accessibilityLabel={`Sync: ${operation}. Show sync operations`}
+        onPress={() => setShowHistory(true)}
+        style={[styles.syncStrip, { top: insets.top, backgroundColor: colors.surface, borderColor: colors.border }]}
+      >
+        <Text numberOfLines={1} style={[styles.syncText, { color: colors.text }]}>
+          Sync: {operation}  ·  Tap for history
+        </Text>
+      </Pressable>
+      {showHistory ? <DebugLogsScreen visible onClose={() => setShowHistory(false)} syncOnly /> : null}
+    </>
+  );
+}
 
 function App() {
   useEffect(() => () => {
@@ -362,6 +405,7 @@ function App() {
             <SystemBars style={isDark ? 'light' : 'dark'} />
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
+          {__DEV__ ? <DevSyncStrip /> : null}
         </SafeAreaProvider>
       </GestureHandlerRootView>
     );
@@ -374,6 +418,7 @@ function App() {
         <SafeAreaProvider>
           <SystemBars style={isDark ? 'light' : 'dark'} />
           <LockScreen onUnlock={handleUnlock} />
+          {__DEV__ ? <DevSyncStrip /> : null}
         </SafeAreaProvider>
       </GestureHandlerRootView>
     );
@@ -419,6 +464,7 @@ function App() {
         >
           <AppNavigator />
         </NavigationContainer>
+        {__DEV__ ? <DevSyncStrip /> : null}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -432,6 +478,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  syncStrip: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    elevation: 1000,
+    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  syncText: {
+    fontFamily: 'Menlo',
+    fontSize: 11,
   },
 });
 

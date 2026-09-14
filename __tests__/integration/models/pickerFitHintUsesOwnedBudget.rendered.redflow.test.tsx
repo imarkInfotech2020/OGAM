@@ -1,7 +1,7 @@
 /**
- * UI integration — the current model selector must not block selection from an
- * instantaneous free-RAM reading. The load owner performs the authoritative
- * memory check when the model is loaded.
+ * UI integration — the model selector warns about RAM but does not block
+ * selection from an instantaneous reading. The load owner performs the
+ * authoritative memory check when the model is loaded.
  */
 import {
   installNativeBoundary,
@@ -74,7 +74,7 @@ describe('Model selector — selection is independent of transient free RAM', ()
       { timeout: 4000 },
     );
     expect(view.getByTestId('text-model-row-huge-model')).not.toBeNull();
-    expect(view.queryByText(/may not fit/i)).toBeNull();
+    expect(view.getAllByText(/may not fit/i).length).toBeGreaterThan(0);
 
     rtl.fireEvent.press(fittingRow);
     expect(onSelectModel).toHaveBeenCalledWith(fittingModel);

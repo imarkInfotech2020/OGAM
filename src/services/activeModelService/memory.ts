@@ -4,6 +4,8 @@
  */
 
 import { DownloadedModel, ONNXImageModel } from '../../types';
+import { loadLlamaModelInfo } from 'llama.rn';
+import { buildModelParams } from '../llmHelpers';
 import { hardwareService } from '../hardware';
 import { llmService } from '../llm';
 import { liteRTService } from '../litert';
@@ -40,19 +42,52 @@ const getMemoryWarningThresholdGB = async (): Promise<number> => {
 // Size estimators
 // ---------------------------------------------------------------------------
 
-function estimateModelMemoryGB(
+export async function estimateTextModelMemoryMB(model: DownloadedModel): Promise<number> {
+  const settings = useAppStore.getState().settings;
+  const fallback = hardwareService.estimateModelRam(
+    model, textOverheadMultiplier(settings.inferenceBackend),
+  );
+  if (model.engine !== 'llama') return Math.ceil(fallback / (1024 * 1024));
+  try {
+    const metadata = await loadLlamaModelInfo(model.filePath) as Record<string, unknown>;
+    const architecture = metadata['general.architecture'];
+    if (typeof architecture !== 'string') return Math.ceil(fallback / (1024 * 1024));
+    const number = (field: string): number | undefined => {
+      const value = metadata[`${architecture}.${field}`];
+      const parsed = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+    };
+    const blocks = number('block_count');
+    const heads = number('attention.head_count');
+    const kvHeads = number('attention.head_count_kv') ?? heads;
+    const embedding = number('embedding_length');
+    const keyLength = number('attention.key_length') ?? (embedding && heads ? embedding / heads : undefined);
+    const valueLength = number('attention.value_length') ?? keyLength;
+    const vocabulary = number('vocab_size');
+    if (!blocks || !kvHeads || !embedding || !keyLength || !valueLength) {
+      return Math.ceil(fallback / (1024 * 1024));
+    }
+    const params = buildModelParams(model.filePath, settings);
+    const context = Math.min(params.ctxLen, number('attention.sliding_window') ?? params.ctxLen);
+    const cacheType = params.usesF16Cache ? 'f16' : settings.cacheType;
+    const bytesPerElement = cacheType === 'q4_0' ? 18 / 32
+      : cacheType === 'q8_0' ? 34 / 32 : 2;
+    const kvBytes = blocks * context * kvHeads * (keyLength + valueLength) * bytesPerElement;
+    const computeBytes = ((vocabulary ?? 0) + embedding) * params.nBatch * 4;
+    const totalBytes = Math.ceil((model.fileSize + (model.mmProjFileSize ?? 0) + kvBytes + computeBytes) * 1.1);
+    return Math.ceil(totalBytes / (1024 * 1024));
+  } catch {
+    return Math.ceil(fallback / (1024 * 1024));
+  }
+}
+
+async function estimateModelMemoryGB(
   model: DownloadedModel | ONNXImageModel,
   type: ModelType,
-): number {
-  if (type === 'text') {
-    const textModel = model as DownloadedModel;
-    const sizeGB = (textModel.fileSize || 0) / (1024 * 1024 * 1024);
-    // GPU-aware overhead — same single source the residency gate uses, so pre-check and gate agree.
-    return sizeGB * textOverheadMultiplier(useAppStore.getState().settings.inferenceBackend);
-  }
+): Promise<number> {
+  if (type === 'text') return (await estimateTextModelMemoryMB(model as DownloadedModel)) / 1024;
   const imageModel = model as ONNXImageModel;
-  // ONE image-RAM estimator: delegate to the authoritative load-gate estimator so the
-  // advisory pre-check and the gate can't diverge ('Safe to load' then a hard refusal).
+  // The image load gate remains the owner of its existing estimate.
   const estimate = hardwareService.estimateImageModelRam?.(imageModel);
   if (estimate != null) return estimate / (1024 * 1024 * 1024);
   const sizeGB = (imageModel.size || 0) / (1024 * 1024 * 1024);
@@ -69,16 +104,16 @@ export interface ModelLists {
   downloadedImageModels: ONNXImageModel[];
 }
 
-export function getCurrentlyLoadedMemoryGB(
+export async function getCurrentlyLoadedMemoryGB(
   ids: LoadedModelIds,
   lists: ModelLists,
-): number {
+): Promise<number> {
   let totalGB = 0;
 
   if (ids.loadedTextModelId && (llmService.isModelLoaded() || liteRTService.isModelLoaded())) {
     const textModel = lists.downloadedModels.find(m => m.id === ids.loadedTextModelId);
     if (textModel) {
-      totalGB += estimateModelMemoryGB(textModel, 'text');
+      totalGB += await estimateModelMemoryGB(textModel, 'text');
     }
   }
 
@@ -87,7 +122,7 @@ export function getCurrentlyLoadedMemoryGB(
       m => m.id === ids.loadedImageModelId,
     );
     if (imageModel) {
-      totalGB += estimateModelMemoryGB(imageModel, 'image');
+      totalGB += await estimateModelMemoryGB(imageModel, 'image');
     }
   }
 
@@ -95,24 +130,24 @@ export function getCurrentlyLoadedMemoryGB(
 }
 
 /** Memory used by OTHER models already loaded (not the one being replaced). */
-export function getOtherLoadedMemoryGB(
+async function getOtherLoadedMemoryGB(
   modelType: ModelType,
   ids: LoadedModelIds,
   lists: ModelLists,
-): number {
+): Promise<number> {
   let totalGB = 0;
   if (modelType === 'text' && ids.loadedImageModelId) {
     const imageModel = lists.downloadedImageModels.find(
       m => m.id === ids.loadedImageModelId,
     );
     if (imageModel) {
-      totalGB += estimateModelMemoryGB(imageModel, 'image');
+      totalGB += await estimateModelMemoryGB(imageModel, 'image');
     }
   }
   if (modelType === 'image' && ids.loadedTextModelId && (llmService.isModelLoaded() || liteRTService.isModelLoaded())) {
     const textModel = lists.downloadedModels.find(m => m.id === ids.loadedTextModelId);
     if (textModel) {
-      totalGB += estimateModelMemoryGB(textModel, 'text');
+      totalGB += await estimateModelMemoryGB(textModel, 'text');
     }
   }
   return totalGB;
@@ -158,8 +193,8 @@ export async function checkMemoryForModel(
     };
   }
 
-  const requiredMemoryGB = estimateModelMemoryGB(model, modelType);
-  const currentlyLoadedMemoryGB = getOtherLoadedMemoryGB(modelType, ids, lists);
+  const requiredMemoryGB = await estimateModelMemoryGB(model, modelType);
+  const currentlyLoadedMemoryGB = await getOtherLoadedMemoryGB(modelType, ids, lists);
   const totalRequiredMemoryGB = requiredMemoryGB + currentlyLoadedMemoryGB;
   const remainingBudgetGB = memoryBudgetGB - totalRequiredMemoryGB;
 
@@ -242,7 +277,7 @@ export async function checkMemoryForDualModel(
   if (textModelId) {
     const textModel = lists.downloadedModels.find(m => m.id === textModelId);
     if (textModel) {
-      totalRequiredGB += estimateModelMemoryGB(textModel, 'text');
+      totalRequiredGB += await estimateModelMemoryGB(textModel, 'text');
       modelNames.push(textModel.name);
     }
   }
@@ -250,7 +285,7 @@ export async function checkMemoryForDualModel(
   if (imageModelId) {
     const imageModel = lists.downloadedImageModels.find(m => m.id === imageModelId);
     if (imageModel) {
-      totalRequiredGB += estimateModelMemoryGB(imageModel, 'image');
+      totalRequiredGB += await estimateModelMemoryGB(imageModel, 'image');
       modelNames.push(imageModel.name);
     }
   }

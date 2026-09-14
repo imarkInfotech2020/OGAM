@@ -121,6 +121,10 @@ export const useChatScreen = () => {
     s => s.activeRemoteTextModelId,
   );
   const discoveredModels = useRemoteServerStore(s => s.discoveredModels);
+  const activeRemoteImageServer = useRemoteServerStore(s => {
+    const id = s.activeRemoteMediaServerIds.image;
+    return s.servers.find(server => server.id === id && !!server.mediaModels?.image);
+  });
 
   const activeConversationId = useChatStore(s => s.activeConversationId);
   const conversations = useChatStore(s => s.conversations);
@@ -161,7 +165,7 @@ export const useChatScreen = () => {
     ? (activeModelInfo.model as RemoteModel | null)
     : null;
   const hasTextModel = activeModelInfo.modelId !== null;
-  const hasActiveModel = hasTextModel || !!activeImageModelId;
+  const hasActiveModel = hasTextModel || !!activeImageModelId || !!activeRemoteImageServer;
   const activeModelName = activeModelInfo.modelName;
   const availableDownloadedTextModels = useMemo(
     () =>
@@ -189,9 +193,9 @@ export const useChatScreen = () => {
   const activeProject = effectiveProjectId
     ? getProject(effectiveProjectId)
     : null;
-  const activeImageModel = downloadedImageModels.find(
-    m => m.id === activeImageModelId,
-  );
+  const activeImageModel = activeRemoteImageServer
+    ? { id: activeRemoteImageServer.mediaModels!.image!, name: `${activeRemoteImageServer.name} / ${activeRemoteImageServer.mediaModels!.image}` }
+    : downloadedImageModels.find(m => m.id === activeImageModelId);
   const imageModelLoaded = !!activeImageModel;
   const isGeneratingImage = imageGenState.isGenerating;
   const isStreamingForThisConversation = isStreamingActiveConversation(

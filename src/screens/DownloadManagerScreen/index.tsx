@@ -43,6 +43,8 @@ export const DownloadManagerScreen: React.FC = () => {
     setAlertState,
     handleRemoveDownload,
     handleRetryDownload,
+    handlePauseDownload,
+    handleResumeDownload,
     handleDeleteItem,
     handleRepairVision,
     isRepairingVision,
@@ -62,6 +64,7 @@ export const DownloadManagerScreen: React.FC = () => {
   // Failed/retriable rows are shown here as cards; surface their count too so this screen and the
   // ModelsScreen badge agree on "outstanding download work" (badge = downloading + queued + failed).
   const activeFailedCount = filteredActive.filter(i => isFailedStatus(i.status as DownloadStatus)).length;
+  const activePausedCount = filteredActive.filter(i => i.status === 'paused').length;
 
   const renderHeader = useCallback(() => (
     <ScrollView
@@ -112,6 +115,11 @@ export const DownloadManagerScreen: React.FC = () => {
                       {activeQueuedCount} queued
                     </Text>
                   )}
+                  {activePausedCount > 0 && (
+                    <Text testID="dm-active-paused-count" style={[styles.countText, { color: colors.textSecondary }]}>
+                      {activePausedCount} paused
+                    </Text>
+                  )}
                   {activeFailedCount > 0 && (
                     <Text testID="dm-active-failed-count" style={[styles.countText, { color: colors.error ?? colors.textSecondary }]}>
                       {activeFailedCount} failed
@@ -120,7 +128,7 @@ export const DownloadManagerScreen: React.FC = () => {
                 </View>
                 {filteredActive.map(item => (
                   <View key={`active-${item.modelId}-${item.fileName}`}>
-                    <ActiveDownloadCard item={item} onRemove={handleRemoveDownload} onRetry={handleRetryDownload} />
+                    <ActiveDownloadCard item={item} onRemove={handleRemoveDownload} onRetry={handleRetryDownload} onPause={handlePauseDownload} onResume={handleResumeDownload} />
                   </View>
                 ))}
               </View>

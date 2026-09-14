@@ -24,7 +24,7 @@ test('an iPhone 17 Pro Max gets 2B, 4B, and Qwen 3.5 9B setup choices', () => {
   const plans = selectAutoSetupPlans({ text: catalog, image, stt });
 
   expect(plans.map(plan => plan.items[0].name)).toEqual([
-    'Gemma 4 E2B',
+    'Qwen 3.5 2B',
     'Gemma 4 E4B',
     'Qwen 3.5 9B',
   ]);

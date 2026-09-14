@@ -273,7 +273,9 @@ class WorkerDownload(
 
     private suspend fun handleStoppedState(downloadId: String, download: DownloadEntity, bytesWritten: Long): Result {
         val current = downloadDao.getDownload(downloadId) ?: download
-        return if (current.status == DownloadStatus.CANCELLED) {
+        return if (current.status == DownloadStatus.PAUSED) {
+            Result.failure() // Keep the partial file; resume uses HTTP Range.
+        } else if (current.status == DownloadStatus.CANCELLED) {
             val partialFile = File(current.destination)
             if (partialFile.exists()) partialFile.delete()
             Result.failure()

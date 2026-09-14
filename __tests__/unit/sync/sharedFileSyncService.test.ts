@@ -274,6 +274,7 @@ describe('the files this phone offers the rest of the mesh', () => {
     it('waits for its durable message identity before it enters the mesh', async () => {
       await generatedImageOnDisk(IMAGE_ID, 2048, CONVERSATION_ID);
       await launch();
+      await service.stateReady(PREFERENCES);
 
       // The gallery store is written before the chat message at image completion. Publishing in this
       // gap produces a gallery-only control that cannot put the received bytes back into the bubble.

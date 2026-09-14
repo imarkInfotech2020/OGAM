@@ -36,6 +36,8 @@ export interface UseDownloadManagerResult {
   setAlertState: (state: AlertState) => void;
   handleRemoveDownload: (item: DownloadItem) => void;
   handleRetryDownload: (item: DownloadItem) => void;
+  handlePauseDownload: (item: DownloadItem) => void;
+  handleResumeDownload: (item: DownloadItem) => void;
   handleDeleteItem: (item: DownloadItem) => void;
   handleRepairVision: (item: DownloadItem) => void;
   isRepairingVision: (modelId: string) => boolean;
@@ -214,6 +216,24 @@ export function useDownloadManager(): UseDownloadManagerResult {
     }
   };
 
+  const handlePauseDownload = async (item: DownloadItem) => {
+    try {
+      await modelDownloadService.pause(idOf(item));
+    } catch (error) {
+      logger.error('[DownloadManager] Failed to pause download:', error);
+      setAlertState(showAlert('Pause failed', 'This download could not pause. Try again.'));
+    }
+  };
+
+  const handleResumeDownload = async (item: DownloadItem) => {
+    try {
+      await modelDownloadService.resume(idOf(item));
+    } catch (error) {
+      logger.error('[DownloadManager] Failed to resume download:', error);
+      setAlertState(showAlert('Resume failed', error instanceof Error ? error.message : 'Try again.'));
+    }
+  };
+
   const handleRemoveDownload = (item: DownloadItem) => {
     setAlertState(
       showAlert(
@@ -362,6 +382,8 @@ export function useDownloadManager(): UseDownloadManagerResult {
     setAlertState,
     handleRemoveDownload,
     handleRetryDownload,
+    handlePauseDownload,
+    handleResumeDownload,
     handleDeleteItem,
     handleRepairVision,
     isRepairingVision,

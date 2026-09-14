@@ -47,7 +47,6 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   model, index, imageRec,
   isRecommendedModel, handleDownloadImageModel, handleCancelImageDownload,
 }) => {
-  const styles = useThemedStyles(createStyles);
   const recommended = isRecommendedModel(model);
   const { isCompatible, incompatibleReason } = getImageModelCompatibility(model, imageRec);
   // Single source of truth: live download status read from useDownloadStore
@@ -71,13 +70,9 @@ export const ImageModelCardItem: React.FC<ImageModelCardProps> = ({
   const variantSuffix = model.variant ? ` \u00B7 ${getVariantLabel(model.variant)}` : '';
   return (
     <View>
-      {recommended && (
-        <View style={styles.recommendedBadge}>
-          <Text style={styles.recommendedBadgeText}>RECOMMENDED</Text>
-        </View>
-      )}
       <ModelCard
         compact
+        recommended={recommended ? {} : undefined}
         model={{
           id: model.id,
           name: model.displayName,
