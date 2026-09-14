@@ -547,7 +547,8 @@ describe('DownloadManagerScreen', () => {
     };
 
     const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('25% · 256 B / 1 KB · Rate unavailable')).toBeTruthy();
+    expect(getByText('256 B / 1 KB · Rate unavailable')).toBeTruthy();
+    expect(getByText('25%')).toBeTruthy();
   });
 
   it('shows the measured rate for an active download', () => {
@@ -571,7 +572,8 @@ describe('DownloadManagerScreen', () => {
     };
 
     const { getByText } = render(<DownloadManagerScreen />);
-    expect(getByText('50% · 512 KB / 1 MB · 128.0 KB/s')).toBeTruthy();
+    expect(getByText('512 KB / 1 MB · 128.0 KB/s')).toBeTruthy();
+    expect(getByText('50%')).toBeTruthy();
   });
 
   it('does not show storage section when no completed models', () => {

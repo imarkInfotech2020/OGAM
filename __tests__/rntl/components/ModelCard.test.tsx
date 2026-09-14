@@ -1010,28 +1010,28 @@ describe('ModelCard', () => {
     });
 
     it('renders Retry and Remove buttons when failedState is provided', () => {
-      const { getByText } = render(
+      const { getByLabelText } = render(
         <ModelCard model={baseModel} failedState={baseFailedState} />,
       );
-      expect(getByText('Retry')).toBeTruthy();
-      expect(getByText('Remove')).toBeTruthy();
+      expect(getByLabelText('Retry download')).toBeTruthy();
+      expect(getByLabelText('Remove download')).toBeTruthy();
     });
 
     it('calls onRetry when Retry is pressed', () => {
       const onRetry = jest.fn();
-      const { getByText } = render(
+      const { getByLabelText } = render(
         <ModelCard model={baseModel} failedState={{ ...baseFailedState, onRetry }} />,
       );
-      fireEvent.press(getByText('Retry'));
+      fireEvent.press(getByLabelText('Retry download'));
       expect(onRetry).toHaveBeenCalled();
     });
 
     it('calls onRemove when Remove is pressed', () => {
       const onRemove = jest.fn();
-      const { getByText } = render(
+      const { getByLabelText } = render(
         <ModelCard model={baseModel} failedState={{ ...baseFailedState, onRemove }} />,
       );
-      fireEvent.press(getByText('Remove'));
+      fireEvent.press(getByLabelText('Remove download'));
       expect(onRemove).toHaveBeenCalled();
     });
 
@@ -1042,7 +1042,7 @@ describe('ModelCard', () => {
           failedState={{ ...baseFailedState, bytesDownloaded: 193_000_000, totalBytes: 386_000_000 }}
         />,
       );
-      expect(getByText('50%')).toBeTruthy();
+      expect(getByText('50% · 184 MB / 368 MB')).toBeTruthy();
     });
 
     it('does not invent a percentage when the failed download size is unknown', () => {

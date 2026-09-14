@@ -101,9 +101,13 @@ function configureStores() {
   mockUseAppStore.mockImplementation((selector?: any) => (selector ? selector(appState) : appState));
 
   const downloadStoreState = {
-    downloads, repairingVisionIds: {}, setRepairingVision: mockSetRepairingVision,
+    downloads, repairingVisionIds: {} as Record<string, true>, setRepairingVision: mockSetRepairingVision,
     remove: mockRemove, setStatus: mockSetStatus, downloadIdIndex: {},
   };
+  mockSetRepairingVision.mockImplementation((id: string, repairing: boolean) => {
+    if (repairing) downloadStoreState.repairingVisionIds[id] = true;
+    else delete downloadStoreState.repairingVisionIds[id];
+  });
   mockDownloadStoreGetState.mockReturnValue(downloadStoreState);
   mockUseDownloadStore.mockImplementation((selector?: any) => (selector ? selector(downloadStoreState) : downloadStoreState));
 }

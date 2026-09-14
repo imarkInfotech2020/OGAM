@@ -189,7 +189,6 @@ describe('remoteMediaRuntime', () => {
           model: 'kokoro',
           input: 'Your summary is ready.',
           voice: 'hf_alpha',
-          response_format: 'mp3',
         }),
       }),
     );
