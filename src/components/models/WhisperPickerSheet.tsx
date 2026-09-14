@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text } from 'react-native';
 import { LoadingDots } from '../LoadingDots';
 import Icon from 'react-native-vector-icons/Feather';
 import { AppSheet } from '../../components/AppSheet';
+import { CustomAlert, showAlert, hideAlert, initialAlertState, type AlertState } from '../CustomAlert';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import { useTheme, useThemedStyles } from '../../theme';
 import type { ThemeColors } from '../../theme';
@@ -26,6 +27,7 @@ type Props = {
 export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
+  const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
   const downloadedModelId = useWhisperStore(s => s.downloadedModelId);
   const isModelLoading = useWhisperStore(s => s.isModelLoading);
   const presentModelIds = useWhisperStore(s => s.presentModelIds);
@@ -45,6 +47,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
   }, [visible, anyDownloading]);
 
   return (
+    <>
     <AppSheet
       visible={visible}
       onClose={onClose}
@@ -132,7 +135,21 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
                     <AnimatedPressable
                       hapticType="selection"
                       hitSlop={8}
-                      onPress={() => deleteModelById(m.id)}
+                      accessibilityLabel={`Delete ${m.name} transcription model`}
+                      onPress={(event) => {
+                        event?.stopPropagation?.();
+                        setAlertState(showAlert(
+                          'Remove Transcription Model',
+                          `Delete "${m.name}"? This will free up about ${m.size} MB.`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Remove', style: 'destructive', onPress: () => {
+                              setAlertState(hideAlert());
+                              deleteModelById(m.id);
+                            } },
+                          ],
+                        ));
+                      }}
                     >
                       <Icon name="trash-2" size={16} color={colors.textMuted} />
                     </AnimatedPressable>
@@ -147,6 +164,14 @@ export const WhisperPickerSheet: React.FC<Props> = ({ visible, onClose }) => {
         })}
       </View>
     </AppSheet>
+    <CustomAlert
+      visible={alertState.visible}
+      title={alertState.title}
+      message={alertState.message}
+      buttons={alertState.buttons}
+      onClose={() => setAlertState(hideAlert())}
+    />
+    </>
   );
 };
 
