@@ -8,6 +8,8 @@ import { textOverheadMultiplier } from '../../services/activeModelService/types'
 import { useAppStore } from '../../stores';
 import { ModelRow } from '../ModelRow';
 import { createAllStyles } from './styles';
+import { fileExceedsBudget } from '../../services/memoryBudget';
+import { useResidentRows } from '../models/useResidentRows';
 import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
 
 export interface TextTabProps {
@@ -54,6 +56,7 @@ export const TextTab: React.FC<TextTabProps> = ({
   const ramMultiplier = textOverheadMultiplier(
     useAppStore(s => s.settings?.inferenceBackend),
   );
+  const textResident = useResidentRows(true).text;
   // "Loaded" drives the Currently-Loaded + Unload section (only meaningful once a model
   // is actually in memory). "Active" also counts the selected-but-not-yet-loaded model
   // so the switcher reads "Switch Model" and highlights the active choice under deferred
@@ -103,10 +106,9 @@ export const TextTab: React.FC<TextTabProps> = ({
                       activeLocalModel.quantization
                     } • ${hardwareService.formatModelSize(
                       activeLocalModel,
-                    )} • ${hardwareService.formatModelRam(
-                      activeLocalModel,
-                      ramMultiplier,
-                    )} RAM`
+                    )} • ${textResident
+                      ? `${(textResident.sizeMB / 1024).toFixed(1)} GB`
+                      : hardwareService.formatModelRam(activeLocalModel, ramMultiplier)} RAM`
                   : `Remote • ${activeRemoteModelInfo?.serverName ?? 'Model'}`}
               </Text>
             </View>
@@ -181,6 +183,8 @@ export const TextTab: React.FC<TextTabProps> = ({
             <Text style={styles.sectionSubTitle}>Local Models</Text>
           </View>
           {downloadedModels.map(model => {
+            const fileSize = (model.fileSize || 0) + ('mmProjFileSize' in model ? (model.mmProjFileSize || 0) : 0);
+            const memoryFits = !fileExceedsBudget(fileSize, hardwareService.getTotalMemoryGB());
             const isLoaded = currentModelPath === model.filePath;
             // The selected-but-not-loaded model is highlighted as active, but stays
             // tappable so tapping it actually loads it (load-on-tap).
@@ -205,6 +209,7 @@ export const TextTab: React.FC<TextTabProps> = ({
                 name={model.name}
                 size={hardwareService.formatModelSize(model)}
                 quant={model.quantization}
+                ramHint={`~${hardwareService.formatModelRam(model, ramMultiplier)} RAM${memoryFits ? '' : ' (may not fit)'}`}
                 isVision={
                   model.engine === 'llama' &&
                   predictGgufCapabilities(model).vision

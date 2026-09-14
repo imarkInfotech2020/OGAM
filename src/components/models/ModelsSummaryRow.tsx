@@ -15,6 +15,7 @@ type Props = {
   counts?: Partial<Record<ModelRowType, number>>;
   isLoading: boolean;
   onPress: () => void;
+  onPressType?: (type: ModelRowType) => void;
 };
 
 const TYPE_ICONS: { type: ModelRowType; icon: string; caption: string }[] = [
@@ -29,7 +30,7 @@ const TYPE_ICONS: { type: ModelRowType; icon: string; caption: string }[] = [
  * type — emerald + bright caption when that type has an active model, dimmed +
  * muted when not. Tap → manager sheet.
  */
-export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, onPress }) => {
+export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, onPress, onPressType }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
@@ -46,8 +47,13 @@ export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, o
           const active = !!labels[type] && labels[type] !== '—';
           const count = counts?.[type];
           return (
-            <View
+            <AnimatedPressable
               key={type}
+              testID={`model-summary-${type}-open`}
+              hapticType="selection"
+              onPress={(event) => { event?.stopPropagation?.(); (onPressType ?? onPress)(type); }}
+            >
+            <View
               testID={`model-summary-${type}`}
               // `selected` reflects "this model type has an active model" — the same signal the
               // caption/icon colour encodes visually. Exposed so a test can observe active-vs-dimmed
@@ -65,6 +71,7 @@ export const ModelsSummaryRow: React.FC<Props> = ({ labels, counts, isLoading, o
                 <Text testID={`model-summary-count-${type}`} style={[styles.count, count > 0 && styles.countActive]}>{count}</Text>
               )}
             </View>
+            </AnimatedPressable>
           );
         })}
       </View>

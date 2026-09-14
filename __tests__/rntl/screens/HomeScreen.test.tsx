@@ -1001,7 +1001,7 @@ describe('HomeScreen', () => {
 
       const result = renderHomeScreen();
       openTextPicker(result);
-      expect(result.getByText(/6\.0 GB/)).toBeTruthy();
+      expect(result.getAllByText(/6\.0 GB/).length).toBeGreaterThan(0);
     });
 
     it('shows estimated RAM for an image model in the picker', () => {
@@ -1016,7 +1016,7 @@ describe('HomeScreen', () => {
 
       const result = renderHomeScreen();
       openImagePicker(result);
-      expect(result.getByText(/3\.6 GB/)).toBeTruthy();
+      expect(result.getAllByText(/3\.6 GB/).length).toBeGreaterThan(0);
     });
   });
 
@@ -1038,7 +1038,7 @@ describe('HomeScreen', () => {
       openTextPicker(result);
 
       // Picker sheet shows its title (manager sheet has closed).
-      expect(queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('Select Model');
+      expect(queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('TEXT MODEL');
     });
 
     it('opens image model picker when the image manager row is pressed', () => {
@@ -1048,7 +1048,7 @@ describe('HomeScreen', () => {
       const result = renderHomeScreen();
       openImagePicker(result);
 
-      expect(result.queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('Select Model');
+      expect(result.queryAllByTestId('app-sheet-title').map(n => n.props.children)).toContain('IMAGE MODEL');
     });
 
     it('shows "No text models available" when picker opened with no models', () => {
