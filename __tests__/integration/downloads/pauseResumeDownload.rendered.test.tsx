@@ -84,4 +84,38 @@ describe('Model download pause and resume', () => {
       downloadId: 'dl-speech-pause', bytesDownloaded: 16 * MB, status: 'running',
     });
   });
+  it('pauses the current file in a multi-file image download and resumes its native transfer', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    const React = require('react');
+    const { render, waitFor, fireEvent } = requireRTL();
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { downloadHuggingFaceModel } = require('../../../src/services/imageDownloadActions');
+    const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
+
+    registerCoreDownloadProviders();
+    const download = downloadHuggingFaceModel({
+      id: 'sample-multi', name: 'Sample Multi', description: 'Image model',
+      downloadUrl: '', size: 128 * MB, style: 'default', backend: 'mnn',
+      huggingFaceRepo: 'sample/model', huggingFaceFiles: [{ path: 'weights.bin', size: 128 * MB }],
+    }, {
+      addDownloadedImageModel: () => {}, activeImageModelId: null,
+      setActiveImageModelId: () => {}, setAlertState: () => {}, triedImageGen: true,
+    });
+    const screen = render(React.createElement(DownloadManagerScreen, {}));
+    await waitFor(() => { expect(boundary.download!.active()).toHaveLength(1); });
+    const transfer = boundary.download!.active()[0];
+    boundary.download!.seedActive({ ...transfer, bytesDownloaded: 32 * MB });
+
+    fireEvent.press(await waitFor(() => screen.getByLabelText('Pause Sample Multi')));
+    await waitFor(() => { expect(screen.getByLabelText('Resume Sample Multi')).toBeTruthy(); });
+    expect(boundary.download!.active()[0]).toMatchObject({
+      downloadId: transfer.downloadId, bytesDownloaded: 32 * MB, status: 'paused',
+    });
+    fireEvent.press(screen.getByLabelText('Resume Sample Multi'));
+    await waitFor(() => { expect(screen.getByLabelText('Pause Sample Multi')).toBeTruthy(); });
+    expect(boundary.download!.active()[0]).toMatchObject({
+      downloadId: transfer.downloadId, bytesDownloaded: 32 * MB, status: 'running',
+    });
+    download.catch(() => {});
+  });
 });
