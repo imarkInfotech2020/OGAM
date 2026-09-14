@@ -800,6 +800,16 @@ function makeDownloadFake(handle: FakeEmitterHandle): DownloadFake {
     cancelDownload: jest.fn(async (id: string) => {
       rows.delete(id);
     }),
+    pauseDownload: jest.fn(async (id: string) => {
+      const row = rows.get(id);
+      if (!row) throw new Error('Download not found');
+      rows.set(id, { ...row, status: 'paused' });
+    }),
+    resumeDownload: jest.fn(async (id: string) => {
+      const row = rows.get(id);
+      if (!row || row.status !== 'paused') throw new Error('Download is not paused');
+      rows.set(id, { ...row, status: 'running' });
+    }),
     retryDownload: jest.fn(async () => {}),
     getActiveDownloads: jest.fn(async () => [...rows.values()]),
     moveCompletedDownload: jest.fn(

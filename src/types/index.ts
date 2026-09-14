@@ -450,6 +450,7 @@ export type BackgroundDownloadStatus =
   | 'pending'
   | 'running'
   | 'retrying'
+  | 'paused'
   | 'waiting_for_network'
   | 'completed'
   | 'failed'

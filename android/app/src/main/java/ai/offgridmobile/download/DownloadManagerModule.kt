@@ -154,6 +154,47 @@ class DownloadManagerModule(reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun pauseDownload(downloadId: String, promise: Promise) {
+        scope.launch {
+            try {
+                val download = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
+                    ?: return@launch SafePromise(promise, NAME).reject("PAUSE_ERROR", "Download not found")
+                if (download.status != DownloadStatus.RUNNING && download.status != DownloadStatus.QUEUED &&
+                    download.status != DownloadStatus.WAITING_FOR_NETWORK && download.status != DownloadStatus.RETRYING) {
+                    return@launch SafePromise(promise, NAME).reject("PAUSE_ERROR", "Download cannot be paused")
+                }
+                withContext(Dispatchers.IO) { downloadDao.updateStatus(downloadId, DownloadStatus.PAUSED) }
+                removeWorkObserver(downloadId)
+                WorkerDownload.cancel(reactApplicationContext, downloadId)
+                DownloadEventBridge.progress(downloadId, download.fileName, download.modelId,
+                    download.downloadedBytes, download.totalBytes, "paused")
+                SafePromise(promise, NAME).resolve(true)
+            } catch (e: Exception) {
+                SafePromise(promise, NAME).reject("PAUSE_ERROR", "Failed to pause download: ${e.message}", e)
+            }
+        }
+    }
+
+    @ReactMethod
+    fun resumeDownload(downloadId: String, promise: Promise) {
+        scope.launch {
+            try {
+                val download = withContext(Dispatchers.IO) { downloadDao.getDownload(downloadId) }
+                    ?: return@launch SafePromise(promise, NAME).reject("RESUME_ERROR", "Download not found")
+                if (download.status != DownloadStatus.PAUSED) {
+                    return@launch SafePromise(promise, NAME).reject("RESUME_ERROR", "Download is not paused")
+                }
+                withContext(Dispatchers.IO) { downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED) }
+                WorkerDownload.enqueue(reactApplicationContext, downloadId)
+                registerObserver(downloadId, download.fileName, download.modelId)
+                SafePromise(promise, NAME).resolve(true)
+            } catch (e: Exception) {
+                SafePromise(promise, NAME).reject("RESUME_ERROR", "Failed to resume download: ${e.message}", e)
+            }
+        }
+    }
+
+    @ReactMethod
     fun cancelDownload(downloadId: String, promise: Promise) {
         scope.launch {
             try {

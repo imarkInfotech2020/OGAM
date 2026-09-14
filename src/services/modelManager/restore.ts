@@ -25,7 +25,7 @@ type RestorableDownloadInfo = BackgroundDownloadInfo & {
 };
 
 function isRestorable(download: BackgroundDownloadInfo): boolean {
-  return download.status === 'running' || download.status === 'pending' || download.status === 'completed';
+  return download.status === 'running' || download.status === 'pending' || download.status === 'paused' || download.status === 'completed';
 }
 
 async function resolveMmProjState(

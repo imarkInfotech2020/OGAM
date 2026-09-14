@@ -54,7 +54,7 @@ export const sttProvider: DownloadProvider = {
       out.push({
         id: uniformDownloadId('stt', e.modelId), modelType: 'stt', name: e.fileName || bare,
         sizeBytes: e.totalBytes, bytesDownloaded: e.bytesDownloaded, progress: e.progress,
-        status: mapStoreStatus(e.status), capabilities: STT_CAPABILITIES, error: e.errorMessage,
+        status: mapStoreStatus(e.status), capabilities: { ...STT_CAPABILITIES, pause: isActiveStatus(e.status), resume: e.status === 'paused' }, error: e.errorMessage,
       });
     }
     // Completed (on disk) — skip ones that also have a live in-flight entry.
@@ -70,6 +70,21 @@ export const sttProvider: DownloadProvider = {
       });
     }
     return out;
+  },
+
+  async pause(id: string): Promise<void> {
+    const entry = findEntry(downloadId(id));
+    if (!entry) return;
+    await backgroundDownloadService.pauseDownload(entry.downloadId);
+    useDownloadStore.getState().setStatus(entry.downloadId, 'paused');
+  },
+
+  async resume(id: string): Promise<void> {
+    const entry = findEntry(downloadId(id));
+    if (!entry) return;
+    await backgroundDownloadService.resumeDownload(entry.downloadId);
+    useDownloadStore.getState().setStatus(entry.downloadId, 'pending');
+    backgroundDownloadService.startProgressPolling();
   },
 
   async cancel(id: string): Promise<void> {

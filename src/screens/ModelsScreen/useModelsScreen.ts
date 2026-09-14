@@ -197,7 +197,7 @@ export function useModelsScreen() {
   // failed/retriable (a failed download needs a retry or remove and must not be invisible).
   const downloadBadgeCount = useDownloadStore(state =>
     Object.values(state.downloads).filter(
-      d => isActiveStatus(d.status) || isFailedStatus(d.status),
+      d => isActiveStatus(d.status) || isFailedStatus(d.status) || d.status === 'paused',
     ).length,
   );
   const totalModelCount =

@@ -30,6 +30,8 @@ export type DownloadItem = {
   progress: number;
   bytesPerSecond?: number;
   status: string;
+  canPause?: boolean;
+  canResume?: boolean;
   downloadedAt?: string;
   filePath?: string;
   isVisionModel?: boolean;
@@ -72,9 +74,11 @@ interface ActiveDownloadCardProps {
   item: DownloadItem;
   onRemove: (item: DownloadItem) => void;
   onRetry: (item: DownloadItem) => void;
+  onPause: (item: DownloadItem) => void;
+  onResume: (item: DownloadItem) => void;
 }
 
-export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry }) => {
+export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, onRemove, onRetry, onPause, onResume }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const progressColor =
@@ -134,13 +138,26 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.cancelButton}
-            testID="remove-download-button"
-            onPress={() => onRemove(item)}
-          >
-            <Icon name="x" size={20} color={colors.error} />
-          </TouchableOpacity>
+          <View style={styles.failedActionsRow}>
+            {(item.canPause || item.canResume) && (
+              <TouchableOpacity
+                style={styles.retryButton}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.canResume ? 'Resume' : 'Pause'} ${item.fileName}`}
+                onPress={() => item.canResume ? onResume(item) : onPause(item)}
+              >
+                <Icon name={item.canResume ? 'play' : 'pause'} size={14} color={colors.primary} />
+                <Text style={styles.retryButtonText}>{item.canResume ? 'Resume' : 'Pause'}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.cancelButton}
+              testID="remove-download-button"
+              onPress={() => onRemove(item)}
+            >
+              <Icon name="x" size={20} color={colors.error} />
+            </TouchableOpacity>
+          </View>
         )}
       </View>
       <View style={styles.progressContainer}>

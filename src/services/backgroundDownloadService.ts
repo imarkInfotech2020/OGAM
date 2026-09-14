@@ -268,6 +268,26 @@ class BackgroundDownloadService {
     return true;
   }
 
+  async pauseDownload(downloadId: string): Promise<void> {
+    if (!this.isAvailable()) throw new Error('Background downloads not available');
+    await DownloadManagerModule.pauseDownload(downloadId);
+    this.release(downloadId);
+  }
+
+  async resumeDownload(downloadId: string): Promise<void> {
+    if (!this.isAvailable()) throw new Error('Background downloads not available');
+    if (!this.activeIds.has(downloadId) && this.activeIds.size >= MAX_CONCURRENT_DOWNLOADS) {
+      throw new Error('Three downloads are already running. Try again when one finishes.');
+    }
+    this.activeIds.add(downloadId);
+    try {
+      await DownloadManagerModule.resumeDownload(downloadId);
+    } catch (error) {
+      this.release(downloadId);
+      throw error;
+    }
+  }
+
   async retryDownload(downloadId: string): Promise<void> {
     if (!this.isAvailable() || Platform.OS !== 'android') {
       throw new Error('retryDownload is only available on Android');

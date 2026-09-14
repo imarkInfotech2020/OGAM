@@ -28,6 +28,8 @@ export function mapStoreStatus(s: DownloadStatus): ModelDownloadStatus {
       return 'downloading';
     case 'waiting_for_network':
       return 'paused';
+    case 'paused':
+      return 'paused';
     case 'completed':
       return 'completed';
     case 'failed':

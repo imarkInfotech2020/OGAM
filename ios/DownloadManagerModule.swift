@@ -580,7 +580,7 @@ class DownloadManagerModule: RCTEventEmitter {
         // them cleanly (e.g. STT re-downloads via whisperService).
         let orphanedIds = self.downloads
           .filter { (_, info) in
-            (info.status == "running" || info.status == "pending")
+            (info.status == "running" || info.status == "pending" || info.status == "paused")
               && !self.taskToDownloadId.values.contains(info.downloadId)
           }
           .map { $0.key }
@@ -789,6 +789,50 @@ extension DownloadManagerModule {
       "fileName": fileName,
       "modelId": modelId
     ] as [String: Any])
+  }
+
+  @objc func pauseDownload(_ downloadId: String,
+                           resolver resolve: @escaping RCTPromiseResolveBlock,
+                           rejecter reject: @escaping RCTPromiseRejectBlock) {
+    queue.async(flags: .barrier) {
+      guard var info = self.downloads[downloadId], info.status == "running" || info.status == "pending" else {
+        reject("PAUSE_ERROR", "Download cannot be paused", nil)
+        return
+      }
+      if info.isMultiFile {
+        for file in info.fileTasks.values where !file.completed { file.task?.suspend() }
+      } else {
+        info.task?.suspend()
+      }
+      info.status = "paused"
+      self.downloads[downloadId] = info
+      self.persistStateLocked()
+      resolve(true)
+    }
+  }
+
+  @objc func resumeDownload(_ downloadId: String,
+                            resolver resolve: @escaping RCTPromiseResolveBlock,
+                            rejecter reject: @escaping RCTPromiseRejectBlock) {
+    queue.async(flags: .barrier) {
+      guard var info = self.downloads[downloadId], info.status == "paused" else {
+        reject("RESUME_ERROR", "Download is not paused", nil)
+        return
+      }
+      if info.isMultiFile {
+        for file in info.fileTasks.values where !file.completed { file.task?.resume() }
+      } else {
+        guard let task = info.task else {
+          reject("RESUME_ERROR", "Download stopped; retry it", nil)
+          return
+        }
+        task.resume()
+      }
+      info.status = "running"
+      self.downloads[downloadId] = info
+      self.persistStateLocked()
+      resolve(true)
+    }
   }
 
   @objc func cancelDownload(_ downloadId: String,

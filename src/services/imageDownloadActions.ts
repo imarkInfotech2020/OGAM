@@ -36,6 +36,8 @@ interface ImageMetadata {
 
 type MultifileRuntime = {
   cancelled: boolean;
+  paused: boolean;
+  resumeWaiter?: () => void;
   currentDownloadId?: string;
 };
 
@@ -48,7 +50,7 @@ function makeMultifileId(modelId: string): string {
 }
 
 function startMultifileRuntime(modelId: string): MultifileRuntime {
-  const runtime: MultifileRuntime = { cancelled: false };
+  const runtime: MultifileRuntime = { cancelled: false, paused: false };
   activeMultifileDownloads.set(modelId, runtime);
   return runtime;
 }
@@ -79,14 +81,49 @@ function wireCurrentDownloadPromise(downloadIdPromise: Promise<string> | undefin
     runtime.currentDownloadId = downloadId;
     if (runtime.cancelled) {
       backgroundDownloadService.cancelDownload(downloadId).catch(() => {});
+    } else if (runtime.paused) {
+      backgroundDownloadService.pauseDownload(downloadId).catch(() => {});
     }
   }).catch(() => {});
+}
+
+export async function pauseSyntheticImageDownload(modelId: string): Promise<void> {
+  const runtime = activeMultifileDownloads.get(modelId);
+  if (!runtime || runtime.paused) return;
+  runtime.paused = true;
+  if (runtime.currentDownloadId) {
+    try {
+      await backgroundDownloadService.pauseDownload(runtime.currentDownloadId);
+    } catch (error) {
+      runtime.paused = false;
+      throw error;
+    }
+  }
+  useDownloadStore.getState().setStatus(makeMultifileId(modelId), 'paused');
+}
+
+export async function resumeSyntheticImageDownload(modelId: string): Promise<void> {
+  const runtime = activeMultifileDownloads.get(modelId);
+  if (!runtime || !runtime.paused) return;
+  if (runtime.currentDownloadId) await backgroundDownloadService.resumeDownload(runtime.currentDownloadId);
+  runtime.paused = false;
+  useDownloadStore.getState().setStatus(makeMultifileId(modelId), 'pending');
+  runtime.resumeWaiter?.();
+  runtime.resumeWaiter = undefined;
+  backgroundDownloadService.startProgressPolling();
+}
+
+async function waitWhilePaused(runtime: MultifileRuntime): Promise<void> {
+  if (!runtime.paused) return;
+  await new Promise<void>(resolve => { runtime.resumeWaiter = resolve; });
 }
 
 export async function cancelSyntheticImageDownload(modelId: string): Promise<void> {
   const runtime = activeMultifileDownloads.get(modelId);
   if (!runtime) return;
   runtime.cancelled = true;
+  runtime.resumeWaiter?.();
+  runtime.resumeWaiter = undefined;
   // Drop a part still waiting for a slot NOW — it has no native downloadId yet, so
   // cancelDownload can't reach it (else it promotes, briefly starts, then cancels).
   // The queue key is the part's modelId param, == makeImageModelKey(modelId).
@@ -134,6 +171,7 @@ async function downloadSequentialFiles(opts: {
   let downloadedSize = 0;
 
   for (const file of files) {
+    await waitWhilePaused(runtime);
     assertNotCancelled(modelInfo.id, runtime);
     const filePath = `${modelDir}/${file.relativePath}`;
     const fileDir = filePath.substring(0, filePath.lastIndexOf('/'));
@@ -145,7 +183,7 @@ async function downloadSequentialFiles(opts: {
       params: { url: file.url, fileName: tempFileName, modelId: `image:${modelInfo.id}`, modelType: 'image', totalBytes: file.size },
       destPath: filePath,
       onProgress: (bytesDownloaded) => {
-        if (runtime.cancelled) return;
+        if (runtime.cancelled || runtime.paused) return;
         const totalDownloaded = capturedDownloadedSize + bytesDownloaded;
         useDownloadStore.getState().updateProgress(syntheticId, totalDownloaded, totalSize);
       },
@@ -153,6 +191,8 @@ async function downloadSequentialFiles(opts: {
     wireCurrentDownloadPromise(downloadIdPromise, runtime);
     await promise;
     runtime.currentDownloadId = undefined;
+    await waitWhilePaused(runtime);
+    assertNotCancelled(modelInfo.id, runtime);
     downloadedSize += file.size;
     useDownloadStore.getState().updateProgress(syntheticId, downloadedSize, totalSize);
   }
@@ -211,7 +251,7 @@ function addImageEntry(opts: {
   const { modelId, downloadId, fileName, totalBytes, metadata } = opts;
   const modelKey = makeImageModelKey(modelId);
   const existing = useDownloadStore.getState().downloads[modelKey];
-  if (existing && isActiveStatus(existing.status)) return false;
+  if (existing && (isActiveStatus(existing.status) || existing.status === 'paused')) return false;
   if (existing) {
     // Failed/etc. entry from a prior attempt - reuse logical record.
     useDownloadStore.getState().retryEntry(modelKey, downloadId);
@@ -398,7 +438,7 @@ export async function proceedWithDownload(
   };
   const modelKey = makeImageModelKey(modelInfo.id);
   const existing = useDownloadStore.getState().downloads[modelKey];
-  if (existing && isActiveStatus(existing.status)) return;
+  if (existing && (isActiveStatus(existing.status) || existing.status === 'paused')) return;
 
   // Guard: if files already exist on disk, register without re-downloading.
   const imageModelsDir = modelManager.getImageModelsDirectory();

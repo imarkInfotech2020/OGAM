@@ -12,6 +12,7 @@ export type DownloadStatus =
   | 'pending'
   | 'running'
   | 'retrying'
+  | 'paused'
   | 'waiting_for_network'
   | 'processing'
   | 'completed'
