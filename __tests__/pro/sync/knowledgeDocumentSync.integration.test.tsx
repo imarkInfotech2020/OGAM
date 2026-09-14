@@ -9,6 +9,7 @@ import {
   installLicensedPhone,
   registerThisPhone,
 } from '../../harness/licensedMesh';
+import { MembershipPersistenceBoundary } from '../../utils/membershipPersistenceBoundary';
 
 jest.unmock('@react-navigation/native');
 
@@ -93,6 +94,10 @@ describe('Pro mobile knowledge document sync journey', () => {
       createKnowledgeDocumentTransferMetadata,
     } = require('@offgrid/sync');
     const { AppNavigator } = require('../../../src/navigation/AppNavigator');
+    const { SyncScreen } = require('../../../pro/ui/SyncScreen');
+    const { SyncHomeCard } = require('../../../pro/ui/SyncHomeCard');
+    const { registerScreen, _clearScreensForTesting } = require('../../../src/navigation/screenRegistry');
+    const { registerSlot, SLOTS, _clearSlotsForTesting } = require('../../../src/bootstrap/slotRegistry');
     const {
       HOOKS,
       _clearHooksForTesting,
@@ -159,6 +164,8 @@ describe('Pro mobile knowledge document sync journey', () => {
       JSON.stringify({ projects: false }),
     );
     _clearHooksForTesting();
+    registerScreen({ name: 'Sync', component: SyncScreen });
+    registerSlot(SLOTS.homeSyncCard, SyncHomeCard);
     useSyncStore.getState().reset();
     useChatStore.getState().clearAllConversations();
     useAppStore.getState().setOnboardingComplete(true);
@@ -210,10 +217,15 @@ describe('Pro mobile knowledge document sync journey', () => {
     });
     let remoteState: InstanceType<typeof StateSync>;
     let remoteTransfers: InstanceType<typeof FileTransferManager>;
+    const remotePersistence = new MembershipPersistenceBoundary();
     const remote = buildSyncEngine({
       pairingEntitlement: mesh.peer(),
       localDevice: remoteDevice,
       tcpModule: TcpSocket,
+      getSharedSecret: (deviceId: string) =>
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
       onMessage: (deviceId: string, message: Record<string, unknown>) => {
         remoteTransfers.handleMessage(deviceId, message);
       },
@@ -330,6 +342,35 @@ describe('Pro mobile knowledge document sync journey', () => {
         'Desktop did not receive the durable control for the pre-pair document',
       );
 
+      view = renderApp();
+      rtl.fireEvent.press(await view.findByTestId('open-sync-from-home'));
+      await rtl.waitFor(() => {
+        expect(view!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy();
+      });
+      remote.engine.disconnect(mobile.id);
+      await rtl.waitFor(() => {
+        expect(view!.getByTestId(`sync-reconnect-${remoteDevice.id}`)).toBeTruthy();
+      });
+      await knowledgeDocumentSyncService.stop();
+      knowledgeDocumentSyncService.start({
+        recordStateMutation: (mutation: unknown) =>
+          stateSyncService.recordMutation(mutation),
+      });
+      rtl.fireEvent.press(view.getByTestId(`sync-reconnect-${remoteDevice.id}`));
+      await waitForCondition(
+        () =>
+          useSyncStore.getState().knownDevices.some(
+            (device: { id: string; status: string }) =>
+              device.id === remoteDevice.id && device.status === 'connected',
+          ),
+        'Mobile did not reconnect to Desktop',
+      );
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(receivedByDesktop.filter(transfer =>
+        transfer.request.payload.metadata.name === 'phone-before-pair.txt',
+      )).toHaveLength(1);
+      rtl.fireEvent.press(view.getByLabelText('Back'));
+
       const remoteChecksum = new IncrementalChecksum();
       remoteChecksum.update(remoteBytes);
       await remoteTransfers.sendFile(mobile.id, {
@@ -408,8 +449,7 @@ describe('Pro mobile knowledge document sync journey', () => {
         ),
       ).toHaveLength(1);
 
-      view = renderApp();
-      rtl.fireEvent.press(view.getByTestId('projects-tab'));
+      rtl.fireEvent.press(await view.findByTestId('projects-tab'));
       await rtl.waitFor(() => {
         expect(view!.queryByText('OGAD')).not.toBeNull();
       });
@@ -499,6 +539,8 @@ describe('Pro mobile knowledge document sync journey', () => {
       globals.Buffer = previousGlobalBuffer;
       view?.unmount();
       _clearHooksForTesting();
+      _clearScreensForTesting();
+      _clearSlotsForTesting();
       await remoteTransfers.dispose();
       await knowledgeDocumentSyncService.stop();
       await stateSyncService.stop();
