@@ -374,6 +374,7 @@ export interface LlamaFake {
 function makeLlamaFake(
   onRelease?: () => void,
   chatTemplate?: string,
+  modelInfo?: Record<string, unknown>,
 ): LlamaFake {
   const calls: LlamaFake['calls'] = { completion: [], clearCache: [] };
   type PreparedCompletion = Omit<LlamaCompletionScript, 'text'> & {
@@ -595,6 +596,7 @@ function makeLlamaFake(
   };
 
   const module: Record<string, jest.Mock> = {
+    loadLlamaModelInfo: jest.fn(async () => modelInfo ?? {}),
     // Faithful to llama.rn/llama.cpp: the native loader reports gpu=true (+ the offload device
     // list) when it actually offloaded layers (n_gpu_layers > 0), and gpu=false for a pure-CPU
     // init. Echo that from the requested load params so the REAL captureGpuInfo → GenerationMeta
@@ -998,6 +1000,8 @@ export interface InstallOpts {
    *  supportsNativeThinking (reasoning-delimiter detection). Omit for the reasoning-capable default;
    *  pass a marker-free template (e.g. Mistral's) to model a non-thinking model. */
   llamaChatTemplate?: string;
+  /** GGUF header fields returned by the native metadata reader. */
+  llamaModelInfo?: Record<string, unknown>;
   /** Seed a stateful background-download native module (boundary.download). */
   download?: boolean;
   /** Replace the global whisper.rn stub with a driveable STT context (boundary.whisper). */
@@ -1067,7 +1071,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
 
   // Scriptable llama.rn: override the global stub so completion output is under test control.
   const llamaFake = opts.llama
-    ? makeLlamaFake(freeModelMemory, opts.llamaChatTemplate)
+    ? makeLlamaFake(freeModelMemory, opts.llamaChatTemplate, opts.llamaModelInfo)
     : undefined;
   if (llamaFake) jest.doMock('llama.rn', () => llamaFake.module);
 

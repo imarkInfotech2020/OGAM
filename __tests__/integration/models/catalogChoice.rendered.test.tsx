@@ -1,4 +1,5 @@
 import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBoundary';
+import { createDownloadedModel } from '../../utils/factories';
 
 describe('Model choice on the phone', () => {
   it('opens the image picker directly from the Home model summary', async () => {
@@ -26,5 +27,52 @@ describe('Model choice on the phone', () => {
       recommended: { chips: ['Fast'] },
     }));
     expect(card.getByText(/Q4_K_M.*Text.*7B params.*8GB\+ RAM.*Fast/)).toBeTruthy();
+  });
+
+  it('shows the iOS text picker estimate from GGUF metadata with one approximation mark', async () => {
+    installNativeBoundary({
+      llama: true,
+      ram: { platform: 'ios', totalBytes: 12 * GB, availBytes: 8 * GB },
+      llamaModelInfo: {
+        'general.architecture': 'qwen3',
+        'qwen3.block_count': 36,
+        'qwen3.attention.head_count': 32,
+        'qwen3.attention.head_count_kv': 8,
+        'qwen3.embedding_length': 4096,
+        'qwen3.attention.key_length': 128,
+        'qwen3.attention.value_length': 128,
+        'qwen3.vocab_size': 151936,
+        'qwen3.attention.sliding_window': 4096,
+      },
+    });
+    const React = require('react');
+    const { render, waitFor } = requireRTL();
+    const { TextTab } = require('../../../src/components/ModelSelectorModal/TextTab');
+    const model = createDownloadedModel({
+      id: 'qwythos',
+      name: 'Qwythos 9B',
+      engine: 'llama',
+      filePath: '/docs/models/qwythos.gguf',
+      fileName: 'qwythos.gguf',
+      fileSize: 5.5 * GB,
+    });
+    const picker = render(React.createElement(TextTab, {
+      downloadedModels: [model],
+      remoteModels: [],
+      currentModelPath: null,
+      currentRemoteModelId: null,
+      isAnyLoading: false,
+      onSelectModel: () => {},
+      onSelectRemoteModel: () => {},
+      onUnloadModel: () => {},
+      onAddServer: () => {},
+    }));
+
+    await waitFor(() => {
+      const hint = picker.getByText(/^~\d+\.\d GB RAM/);
+      const estimate = Number(String(hint.props.children).match(/[\d.]+/)?.[0]);
+      expect(estimate).toBeLessThan(7.2);
+      expect(picker.queryByText(/^~~/)).toBeNull();
+    });
   });
 });
