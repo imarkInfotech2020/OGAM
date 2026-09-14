@@ -22,12 +22,16 @@ import { createStyles } from './styles';
 interface DebugLogsScreenProps {
   visible: boolean;
   onClose: () => void;
+  syncOnly?: boolean;
 }
 
-export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClose }) => {
+export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClose, syncOnly = false }) => {
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
   const { logs, clearLogs } = useDebugLogsStore();
+  const visibleLogs = syncOnly
+    ? logs.filter(log => /\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]/i.test(log.message))
+    : logs;
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -51,7 +55,7 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
   };
 
   const handleCopyAllLogs = async () => {
-    const logsText = logs
+    const logsText = visibleLogs
       .map(
         (log: any) =>
           `[${formatTime(log.timestamp)}] ${log.level.toUpperCase()}: ${log.message}`
@@ -67,7 +71,7 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
   };
 
   const handleShare = async () => {
-    const logsText = logs
+    const logsText = visibleLogs
       .map(
         (log: any) =>
           `[${formatTime(log.timestamp)}] ${log.level.toUpperCase()}: ${log.message}`
@@ -90,8 +94,8 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Debug Logs</Text>
-            <Text style={styles.subtitle}>{logs.length} entries</Text>
+            <Text style={styles.title}>{syncOnly ? 'Sync Operations' : 'Debug Logs'}</Text>
+            <Text style={styles.subtitle}>{visibleLogs.length} entries</Text>
           </View>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
             <Icon name="x" size={24} color={theme.colors.text} />
@@ -110,20 +114,20 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
             <Text style={styles.actionButtonText}>Share</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionButton} onPress={clearLogs}>
+          {!syncOnly && <TouchableOpacity style={styles.actionButton} onPress={clearLogs}>
             <Icon name="trash-2" size={16} color={theme.colors.error} style={styles.actionIcon} />
             <Text style={[styles.actionButtonText, { color: theme.colors.error }]}>Clear</Text>
-          </TouchableOpacity>
+          </TouchableOpacity>}
         </View>
 
         {/* Logs List */}
-        {logs.length === 0 ? (
+        {visibleLogs.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No logs yet</Text>
+            <Text style={styles.emptyText}>{syncOnly ? 'No sync operations yet' : 'No logs yet'}</Text>
           </View>
         ) : (
           <FlatList
-            data={logs}
+            data={visibleLogs}
             keyExtractor={(_, index) => `${index}`}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }: { item: any }) => (
