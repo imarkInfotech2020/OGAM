@@ -45,7 +45,18 @@ export async function runRemoteImageGeneration(
     const remote = await remoteMediaRuntime.generateImage(
       server,
       { prompt: options.enhancedPrompt ?? params.prompt, size: `${width}x${height}` },
-      { signal: controller.signal, override: options.override },
+      {
+        signal: controller.signal,
+        override: options.override,
+        onImageProgress: (step, total) => {
+          if (!deps.isCancelled() && total > 0) {
+            deps.updateState({
+              progress: { step, totalSteps: total },
+              status: `Generating image (${step}/${total})...`,
+            });
+          }
+        },
+      },
     );
     const dataUrl = remote.url?.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/i);
     const base64 = dataUrl?.[2] ?? remote.base64;

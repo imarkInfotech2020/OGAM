@@ -17,6 +17,7 @@ export interface RemoteVoiceResult {
 export interface RemoteMediaRequestOptions {
   signal?: AbortSignal;
   override?: boolean;
+  onImageProgress?: (step: number, total: number) => void;
 }
 
 function endpoint(server: RemoteServer, path: string): string {
@@ -93,6 +94,11 @@ export const remoteMediaRuntime = {
     options: RemoteMediaRequestOptions = {},
   ): Promise<RemoteImageResult> {
     const openRouter = new URL(server.endpoint).hostname === 'openrouter.ai';
+    const desktop = server.modelManagement === 'offgrid-desktop-v1';
+    type ImagePayload = {
+      data?: Array<{ b64_json?: string; url?: string }>;
+      choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: string } }> } }>;
+    };
     const payload = await request({
       server,
       path: openRouter ? '/v1/chat/completions' : '/v1/images/generations',
@@ -111,16 +117,48 @@ export const remoteMediaRuntime = {
               prompt: input.prompt,
               size: input.size ?? '1024x1024',
               response_format: 'b64_json',
+              ...(desktop ? { async: true } : {}),
               ...(options.override ? { allow_unsafe_memory_override: true } : {}),
             }),
       },
       signal: options.signal,
-    }, response => response.json() as Promise<{
-      data?: Array<{ b64_json?: string; url?: string }>;
-      choices?: Array<{ message?: { images?: Array<{ image_url?: { url?: string } }> } }>;
-    }>);
-    const image = payload.data?.[0];
-    const imageUrl = image?.url ?? payload.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    }, response => response.json() as Promise<ImagePayload & { request_id?: string }>);
+    let result: ImagePayload = payload;
+    if (desktop && payload.request_id) {
+      while (true) {
+        if (options.signal?.aborted) throw new Error('Remote request cancelled');
+        const state = await request({
+          server,
+          path: `/v1/requests/${encodeURIComponent(payload.request_id)}`,
+          init: { method: 'GET' },
+          signal: options.signal,
+        }, response => response.json() as Promise<{
+          status: string;
+          result?: ImagePayload;
+          error?: { message?: string };
+          progress?: { step: number; total: number };
+        }>);
+        if (state.progress) options.onImageProgress?.(state.progress.step, state.progress.total);
+        if (state.status === 'completed') {
+          result = state.result ?? {};
+          break;
+        }
+        if (state.status === 'failed') throw new Error(state.error?.message ?? 'Remote image generation failed');
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            options.signal?.removeEventListener('abort', abort);
+            resolve();
+          }, 1000);
+          const abort = () => {
+            clearTimeout(timer);
+            reject(new Error('Remote request cancelled'));
+          };
+          options.signal?.addEventListener('abort', abort, { once: true });
+        });
+      }
+    }
+    const image = result.data?.[0];
+    const imageUrl = image?.url ?? result.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     if (!image?.b64_json && !imageUrl) throw new Error('Remote server returned no image');
     return { base64: image?.b64_json, url: imageUrl };
   },
