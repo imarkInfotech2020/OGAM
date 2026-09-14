@@ -915,11 +915,12 @@ describe('ModelCard', () => {
       expect(queryByText('Recommended')).toBeNull();
     });
 
-    it('renders the pill with a custom pillLabel', () => {
-      const { getByText } = render(
+    it('uses the fire icon without a visible label', () => {
+      const { getByLabelText, queryByText } = render(
         <ModelCard model={baseModel} compact={true} recommended={{ pillLabel: 'Featured' }} />,
       );
-      expect(getByText(/test-author · Featured/)).toBeTruthy();
+      expect(getByLabelText('Recommended')).toBeTruthy();
+      expect(queryByText('Featured')).toBeNull();
     });
 
     it('renders the highlight as part of the common description (compact)', () => {
@@ -967,14 +968,15 @@ describe('ModelCard', () => {
       expect(getByText('Visible description')).toBeTruthy();
     });
 
-    it('renders pill + combined description/highlight in standard (non-compact) mode', () => {
-      const { getByText } = render(
+    it('renders the fire icon and combined description in standard mode', () => {
+      const { getByLabelText, getByText, queryByText } = render(
         <ModelCard
           model={{ ...baseModel, description: 'Detail description' }}
           recommended={{ pillLabel: 'Recommended', highlightText: 'Up to 2x faster via GPU' }}
         />,
       );
-      expect(getByText('Recommended')).toBeTruthy();
+      expect(getByLabelText('Recommended')).toBeTruthy();
+      expect(queryByText('Recommended')).toBeNull();
       // Description + highlight render as one common line (not a separate colour/slot).
       expect(getByText('Detail description Up to 2x faster via GPU')).toBeTruthy();
     });

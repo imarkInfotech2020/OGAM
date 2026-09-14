@@ -137,6 +137,7 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) 
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.tabScroller}
           contentContainerStyle={styles.tabBar}
         >
           {MODEL_TABS.map(tab => (
@@ -242,7 +243,7 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) 
       {/* Voice Models Tab: pro panel when registered, otherwise an upsell. */}
       {vm.activeTab === 'voice' && (
         VoiceModelsPanel
-          ? <VoiceModelsPanel showRemoteModels={!embedded} />
+          ? <VoiceModelsPanel showRemoteModels={false} />
           : <VoiceModelsUpsell onGetPro={() => vm.navigation.navigate('ProDetail')} />
       )}
 
@@ -250,7 +251,7 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) 
       {vm.activeTab === 'transcription' && (
         <TranscriptionModelsTab
           showLanguageSelector={!embedded}
-          showRemoteModels={!embedded}
+          showRemoteModels={false}
         />
       )}
 

@@ -63,6 +63,8 @@ describe('Model choice on the phone', () => {
       recommended: { chips: ['Fast'] },
     }));
     expect(card.getByText(/Q4_K_M.*Text.*7B params.*8GB\+ RAM.*Fast/)).toBeTruthy();
+    expect(card.getByLabelText('Recommended')).toBeTruthy();
+    expect(card.queryByText('Recommended')).toBeNull();
   });
 
   it('shows the iOS text picker estimate from GGUF metadata with one approximation mark', async () => {

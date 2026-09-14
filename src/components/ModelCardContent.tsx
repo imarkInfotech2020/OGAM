@@ -84,7 +84,6 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
   const sourceLabels = [
     model.author,
     hasVerifiedMark ? undefined : credibilityLabel,
-    recommended ? (recommended.pillLabel ?? 'Recommended') : undefined,
   ].filter((value): value is string => !!value);
 
   return (
@@ -189,14 +188,7 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
             <Text style={styles.activeBadgeText}>Active</Text>
           </View>
         )}
-        {recommended && (
-          <>
-            <MaterialIcon name="whatshot" size={14} color={colors.trending} />
-            <View style={styles.recommendedPill}>
-              <Text style={styles.recommendedPillText}>{recommended.pillLabel ?? 'Recommended'}</Text>
-            </View>
-          </>
-        )}
+        {recommended && <MaterialIcon name="whatshot" size={14} color={colors.trending} accessibilityLabel="Recommended" />}
         {/* GPU/NPU capability badge — a LiteRT or Q4_0/Q8_0 quant this device can accelerate. */}
         {supportsAcceleration && (
           <View style={styles.accelBadge} testID="npu-gpu-badge">
@@ -319,9 +311,9 @@ interface ModelCardActionsProps {
 
 const HIT_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
 
-function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }: {
+function ActionButton({ icon, color, haptic, onPress, disabled, testID, accessibilityLabel, styles }: {
   icon: string; color: string; haptic: string; onPress: () => void;
-  disabled?: boolean; testID?: string; styles: ReturnType<typeof createStyles>;
+  disabled?: boolean; testID?: string; accessibilityLabel?: string; styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <TouchableOpacity
@@ -330,6 +322,8 @@ function ActionButton({ icon, color, haptic, onPress, disabled, testID, styles }
       disabled={disabled}
       hitSlop={HIT_SLOP}
       testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
     >
       <Icon name={icon} size={16} color={color} />
     </TouchableOpacity>
@@ -352,7 +346,7 @@ function DownloadedActions({ isActive, testID, colors, styles, onSelect, onDelet
         onRepairVision && <ActionButton icon="tool" color={colors.warning} haptic="impactLight" onPress={onRepairVision} testID={tid('repair-vision')} styles={styles} />
       )}
       {!isActive && onSelect && <ActionButton icon="check-circle" color={colors.primary} haptic="selection" onPress={onSelect} styles={styles} />}
-      {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} styles={styles} />}
+      {onDelete && <ActionButton icon="trash-2" color={colors.error} haptic="notificationWarning" onPress={onDelete} testID={tid('delete') ?? 'delete-model-button'} accessibilityLabel="Delete model" styles={styles} />}
     </>
   );
 }
