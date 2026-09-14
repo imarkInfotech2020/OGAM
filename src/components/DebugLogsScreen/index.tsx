@@ -29,9 +29,17 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
   const { logs, clearLogs } = useDebugLogsStore();
-  const visibleLogs = syncOnly
+  const [syncFilter, setSyncFilter] = React.useState<'state' | 'files' | 'startup' | 'all'>('state');
+  const syncLogs = syncOnly
     ? logs.filter(log => /\[(?:BOOT-SYNC|StateSync|SYNC_DIAGNOSTIC|REPAIR)\]/i.test(log.message))
     : logs;
+  const visibleLogs = !syncOnly || syncFilter === 'all'
+    ? syncLogs
+    : syncLogs.filter(log => {
+        if (syncFilter === 'state') return /\[StateSync\]/i.test(log.message);
+        if (syncFilter === 'files') return /\[SYNC_DIAGNOSTIC\]/i.test(log.message);
+        return /\[(?:BOOT-SYNC|REPAIR)\]/i.test(log.message);
+      });
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -94,13 +102,31 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>{syncOnly ? 'Sync Operations' : 'Debug Logs'}</Text>
-            <Text style={styles.subtitle}>{visibleLogs.length} entries</Text>
+            <Text style={styles.title}>{syncOnly ? 'Sync Debug Logs' : 'Debug Logs'}</Text>
+            <Text style={styles.subtitle}>{visibleLogs.length} log entries</Text>
           </View>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
             <Icon name="x" size={24} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
+
+        {syncOnly && (
+          <View style={styles.actionBar}>
+            {(['state', 'files', 'startup', 'all'] as const).map(filter => (
+              <TouchableOpacity
+                key={filter}
+                accessibilityRole="button"
+                accessibilityState={{ selected: syncFilter === filter }}
+                onPress={() => setSyncFilter(filter)}
+                style={[styles.actionButton, syncFilter === filter && styles.filterSelected]}
+              >
+                <Text style={styles.actionButtonText}>
+                  {{ state: 'State ops', files: 'Files', startup: 'Startup', all: 'All' }[filter]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Action Buttons */}
         <View style={styles.actionBar}>
@@ -123,7 +149,7 @@ export const DebugLogsScreen: React.FC<DebugLogsScreenProps> = ({ visible, onClo
         {/* Logs List */}
         {visibleLogs.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{syncOnly ? 'No sync operations yet' : 'No logs yet'}</Text>
+            <Text style={styles.emptyText}>{syncOnly ? 'No sync debug logs yet' : 'No logs yet'}</Text>
           </View>
         ) : (
           <FlatList
