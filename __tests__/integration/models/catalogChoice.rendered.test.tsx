@@ -35,13 +35,13 @@ describe('Model choice on the phone', () => {
       ram: { platform: 'ios', totalBytes: 12 * GB, availBytes: 8 * GB },
       llamaModelInfo: {
         'general.architecture': 'qwen3',
-        'qwen3.block_count': 36,
-        'qwen3.attention.head_count': 32,
-        'qwen3.attention.head_count_kv': 8,
-        'qwen3.embedding_length': 4096,
-        'qwen3.attention.key_length': 128,
-        'qwen3.attention.value_length': 128,
-        'qwen3.attention.sliding_window': 4096,
+        'qwen3.block_count': '36',
+        'qwen3.attention.head_count': '32',
+        'qwen3.attention.head_count_kv': '8',
+        'qwen3.embedding_length': '4096',
+        'qwen3.attention.key_length': '128',
+        'qwen3.attention.value_length': '128',
+        'qwen3.attention.sliding_window': '4096',
       },
     });
     const React = require('react');

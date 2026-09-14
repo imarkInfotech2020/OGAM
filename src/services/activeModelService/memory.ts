@@ -54,7 +54,8 @@ export async function estimateTextModelMemoryMB(model: DownloadedModel): Promise
     if (typeof architecture !== 'string') return Math.ceil(fallback / (1024 * 1024));
     const number = (field: string): number | undefined => {
       const value = metadata[`${architecture}.${field}`];
-      return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+      const parsed = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
     };
     const blocks = number('block_count');
     const heads = number('attention.head_count');
