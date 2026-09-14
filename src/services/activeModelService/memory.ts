@@ -63,7 +63,7 @@ export async function estimateTextModelMemoryMB(model: DownloadedModel): Promise
     const keyLength = number('attention.key_length') ?? (embedding && heads ? embedding / heads : undefined);
     const valueLength = number('attention.value_length') ?? keyLength;
     const vocabulary = number('vocab_size');
-    if (!blocks || !kvHeads || !embedding || !keyLength || !valueLength || !vocabulary) {
+    if (!blocks || !kvHeads || !embedding || !keyLength || !valueLength) {
       return Math.ceil(fallback / (1024 * 1024));
     }
     const params = buildModelParams(model.filePath, settings);
@@ -72,7 +72,7 @@ export async function estimateTextModelMemoryMB(model: DownloadedModel): Promise
     const bytesPerElement = cacheType === 'q4_0' ? 18 / 32
       : cacheType === 'q8_0' ? 34 / 32 : 2;
     const kvBytes = blocks * context * kvHeads * (keyLength + valueLength) * bytesPerElement;
-    const computeBytes = (vocabulary + embedding) * params.nBatch * 4;
+    const computeBytes = ((vocabulary ?? 0) + embedding) * params.nBatch * 4;
     const totalBytes = Math.ceil((model.fileSize + (model.mmProjFileSize ?? 0) + kvBytes + computeBytes) * 1.1);
     return Math.ceil(totalBytes / (1024 * 1024));
   } catch {

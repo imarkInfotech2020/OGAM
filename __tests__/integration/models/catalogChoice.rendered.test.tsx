@@ -41,7 +41,6 @@ describe('Model choice on the phone', () => {
         'qwen3.embedding_length': 4096,
         'qwen3.attention.key_length': 128,
         'qwen3.attention.value_length': 128,
-        'qwen3.vocab_size': 151936,
         'qwen3.attention.sliding_window': 4096,
       },
     });
