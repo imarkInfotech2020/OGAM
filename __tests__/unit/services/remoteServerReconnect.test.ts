@@ -126,7 +126,7 @@ describe('remote server reconnect', () => {
     ]);
   });
 
-  it('reconciles a unique same-port discovery after Keychain confirms no credential', async () => {
+  it('keeps a unique same-port discovery separate without identity proof', async () => {
     const oldEndpoint = 'http://192.168.1.10:7878';
     const discoveredEndpoint = 'http://192.168.1.20:7878';
     global.fetch = jest.fn((input: RequestInfo | URL) =>
@@ -144,9 +144,11 @@ describe('remote server reconnect', () => {
 
     expect(
       useRemoteServerStore.getState().getServerById(serverId)?.endpoint,
-    ).toBe(discoveredEndpoint);
-    expect(result.moved).toEqual([serverId]);
-    expect(result.found).toEqual([]);
+    ).toBe(oldEndpoint);
+    expect(result.moved).toEqual([]);
+    expect(result.found).toEqual([
+      expect.objectContaining({ endpoint: discoveredEndpoint }),
+    ]);
   });
 
   it('scans when auto-discovery is enabled and the active server is reachable', async () => {
@@ -167,9 +169,10 @@ describe('remote server reconnect', () => {
 
     await remoteServerManager.recoverActiveConnection();
 
-    expect(
-      useRemoteServerStore.getState().serverHealth[serverId]?.isHealthy,
-    ).toBe(true);
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${endpoint}/v1/models`,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(global.fetch).toHaveBeenCalledWith(
       'http://192.168.1.2:7878/v1/models',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
