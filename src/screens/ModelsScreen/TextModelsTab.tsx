@@ -3,6 +3,7 @@ import { View, Text, FlatList, TextInput, RefreshControl, TouchableOpacity, Plat
 import { LoadingDots } from '../../components/LoadingDots';
 import DeviceInfo from 'react-native-device-info';
 import Icon from 'react-native-vector-icons/Feather';
+import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { fileExceedsBudget } from '../../services/memoryBudget';
 import { Card, ModelCard } from '../../components';
@@ -207,11 +208,17 @@ const ModelDetailView: React.FC<DetailProps> = ({
       <Card style={styles.modelInfoCard}>
         <View style={styles.authorRow}>
           <Text style={styles.modelAuthor}>{selectedModel.author}</Text>
-          {selectedModel.credibility && (
+          {selectedModel.credibility && (selectedModel.credibility.source === 'official' || selectedModel.credibility.source === 'verified-quantizer') && (
+            <MaterialIcon
+              name="verified"
+              size={14}
+              color={colors.primary}
+              accessibilityLabel={CREDIBILITY_LABELS[selectedModel.credibility.source].label}
+            />
+          )}
+          {selectedModel.credibility && selectedModel.credibility.source !== 'official' && selectedModel.credibility.source !== 'verified-quantizer' && (
             <View style={[styles.credibilityBadge, { backgroundColor: `${CREDIBILITY_LABELS[selectedModel.credibility.source].color}25` }]}>
               {selectedModel.credibility.source === 'lmstudio' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>★</Text>}
-              {selectedModel.credibility.source === 'official' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>✓</Text>}
-              {selectedModel.credibility.source === 'verified-quantizer' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>◆</Text>}
               <Text style={[styles.credibilityText, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>
                 {CREDIBILITY_LABELS[selectedModel.credibility.source].label}
               </Text>

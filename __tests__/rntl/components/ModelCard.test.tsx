@@ -388,7 +388,7 @@ describe('ModelCard', () => {
         />
       );
 
-      expect(getByLabelText('Verified')).toBeTruthy();
+      expect(getByLabelText('Official')).toBeTruthy();
       expect(queryByText('Official')).toBeNull();
       expect(queryByText(/OpenBMB/)).toBeTruthy();
     });
@@ -416,8 +416,8 @@ describe('ModelCard', () => {
       expect(getByText('LM Studio')).toBeTruthy();
     });
 
-    it('shows checkmark for official authors', () => {
-      const { getByText } = render(
+    it('shows an icon for official authors', () => {
+      const { getByLabelText, queryByText } = render(
         <ModelCard
           model={{
             ...baseModel,
@@ -430,12 +430,12 @@ describe('ModelCard', () => {
           }}
         />
       );
-      expect(getByText('✓')).toBeTruthy();
-      expect(getByText('Official')).toBeTruthy();
+      expect(getByLabelText('Official')).toBeTruthy();
+      expect(queryByText('Official')).toBeNull();
     });
 
-    it('shows diamond for verified quantizers', () => {
-      const { getByText } = render(
+    it('shows an icon for verified quantizers', () => {
+      const { getByLabelText, queryByText } = render(
         <ModelCard
           model={{
             ...baseModel,
@@ -448,8 +448,8 @@ describe('ModelCard', () => {
           }}
         />
       );
-      expect(getByText('◆')).toBeTruthy();
-      expect(getByText('Verified')).toBeTruthy();
+      expect(getByLabelText('Verified')).toBeTruthy();
+      expect(queryByText('Verified')).toBeNull();
     });
 
     it('shows no badge icon for community models', () => {
@@ -480,10 +480,11 @@ describe('ModelCard', () => {
           verifiedBy: 'Meta',
         },
       });
-      const { getByText } = render(
+      const { getByLabelText, queryByText } = render(
         <ModelCard model={baseModel} downloadedModel={downloadedModel} />
       );
-      expect(getByText('Official')).toBeTruthy();
+      expect(getByLabelText('Official')).toBeTruthy();
+      expect(queryByText('Official')).toBeNull();
     });
   });
 

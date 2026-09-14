@@ -84,7 +84,7 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
   const sourceLabels = [
     model.author,
     hasVerifiedMark ? undefined : credibilityLabel,
-    recommended ? (recommended.pillLabel ?? 'Recommended') : (isTrending ? 'Trending' : undefined),
+    recommended ? (recommended.pillLabel ?? 'Recommended') : undefined,
   ].filter((value): value is string => !!value);
 
   return (
@@ -97,14 +97,14 @@ export const DenseModelCardContent: React.FC<DenseModelCardContentProps> = ({
               name="verified"
               size={12}
               color={colors.primary}
-              accessibilityLabel="Verified"
+              accessibilityLabel={credibilitySource === 'official' ? 'Official' : 'Verified'}
             />
           )}
           <Text style={styles.denseSource} numberOfLines={1}>
             {sourceLabels.join(' · ')}
           </Text>
           {(recommended || isTrending) && (
-            <MaterialIcon name="whatshot" size={14} color={colors.trending} />
+            <MaterialIcon name="whatshot" size={14} color={colors.trending} accessibilityLabel={isTrending ? 'Trending' : 'Recommended'} />
           )}
         </View>
       </View>
@@ -171,16 +171,13 @@ export const StandardModelCardContent: React.FC<StandardModelCardContentProps> =
         <View style={styles.authorTag}>
           <Text style={styles.authorTagText}>{model.author}</Text>
         </View>
-        {credibilityInfo && (
+        {credibilityInfo && (credibility?.source === 'official' || credibility?.source === 'verified-quantizer') && (
+          <MaterialIcon name="verified" size={14} color={colors.primary} accessibilityLabel={credibilityInfo.label} />
+        )}
+        {credibilityInfo && credibility?.source !== 'official' && credibility?.source !== 'verified-quantizer' && (
           <View style={[styles.credibilityBadge, { backgroundColor: `${credibilityInfo.color}25` }]}>
             {credibility?.source === 'lmstudio' && (
               <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>★</Text>
-            )}
-            {credibility?.source === 'official' && (
-              <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>✓</Text>
-            )}
-            {credibility?.source === 'verified-quantizer' && (
-              <Text style={[styles.credibilityIcon, { color: credibilityInfo.color }]}>◆</Text>
             )}
             <Text style={[styles.credibilityText, { color: credibilityInfo.color }]}>
               {credibilityInfo.label}
