@@ -46,6 +46,9 @@ export const ModelRow: React.FC<ModelRowProps> = ({
       onPress={onPress}
       disabled={disabled || !onPress}
       testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={name}
+      accessibilityState={{ selected: !!isActive }}
     >
       <View style={styles.info}>
         <Text

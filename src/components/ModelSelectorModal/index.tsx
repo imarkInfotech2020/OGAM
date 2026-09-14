@@ -186,7 +186,7 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   }, [servers, serverHealth]);
 
   const handleSelectImageModel = async (model: ONNXImageModel) => {
-    if (activeImageModelId === model.id) return;
+    if (activeImageModelId === model.id && !activeRemoteImageModelId) return;
     // Shared inline Load-Anyway flow so a memory-blocked image load offers the
     // override here too, instead of a dead-end "Failed to Load".
     await loadModelWithOverride(
@@ -253,6 +253,12 @@ export const ModelSelectorModal: React.FC<ModelSelectorModalProps> = ({
   ) => {
     try {
       await remoteServerManager.setActiveRemoteImageModel(serverId, model.id);
+      try {
+        await activeModelService.unloadImageModel();
+      } catch (error) {
+        remoteServerManager.clearActiveRemoteMediaModel('image');
+        throw error;
+      }
       onSelectionComplete?.();
     } catch (error) {
       logger.error(
