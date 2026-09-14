@@ -835,6 +835,7 @@ describe('the licence this phone holds', () => {
       provider.setDirectEntitlementActivationOwner(activationOwner().owner);
       await provider.proLicenseProvider.activate!(LICENCE_KEY);
 
+      keygen.forget(FINGERPRINT);
       await provider.clearProAfterRemoteMembershipRevocation();
 
       // Removed, not merely deactivated: a revoked device keeping its credential could reactivate itself into a
