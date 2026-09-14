@@ -13,6 +13,7 @@ import { downloadStatusIcon } from '../../utils/downloadStatusIcon';
 import { createStyles } from './styles';
 import { presentProgress } from '../../utils/progressPresentation';
 import { SPACING } from '../../constants';
+import { isMMProjFile } from '../../services/mmproj';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -205,7 +206,8 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
   // determinate progress bar the normal download shows lights up during the
   // ~900MB mmproj re-download, instead of a bare indeterminate spinner (OD2).
   const repairEntry = useDownloadStore(s => s.downloads[item.modelId]);
-  const showRepairProgress = isRepairingVision && !!repairEntry;
+  const repairActive = isRepairingVision || !!repairEntry && isMMProjFile(repairEntry.fileName);
+  const showRepairProgress = repairActive && !!repairEntry;
   return (
     <View style={{ marginHorizontal: SPACING.md }}>
       <ModelCard
@@ -221,7 +223,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
         isDownloaded
         isDownloading={showRepairProgress && repairEntry.status !== 'paused'}
         isPaused={showRepairProgress && repairEntry.status === 'paused'}
-        isRepairingVision={isRepairingVision}
+        isRepairingVision={repairActive}
         downloadProgress={repairEntry?.progress}
         downloadBytes={repairEntry ? { downloaded: repairEntry.bytesDownloaded, total: repairEntry.totalBytes, bytesPerSecond: repairEntry.bytesPerSecond } : undefined}
         onRepairVision={needsVisionRepair && onRepairVision ? () => onRepairVision(item) : undefined}
