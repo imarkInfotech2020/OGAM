@@ -164,8 +164,7 @@ export const remoteMediaRuntime = {
         body: JSON.stringify({
           model: requiredModel(server, 'voice'),
           input: input.text,
-          voice: input.voice ?? 'alloy',
-          response_format: 'mp3',
+          ...(input.voice ? { voice: input.voice } : {}),
         }),
       },
       signal: options.signal,
@@ -173,5 +172,17 @@ export const remoteMediaRuntime = {
       audio: await response.arrayBuffer(),
       contentType: response.headers.get('content-type') ?? 'audio/mpeg',
     }));
+  },
+
+  async listVoices(server: RemoteServer, options: RemoteMediaRequestOptions = {}): Promise<string[]> {
+    const payload = await request({
+      server,
+      path: '/v1/audio/voices',
+      init: { method: 'GET' },
+      signal: options.signal,
+    }, response => response.json() as Promise<{ voices?: unknown }>);
+    return Array.isArray(payload.voices)
+      ? payload.voices.filter((voice): voice is string => typeof voice === 'string')
+      : [];
   },
 };
