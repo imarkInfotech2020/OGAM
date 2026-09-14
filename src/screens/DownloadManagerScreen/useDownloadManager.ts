@@ -362,6 +362,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
         setAlertState(showAlert(title, body));
       })
       .catch((e: Error) => {
+        if (e.message === 'Download cancelled') return;
         logger.error('[DownloadDebug] Repair vision failed', {
           modelId: item.modelId,
           error: e.message,

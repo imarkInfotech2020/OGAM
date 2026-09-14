@@ -192,10 +192,13 @@ interface CompletedDownloadCardProps {
   item: DownloadItem;
   onDelete: (item: DownloadItem) => void;
   onRepairVision?: (item: DownloadItem) => void;
+  onPauseRepair?: (item: DownloadItem) => void;
+  onResumeRepair?: (item: DownloadItem) => void;
+  onCancelRepair?: (item: DownloadItem) => void;
   isRepairingVision?: boolean;
 }
 
-export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, isRepairingVision = false }) => {
+export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ item, onDelete, onRepairVision, onPauseRepair, onResumeRepair, onCancelRepair, isRepairingVision = false }) => {
   const needsVisionRepair = checkNeedsVisionRepair(item);
   // A vision repair drives a live download-store row keyed on the completed
   // model's modelKey (`repo/file` = item.modelId). Read it so the SAME
@@ -216,11 +219,15 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
         }}
         file={{ name: item.fileName, size: item.fileSize, quantization: item.quantization, downloadUrl: '' }}
         isDownloaded
-        isDownloading={showRepairProgress}
+        isDownloading={showRepairProgress && repairEntry.status !== 'paused'}
+        isPaused={showRepairProgress && repairEntry.status === 'paused'}
         isRepairingVision={isRepairingVision}
         downloadProgress={repairEntry?.progress}
         downloadBytes={repairEntry ? { downloaded: repairEntry.bytesDownloaded, total: repairEntry.totalBytes, bytesPerSecond: repairEntry.bytesPerSecond } : undefined}
         onRepairVision={needsVisionRepair && onRepairVision ? () => onRepairVision(item) : undefined}
+        onPause={showRepairProgress && repairEntry.status === 'running' && onPauseRepair ? () => onPauseRepair(item) : undefined}
+        onResume={showRepairProgress && repairEntry.status === 'paused' && onResumeRepair ? () => onResumeRepair(item) : undefined}
+        onCancel={showRepairProgress && onCancelRepair ? () => onCancelRepair(item) : undefined}
         onDelete={() => onDelete(item)}
       />
     </View>
