@@ -220,6 +220,7 @@ describe('Pro mobile state sync journey', () => {
         content: 'The field notes are ready.',
         context: JSON.stringify({
           reasoning: 'I should confirm the notes before answering.',
+          metrics: { modelName: 'Field Model', decodeTokensPerSecond: 42.5, completionTokens: 128 },
         }),
         created_at: createdAt,
       },
@@ -244,6 +245,10 @@ describe('Pro mobile state sync journey', () => {
       </>,
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
+    fireEvent.press(ui.getByText('Model Settings'));
+    fireEvent.press(ui.getByTestId('text-generation-accordion'));
+    fireEvent.press(ui.getByTestId('show-gen-details-on-button'));
+    fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
 
     const mobile = useSyncStore.getState().thisDevice;
@@ -341,6 +346,8 @@ describe('Pro mobile state sync journey', () => {
     expect(
       ui.getByText('I should confirm the notes before answering.'),
     ).toBeTruthy();
+    fireEvent.press(ui.getByText('Generation details'));
+    expect(ui.getByText('42.5 tok/s')).toBeTruthy();
 
     remoteLog.record(CORE_SYNC_ENTITIES.message, 'older-gap-message', 'put', {
       conversation_id: 'remote-conversation',

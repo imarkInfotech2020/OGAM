@@ -50,6 +50,7 @@ export function serializeMessageContext(
     // used none is a different fact, and it is only known on the device that generated it.
     toolsOffered: message.generationMeta?.routedToolNames,
     metrics: message.role === 'assistant' ? {
+      modelName: message.generationMeta?.modelName,
       totalSeconds: message.generationTimeMs === undefined
         ? undefined
         : message.generationTimeMs / 1000,
