@@ -97,34 +97,19 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) 
             title="Models"
             variant="tab"
             right={
-              <View style={styles.headerActions}>
-                {vm.activeTab === 'text' && (
-                  <TouchableOpacity
-                    style={styles.downloadManagerButton}
-                    hitSlop={SPACING.md}
-                    onPress={vm.handleImportLocalModel}
-                    disabled={vm.isImporting}
-                    accessibilityRole="button"
-                    accessibilityLabel="Import local file"
-                    testID="import-local-model"
-                  >
-                    <Icon name="upload" size={20} color={colors.text} />
-                  </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.downloadManagerButton}
+                hitSlop={SPACING.md}
+                onPress={() => vm.navigation.navigate('DownloadManager')}
+                testID="downloads-icon"
+              >
+                <Icon name="download" size={20} color={colors.text} />
+                {vm.downloadBadgeCount > 0 && (
+                  <View style={styles.downloadBadge}>
+                    <Text testID="downloads-badge-count" style={styles.downloadBadgeText}>{vm.downloadBadgeCount}</Text>
+                  </View>
                 )}
-                <TouchableOpacity
-                  style={styles.downloadManagerButton}
-                  hitSlop={SPACING.md}
-                  onPress={() => vm.navigation.navigate('DownloadManager')}
-                  testID="downloads-icon"
-                >
-                  <Icon name="download" size={20} color={colors.text} />
-                  {vm.downloadBadgeCount > 0 && (
-                    <View style={styles.downloadBadge}>
-                      <Text testID="downloads-badge-count" style={styles.downloadBadgeText}>{vm.downloadBadgeCount}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             }
           />
         </HideWhenEmbedded>
@@ -197,6 +182,8 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) 
           focusTrigger={vm.focusTrigger}
           handleSearch={vm.handleSearch}
           handleRefresh={vm.handleRefresh}
+          handleImportLocalModel={vm.handleImportLocalModel}
+          isImporting={vm.isImporting}
           handleSelectModel={vm.handleSelectModel}
           handleDownload={vm.handleDownload}
           handleRepairMmProj={vm.handleRepairMmProj}

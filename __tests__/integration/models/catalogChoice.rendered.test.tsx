@@ -21,11 +21,13 @@ describe('Model choice on the phone', () => {
   it('offers local file import as an upload action only on Models > Text', async () => {
     installNativeBoundary({ fs: true, ram: { platform: 'android', totalBytes: 8 * GB, availBytes: 6 * GB } });
     const React = require('react');
-    const { render, fireEvent, waitFor } = requireRTL();
+    const { render, fireEvent, waitFor, within } = requireRTL();
     const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
     const screen = render(React.createElement(ModelsScreen));
 
-    const upload = await waitFor(() => screen.getByTestId('import-local-model'));
+    const searchRow = await waitFor(() => screen.getByTestId('text-model-search-row'));
+    expect(within(searchRow).getByTestId('search-input')).toBeTruthy();
+    const upload = within(searchRow).getByTestId('import-local-model');
     expect(upload.props.accessibilityLabel).toBe('Import local file');
     fireEvent.press(upload);
     await waitFor(() => expect(screen.getByText('Invalid File')).toBeTruthy());

@@ -7,7 +7,6 @@ const createBaseStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   backButton: { padding: 4, marginRight: 8 },
   searchContainerNoPadding: { paddingHorizontal: 0 },
   container: { flex: 1, backgroundColor: colors.background },
-  headerActions: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.md },
   downloadManagerButton: {
     padding: SPACING.xs,
     position: 'relative' as const,
@@ -28,6 +27,7 @@ const createBaseStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   tabBar: {
     flexDirection: 'row' as const,
     paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
     gap: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,

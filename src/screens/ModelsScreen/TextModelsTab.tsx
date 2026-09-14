@@ -55,6 +55,7 @@ type Props = Pick<ModelsScreenViewModel,
   | 'alertState' | 'setAlertState'
   | 'focusTrigger'
   | 'handleSearch' | 'handleRefresh'
+  | 'handleImportLocalModel' | 'isImporting'
   | 'handleSelectModel' | 'handleDownload' | 'handleRepairMmProj' | 'handleCancelDownload' | 'handleDeleteModel'
   | 'clearFilters'
   | 'toggleFilterDimension' | 'toggleOrg'
@@ -325,7 +326,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     filteredResults, recommendedAsModelInfo, trendingAsModelInfo, ramGB, deviceRecommendation,
     hasActiveFilters, downloadedModels,
     alertState, setAlertState, focusTrigger,
-    handleSearch, handleRefresh, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
+    handleSearch, handleRefresh, handleImportLocalModel, isImporting, handleSelectModel, handleDownload, handleRepairMmProj, handleCancelDownload, handleDeleteModel,
     clearFilters, toggleFilterDimension, toggleOrg,
     setTypeFilter, setSourceFilter, setSizeFilter, setQuantFilter, setSortOption,
     isModelDownloaded, getDownloadedModel, isRepairingVisionModel, onboarding = false,
@@ -413,7 +414,7 @@ export const TextModelsTab: React.FC<Props> = (props) => {
 
   return (
     <>
-      <View style={styles.searchContainer}>
+      <View style={styles.searchContainer} testID="text-model-search-row">
         <TextInput
           style={styles.searchInput}
           placeholder="Search Hugging Face models..."
@@ -442,6 +443,18 @@ export const TextModelsTab: React.FC<Props> = (props) => {
           <Icon name="sliders" size={14} color={filterToggleActive ? colors.primary : colors.textMuted} />
           {hasNonSortActiveFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
+        {!onboarding && (
+          <TouchableOpacity
+            style={styles.filterToggle}
+            onPress={handleImportLocalModel}
+            disabled={isImporting}
+            accessibilityRole="button"
+            accessibilityLabel="Import local file"
+            testID="import-local-model"
+          >
+            <Icon name="upload" size={14} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {filterState.expandedDimension === 'sort' && <SortPanel filterState={filterState} setSortOption={setSortOption} styles={styles} colors={colors} />}
