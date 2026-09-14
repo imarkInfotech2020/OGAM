@@ -80,5 +80,9 @@ describe('rendered — iOS image staging purged: Retry recovers the failed card'
     expect(view.queryByTestId('failed-retry-button')).toBeNull();
     const rows = boundary.download!.active();
     expect(rows.some(r => r.modelId === `image:${modelId}` || r.fileName === fileName)).toBe(true);
+
+    // Stop the screen subscription and its coalesced list refresh before Jest tears down RN.
+    view.unmount();
+    require('../../../src/services/modelDownloadService').modelDownloadService._reset();
   });
 });
