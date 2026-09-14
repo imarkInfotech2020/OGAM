@@ -405,6 +405,7 @@ describe('Pro mobile saved-device management journey', () => {
         ).toBeTruthy(),
       { timeout: 10_000 },
     );
+    expect(ui.getByTestId(`sync-send-model-${remoteDevice.id}`).props.accessibilityState.disabled).toBe(false);
     await waitFor(() => {
       const failure = ui!.queryByTestId('qr-scanner-status');
       if (failure) throw new Error(`scanner failed: ${failure.props.children}`);
@@ -596,7 +597,57 @@ describe('Pro mobile saved-device management journey', () => {
     expect(ui.getByTestId('sync-reconnect-desktop-unreachable')).toBeTruthy();
   }, 20_000);
 
-  it('disconnects, reconnects, pairs again from an offline row, and forgets a paired desktop', async () => {
+  it('removes a desktop from the mesh with X but keeps its license seat', async () => {
+    mesh.register({
+      id: 'desktop-managed-peer',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+    });
+    const remoteDevice: DeviceInfo = {
+      id: 'desktop-managed-peer',
+      name: 'Off Grid AI Desktop',
+      platform: 'macos',
+      version: '1',
+      host: '127.0.0.1',
+      port: 0,
+    };
+    const remotePersistence = new MembershipPersistenceBoundary();
+    remote = buildSyncEngine({
+      pairingEntitlement: mesh.peer(),
+      localDevice: remoteDevice,
+      tcpModule: nativeTcpBoundary,
+      getPassphrase: async () => TYPED_PAIRING_CODE,
+      getSharedSecret: deviceId =>
+        remotePersistence.getActive(deviceId)?.sharedSecret,
+      pairingPersistence: remotePersistence,
+      membershipPersistence: remotePersistence,
+    });
+    await remote.engine.start(0);
+    remoteDevice.port = remote.transport.boundPort ?? 0;
+    await syncService.start();
+    ui = render(<NavigationContainer><AppNavigator /></NavigationContainer>);
+    await waitFor(() => expect(ui!.getByTestId('sync-home-card')).toBeTruthy());
+    fireEvent.press(ui.getByTestId('open-sync-from-home'));
+    const mobile = useSyncStore.getState().thisDevice;
+    const discovery = getDiscoveryBoundaries().at(-1);
+    if (!mobile || !discovery?.publishedPort) throw new Error('Sync did not start');
+    await remote.engine.pair(
+      { ...mobile, host: '127.0.0.1', port: discovery.publishedPort },
+      await pairingCodeOnScreen(ui),
+    );
+    await waitFor(() => expect(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).toBeTruthy());
+    const licenseSeats = mesh.installations().length;
+    expect(ui.getByTestId(`sync-disconnect-${remoteDevice.id}`).props.accessibilityLabel)
+      .toBe('Remove Off Grid AI Desktop from mesh');
+    fireEvent.press(ui.getByTestId(`sync-disconnect-${remoteDevice.id}`));
+    await waitFor(() =>
+      expect(JSON.parse(storedPairings() ?? '{}').pairings[remoteDevice.id]).toBeUndefined(),
+    );
+    await waitFor(() => expect(remotePersistence.getActive(mobile.id)).toBeUndefined());
+    expect(mesh.installations()).toHaveLength(licenseSeats);
+  });
+
+  it('reconnects after a link drop, pairs again from an offline row, and forgets a paired desktop', async () => {
     // This desktop has been on the licence all along, as a real paired peer would be: the roster is
     // built from installations, so a peer with none is a peer the phone cannot show.
     mesh.register({
@@ -682,7 +733,7 @@ describe('Pro mobile saved-device management journey', () => {
     );
     expect(within(connectedRow).queryByLabelText(/Rename/)).toBeNull();
 
-    fireEvent.press(ui.getByTestId(`sync-disconnect-${remoteDevice.id}`));
+    remote.engine.disconnect(mobile.id);
     await waitFor(() =>
       expect(
         within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
@@ -831,7 +882,7 @@ describe('Pro mobile saved-device management journey', () => {
       ).toBeNull(),
     );
     expect(ui.queryByText(/Could not reach/)).toBeNull();
-    expect(ui.getByText('1 of 5 devices saved')).toBeTruthy();
+    expect(ui.getByText('1 of 3 devices saved')).toBeTruthy();
 
     remote = buildSyncEngine({
       pairingEntitlement: mesh.peer(),
@@ -940,7 +991,7 @@ describe('Pro mobile saved-device management journey', () => {
       ).toBeTruthy(),
     );
 
-    fireEvent.press(ui.getByTestId(`sync-disconnect-${remoteDevice.id}`));
+    remote.engine.disconnect(mobile.id);
     await waitFor(() =>
       expect(
         within(ui!.getByTestId(`sync-paired-${remoteDevice.id}`)).getByText(
@@ -1013,7 +1064,11 @@ describe('Pro mobile saved-device management journey', () => {
     if (!discovery) throw new Error('Sync discovery did not start');
     const stopsBefore = discovery.stopCount;
     expect(ui.queryByTestId('sync-toggle-browsing')).toBeNull();
-    fireEvent.press(ui.getByTestId('sync-open-device-settings'));
+    const status = ui.getByTestId('sync-discoverability-status');
+    expect(status.props.accessibilityLabel).toBe(
+      'Sync is discoverable. Open device settings.',
+    );
+    fireEvent.press(status);
     expect(await waitFor(() => ui!.getByText('Device settings'))).toBeTruthy();
     fireEvent(ui.getByTestId('sync-toggle-browsing'), 'valueChange', false);
     await waitFor(() => {
@@ -1130,7 +1185,7 @@ describe('Pro mobile saved-device management journey', () => {
     expect(sheetAction(ui, 'Waiting for confirmation', 'Cancel')).toBeTruthy();
     // Two installations: this phone and the Mac. Both are on the licence throughout - what the pairing
     // adds is the trust between them, not a seat.
-    expect(ui.getByText('2 of 5 devices saved')).toBeTruthy();
+    expect(ui.getByText('2 of 3 devices saved')).toBeTruthy();
     await waitFor(() => expect(passphraseResolvers).toHaveLength(1));
     fireEvent.press(sheetAction(ui, 'Waiting for confirmation', 'Cancel'));
 

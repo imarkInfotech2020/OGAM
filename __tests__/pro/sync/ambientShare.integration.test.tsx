@@ -536,7 +536,7 @@ describe('mobile ambient sharing journey', () => {
     fireEvent.press(await waitFor(() => ui!.getByTestId('home-tab')));
     fireEvent.press(await waitFor(() => ui!.getByTestId('home-notifications')));
     const rejectedRow = await waitFor(() =>
-      approvalRow(ui!, /Share Screenshot-rejected\.png with/),
+      approvalRow(ui!, /Screenshot-rejected\.png with/),
     );
     expect(
       remoteRecords.has(`${SHARED_FILE_ENTITY}:${rejectedScreenshot.syncId}`),
@@ -548,7 +548,7 @@ describe('mobile ambient sharing journey', () => {
       ),
     );
     await waitFor(() =>
-      expect(ui!.queryByText(/Share Screenshot-rejected\.png with/)).toBeNull(),
+      expect(ui!.queryByText(/Screenshot-rejected\.png with/)).toBeNull(),
     );
     expect(receivedFiles).toHaveLength(0);
 
@@ -559,7 +559,7 @@ describe('mobile ambient sharing journey', () => {
       contents: 'share after recovery',
     });
     const retryRow = await waitFor(() =>
-      approvalRow(ui!, /Share Screenshot-retry\.png with/),
+      approvalRow(ui!, /Screenshot-retry\.png with/),
     );
     fireEvent.press(
       within(retryRow).getByTestId(

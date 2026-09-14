@@ -43,6 +43,7 @@ describe('the roster the phone remembers', () => {
 
   it('gives back what the licence last said, marked as remembered rather than current', async () => {
     await personalMeshRegistryCache.save({
+      maxDevices: 5,
       freshness: 'fresh',
       checkedAt: 1_700_000_000_000,
       installations: [
@@ -65,6 +66,7 @@ describe('the roster the phone remembers', () => {
 
   it('remembers an empty roster once the licence has actually said so', async () => {
     await personalMeshRegistryCache.save({
+      maxDevices: 5,
       freshness: 'fresh',
       checkedAt: 5,
       installations: [],
@@ -73,6 +75,7 @@ describe('the roster the phone remembers', () => {
     // Distinct from never having asked: the licence answered, and its answer was none.
     await expect(personalMeshRegistryCache.load()).resolves.toEqual({
       freshness: 'cached',
+      maxDevices: 5,
       checkedAt: 5,
       installations: [],
     });
@@ -80,12 +83,14 @@ describe('the roster the phone remembers', () => {
 
   it('replaces the whole roster, so a seat given up elsewhere stops being offered', async () => {
     await personalMeshRegistryCache.save({
+      maxDevices: 5,
       freshness: 'fresh',
       checkedAt: 1,
       installations: [installation(), installation({ installationId: 'gone' })],
     });
 
     await personalMeshRegistryCache.save({
+      maxDevices: 5,
       freshness: 'fresh',
       checkedAt: 2,
       installations: [installation()],
@@ -100,6 +105,7 @@ describe('the roster the phone remembers', () => {
 
   it('keeps every device it is told about, including ones on the same platform', async () => {
     await personalMeshRegistryCache.save({
+      maxDevices: 5,
       freshness: 'fresh',
       checkedAt: 1,
       installations: [
@@ -201,6 +207,7 @@ describe('the roster the phone remembers', () => {
   it('accepts every platform the mesh actually runs on', async () => {
     const platforms = ['macos', 'windows', 'linux', 'android', 'ios'] as const;
     await personalMeshRegistryCache.save({
+      maxDevices: 5,
       freshness: 'fresh',
       checkedAt: 1,
       installations: platforms.map(platform =>
@@ -219,6 +226,7 @@ describe('the roster the phone remembers', () => {
 
   it('accepts a device that has only just been created', async () => {
     await personalMeshRegistryCache.save({
+      maxDevices: 5,
       freshness: 'fresh',
       checkedAt: 0,
       installations: [installation({ lastActiveAt: 0, createdAt: 0 })],
@@ -234,6 +242,7 @@ describe('the roster the phone remembers', () => {
 
   it('writes the roster as a current answer, so the next launch can tell it is remembered', async () => {
     await personalMeshRegistryCache.save({
+      maxDevices: 5,
       freshness: 'cached',
       checkedAt: 42,
       installations: [installation()],
@@ -246,6 +255,7 @@ describe('the roster the phone remembers', () => {
     // for an already-remembered snapshot is guarding.
     expect(JSON.parse(raw ?? 'null')).toEqual({
       freshness: 'fresh',
+      maxDevices: 5,
       checkedAt: 42,
       installations: [installation()],
     });

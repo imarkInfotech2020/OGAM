@@ -125,6 +125,7 @@ describe('two devices agreeing about a shared licence', () => {
       entitlementId,
       secret: key,
       expiresAt: null,
+      maxDevices: 5,
       verifiedAt: 1_700_000_000_000,
     };
   }
@@ -163,6 +164,7 @@ describe('two devices agreeing about a shared licence', () => {
       key: FULL_LICENCE_KEY,
       entitlementId: fullLicenceId,
       expiry: null,
+      maxMachines: 5,
       tier: null,
       verifiedAt: 1_700_000_000_000,
     });
@@ -213,6 +215,7 @@ describe('two devices agreeing about a shared licence', () => {
       key: LICENCE_KEY,
       entitlementId: licenceId,
       expiry: null,
+      maxMachines: 5,
       tier: null,
       verifiedAt: 1_700_000_000_000,
     });

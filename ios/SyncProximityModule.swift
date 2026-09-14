@@ -49,9 +49,10 @@ private struct ProximityDevice {
   let name: String
   let platform: String
   let version: String
+  let modelTransfer: Bool
 
   var dictionary: [String: Any] {
-    [
+    var result: [String: Any] = [
       "id": id,
       "name": name,
       "platform": platform,
@@ -59,15 +60,19 @@ private struct ProximityDevice {
       "host": "",
       "port": 0,
     ]
+    if modelTransfer { result["capabilities"] = ["modelTransfer": true] }
+    return result
   }
 
   var discoveryInfo: [String: String] {
-    [
+    var result = [
       "id": id,
       "name": name,
       "platform": platform,
       "version": version,
     ]
+    if modelTransfer { result["caps"] = "model-transfer" }
+    return result
   }
 
   static func parse(_ value: [String: Any]) -> ProximityDevice? {
@@ -85,7 +90,10 @@ private struct ProximityDevice {
       id: id,
       name: name,
       platform: platform,
-      version: value["version"] as? String ?? "1"
+      version: value["version"] as? String ?? "1",
+      modelTransfer:
+        (value["capabilities"] as? [String: Any])?["modelTransfer"] as? Bool == true ||
+        (value["caps"] as? String)?.split(separator: ",").contains("model-transfer") == true
     )
   }
 

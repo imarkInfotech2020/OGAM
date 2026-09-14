@@ -45,9 +45,9 @@ function buildMetaItems(
   tps: number | null | undefined,
 ): MetaItem[] {
   const layers = meta.gpuLayers != null && meta.gpuLayers > 0 ? ` (${meta.gpuLayers}L)` : '';
-  const backend = meta.gpuBackend || (meta.gpu ? 'GPU' : 'CPU');
+  const backend = meta.gpuBackend || (meta.gpu === undefined ? undefined : meta.gpu ? 'GPU' : 'CPU');
   return [
-    { key: 'backend', label: `${backend}${layers}` },
+    ...(backend ? [{ key: 'backend', label: `${backend}${layers}` }] : []),
     ...formatOptionalMeta(meta, tps),
   ];
 }
