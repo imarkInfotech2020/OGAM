@@ -45,6 +45,7 @@ export interface MmProjRepairDownloadOpts {
   modelId: string;
   file: ModelFile;
   modelsDir: string;
+  modelKey?: string;
   onProgress?: DownloadProgressCallback;
   onDownloadIdReady?: (id: string) => void;
 }
@@ -62,7 +63,16 @@ export async function performMmProjRepairDownload(opts: MmProjRepairDownloadOpts
   const mmProjFile = file.mmProjFile;
   if (!mmProjFile) throw new Error('Model file has no associated mmproj');
 
-  const modelKey = makeModelKey(modelId, file.name);
+  const modelKey = opts.modelKey ?? makeModelKey(modelId, file.name);
+  const existing = useDownloadStore.getState().downloads[modelKey];
+  if (existing) {
+    if (existing.status !== 'failed' && existing.status !== 'cancelled' && existing.status !== 'completed') {
+      throw new Error('A download for this model is already running');
+    }
+    // The model is installed, but a failed projector row from an earlier attempt
+    // may still own its key. Let the new repair own progress and cancel controls.
+    useDownloadStore.getState().remove(modelKey);
+  }
   // Same quant-independent name the normal download uses — repair and download must agree on the file.
   const mmProjLocalPath = `${modelsDir}/${mmProjLocalName(file.name, file.mmProjFile?.name)}`;
   const totalBytes = mmProjFile.size;

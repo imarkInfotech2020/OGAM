@@ -191,6 +191,10 @@ export function useDownloadManager(): UseDownloadManagerResult {
       // Single owner: the service cancels the in-flight download (routing to the
       // owning provider — image uses the injected ops above) and logs [DL-SM].
       await modelDownloadService.cancel(idOf(item));
+      // A projector repair remains a pending promise until its native cancellation
+      // callback settles. Its transient download row is already gone, so stop showing
+      // the completed model as busy now.
+      if (repairingVisionIds[item.modelId]) setRepairingVision(item.modelId, false);
     } catch (error) {
       logger.error('[DownloadManager] Failed to remove download:', error);
       setAlertState(showAlert('Error', 'Failed to remove download'));
@@ -362,7 +366,7 @@ export function useDownloadManager(): UseDownloadManagerResult {
         setAlertState(showAlert(title, body));
       })
       .catch((e: Error) => {
-        if (e.message === 'Download cancelled') return;
+        if (e.message === 'Download cancelled' || !useDownloadStore.getState().repairingVisionIds[item.modelId]) return;
         logger.error('[DownloadDebug] Repair vision failed', {
           modelId: item.modelId,
           error: e.message,

@@ -35,6 +35,7 @@ export type VisionRepairOutcome =
 export interface RepairOpts {
   onProgress?: DownloadProgressCallback;
   onDownloadIdReady?: (id: string) => void;
+  modelKey?: string;
 }
 
 /**
@@ -158,7 +159,7 @@ export async function repairVision(
   if (!file?.mmProjFile)
     return { kind: 'noProjectorPublished', repoId: source.origin.repoId };
 
-  await ctx.repairMmProj({ modelId: source.origin.repoId, file }, opts);
+  await ctx.repairMmProj({ modelId: source.origin.repoId, file }, { ...opts, modelKey: model.id });
   return { kind: 'repaired', repoId: source.origin.repoId };
 }
 
@@ -185,7 +186,7 @@ export async function repairMmProj(
     modelsDir: ctx.modelsDir,
     ...opts,
   });
-  await ctx.saveModelWithMmproj(`${modelId}/${file.name}`, resolvedPath);
+  await ctx.saveModelWithMmproj(opts?.modelKey ?? `${modelId}/${file.name}`, resolvedPath);
 }
 
 /**
