@@ -142,7 +142,14 @@ export async function enhanceImagePrompt(
     logger.error('[ImageGen] Prompt enhancement failed:', error);
     await resetTextEngine();
     if (params.conversationId && tempMessageId) {
-      useChatStore.getState().deleteMessage(params.conversationId, tempMessageId);
+      const reason = error instanceof Error ? error.message : 'the text model did not respond';
+      const chatStore = useChatStore.getState();
+      chatStore.updateMessageThinking(params.conversationId, tempMessageId, false);
+      chatStore.updateMessageContent(
+        params.conversationId,
+        tempMessageId,
+        `Prompt enhancement skipped: ${reason}. Generating image from your original prompt.`,
+      );
     }
     return params.prompt;
   }

@@ -356,6 +356,16 @@ class ImageGenerationService {
       .getState()
       .getActiveRemoteMediaServer('image');
     if (remoteServer?.mediaModels?.image) {
+      const remoteSteps = resolveMobileImageParameters(
+        { id: remoteServer.mediaModels.image },
+        useAppStore.getState().settings,
+        params,
+      ).steps;
+      const enhancedPrompt = await this._enhancePrompt(params, remoteSteps);
+      if (this.cancelRequested) {
+        this.resetState();
+        return null;
+      }
       return runRemoteImageGeneration(params, remoteServer, {
         updateState: state => this.updateState(state),
         fail: (message, cause) => this._fail(message, { cause, remote: true }),
@@ -363,7 +373,7 @@ class ImageGenerationService {
         setRequest: controller => {
           this.remoteRequest = controller;
         },
-      }, opts);
+      }, { ...opts, enhancedPrompt });
     }
     const { settings, activeImageModelId, downloadedImageModels } =
       useAppStore.getState();

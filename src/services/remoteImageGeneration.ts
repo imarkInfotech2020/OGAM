@@ -21,7 +21,7 @@ export async function runRemoteImageGeneration(
   params: GenerateImageParams,
   server: RemoteServer,
   deps: RemoteImageGenerationDeps,
-  options: { override?: boolean } = {},
+  options: { override?: boolean; enhancedPrompt?: string } = {},
 ): Promise<GeneratedImage | null> {
   const modelId = server.mediaModels?.image;
   if (!modelId) return deps.fail('No remote image model is configured');
@@ -37,14 +37,14 @@ export async function runRemoteImageGeneration(
   deps.updateState({
     phase: 'generating', prompt: params.prompt, conversationId: params.conversationId || null,
     messageId, status: `Creating image on ${server.name}...`, previewPath: null,
-    progress: { step: 0, totalSteps: 1 }, error: null, result: null,
+    progress: null, error: null, result: null,
   });
   const controller = new AbortController();
   deps.setRequest(controller);
   try {
     const remote = await remoteMediaRuntime.generateImage(
       server,
-      { prompt: params.prompt, size: `${width}x${height}` },
+      { prompt: options.enhancedPrompt ?? params.prompt, size: `${width}x${height}` },
       { signal: controller.signal, override: options.override },
     );
     const dataUrl = remote.url?.match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/i);
