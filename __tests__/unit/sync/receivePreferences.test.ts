@@ -36,14 +36,14 @@ describe('what this phone will accept, and from whom', () => {
     it('reads back the answer it was given before', async () => {
       const first = store();
       await first.load();
-      await first.setCategory('files', false);
+      await first.setCategory('screenshot', false);
 
       const next = store();
       await next.load();
 
       // The setting has to survive the app closing, or every launch quietly starts accepting things the user
       // turned off.
-      expect(next.accepts('the-mac', 'files')).toBe(false);
+      expect(next.accepts('the-mac', 'screenshot')).toBe(false);
       expect(next.accepts('the-mac', 'models')).toBe(true);
     });
 
@@ -74,17 +74,19 @@ describe('what this phone will accept, and from whom', () => {
   });
 
   describe('the master switch', () => {
-    it('refuses everything from every device when it is off', async () => {
+    it('refuses optional data from every device when it is off', async () => {
       const receiving = store();
       await receiving.load();
 
       await receiving.setOptionalEnabled(false);
 
-      // One switch that means it: "stop accepting" cannot leave a category quietly still arriving.
-      for (const category of ['files', 'models', 'clipboard']) {
+      // Required files and models still arrive; optional categories follow the switch.
+      for (const category of ['screenshot', 'download', 'clipboard']) {
         expect(receiving.accepts('the-mac', category)).toBe(false);
         expect(receiving.accepts('the-ipad', category)).toBe(false);
       }
+      expect(receiving.accepts('the-mac', 'files')).toBe(true);
+      expect(receiving.accepts('the-mac', 'models')).toBe(true);
       expect(receiving.accepts('the-mac', 'chats')).toBe(true);
       expect(receiving.accepts('the-mac', 'projects')).toBe(true);
     });
@@ -96,7 +98,7 @@ describe('what this phone will accept, and from whom', () => {
 
       await receiving.setOptionalEnabled(true);
 
-      expect(receiving.accepts('the-mac', 'files')).toBe(true);
+      expect(receiving.accepts('the-mac', 'screenshot')).toBe(true);
     });
   });
 
@@ -105,10 +107,10 @@ describe('what this phone will accept, and from whom', () => {
       const receiving = store();
       await receiving.load();
 
-      await receiving.setCategory('files', false);
+      await receiving.setCategory('screenshot', false);
 
-      expect(receiving.accepts('the-mac', 'files')).toBe(false);
-      expect(receiving.accepts('the-ipad', 'files')).toBe(false);
+      expect(receiving.accepts('the-mac', 'screenshot')).toBe(false);
+      expect(receiving.accepts('the-ipad', 'screenshot')).toBe(false);
       expect(receiving.accepts('the-mac', 'models')).toBe(true);
     });
 
@@ -128,50 +130,51 @@ describe('what this phone will accept, and from whom', () => {
       const receiving = store();
       await receiving.load();
 
-      await receiving.setCategory('files', false);
+      await receiving.setCategory('screenshot', false);
 
-      expect(receiving.acceptsSharedFileKind('the-mac', 'file')).toBe(false);
+      expect(receiving.acceptsSharedFileKind('the-mac', 'screenshot')).toBe(false);
     });
 
-    it('treats a file kind it does not recognise as an ordinary file', async () => {
+    it('keeps a direct or unknown file available when optional screenshots are off', async () => {
       const receiving = store();
       await receiving.load();
       expect(receiving.acceptsSharedFileKind('the-mac', 'something-new')).toBe(
         true,
       );
 
-      await receiving.setCategory('files', false);
+      await receiving.setCategory('screenshot', false);
 
-      // A kind from a newer build falls under files, so the user's decision about files still governs it -
-      // rather than arriving under no rule at all.
+      // Direct files and unknown kinds are required mesh transfers, not optional screenshots.
       expect(receiving.acceptsSharedFileKind('the-mac', 'something-new')).toBe(
-        false,
+        true,
       );
-      expect(receiving.acceptsSharedFileKind('the-mac', undefined)).toBe(false);
+      expect(receiving.acceptsSharedFileKind('the-mac', undefined)).toBe(true);
     });
   });
 
   describe('refusing one device', () => {
-    it('refuses everything from it and nothing from the others', async () => {
+    it('refuses optional data from it and nothing from the others', async () => {
       const receiving = store();
       await receiving.load();
 
       await receiving.setDeviceOptionalEnabled('the-work-mac', false);
 
-      expect(receiving.accepts('the-work-mac', 'files')).toBe(false);
-      expect(receiving.accepts('the-work-mac', 'models')).toBe(false);
+      expect(receiving.accepts('the-work-mac', 'screenshot')).toBe(false);
+      expect(receiving.accepts('the-work-mac', 'download')).toBe(false);
+      expect(receiving.accepts('the-work-mac', 'files')).toBe(true);
+      expect(receiving.accepts('the-work-mac', 'models')).toBe(true);
       expect(receiving.accepts('the-work-mac', 'chats')).toBe(true);
       // A device the user distrusts is a per-device decision; the rest of their mesh is unaffected.
-      expect(receiving.accepts('the-mac', 'files')).toBe(true);
+      expect(receiving.accepts('the-mac', 'screenshot')).toBe(true);
     });
 
     it('refuses one kind from one device only', async () => {
       const receiving = store();
       await receiving.load();
 
-      await receiving.setDeviceCategory('the-work-mac', 'files', false);
+      await receiving.setDeviceCategory('the-work-mac', 'screenshot', false);
 
-      expect(receiving.accepts('the-work-mac', 'files')).toBe(false);
+      expect(receiving.accepts('the-work-mac', 'screenshot')).toBe(false);
       expect(receiving.accepts('the-work-mac', 'models')).toBe(true);
       expect(receiving.accepts('the-mac', 'chats')).toBe(true);
     });
@@ -185,7 +188,7 @@ describe('what this phone will accept, and from whom', () => {
 
       // Re-pairing is a fresh decision: inheriting an old refusal would make a newly paired device look broken
       // for a reason nothing on screen explains.
-      expect(receiving.accepts('the-work-mac', 'files')).toBe(true);
+      expect(receiving.accepts('the-work-mac', 'screenshot')).toBe(true);
     });
 
     it('does nothing when the device it is asked to forget has no rules', async () => {
@@ -205,7 +208,7 @@ describe('what this phone will accept, and from whom', () => {
     it('gives a new subscriber the current answer immediately', async () => {
       const receiving = store();
       await receiving.load();
-      await receiving.setCategory('files', false);
+      await receiving.setCategory('screenshot', false);
       const seen: ReceivePolicy[] = [];
 
       receiving.subscribe(policy => seen.push(policy));
@@ -213,7 +216,7 @@ describe('what this phone will accept, and from whom', () => {
       // The settings screen draws from the first call: without it every toggle would render as its default
       // until something else changed.
       expect(seen).toHaveLength(1);
-      expect(seen[0].disabledCategories).toContain('files');
+      expect(seen[0].disabledCategories).toContain('screenshot');
     });
 
     it('tells subscribers about every change', async () => {
@@ -277,19 +280,19 @@ describe('what this phone will accept, and from whom', () => {
       const failing = receiving
         .setOptionalEnabled(false)
         .catch(() => undefined);
-      await receiving.setCategory('files', false);
+      await receiving.setCategory('screenshot', false);
       await failing;
 
-      // The user turned receiving off, it failed, and they then turned chats off. The failure must not roll
+      // The user turned receiving off, it failed, and they then turned screenshots off. The failure must not roll
       // back the decision that came after it.
-      expect(receiving.get().disabledCategories).toContain('files');
+      expect(receiving.get().disabledCategories).toContain('screenshot');
     });
 
     it('writes what it was asked to write', async () => {
       const receiving = store();
       await receiving.load();
 
-      await receiving.setDeviceCategory('the-work-mac', 'files', false);
+      await receiving.setDeviceCategory('the-work-mac', 'screenshot', false);
 
       // Read back through storage: the next launch reads exactly these bytes, so a policy that lived only in
       // memory would look like the setting never took.
@@ -297,7 +300,7 @@ describe('what this phone will accept, and from whom', () => {
         (await AsyncStorage.getItem(STORAGE_KEY)) ?? 'null',
       );
       expect(stored.devices['the-work-mac'].disabledCategories).toContain(
-        'files',
+        'screenshot',
       );
     });
   });
