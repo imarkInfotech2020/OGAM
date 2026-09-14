@@ -310,7 +310,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   return (
     <Modal
-      visible={visible && modalVisible}
+      visible={modalVisible}
       transparent
       animationType="none"
       onRequestClose={dismiss}
