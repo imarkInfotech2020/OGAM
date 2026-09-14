@@ -61,12 +61,18 @@ export async function loadAutoSetupCompatibleCatalog(
     (!imageRecommendation.qnnVariant || model.backend !== 'qnn' || model.variant === imageRecommendation.qnnVariant) &&
     !fileExceedsBudget(model.size, ramGB),
   );
-  const image = compatibleImages.map((model, index) => ({
+  const recommendedBackendImages = compatibleImages.filter(
+    model => model.backend === imageRecommendation.recommendedBackend,
+  );
+  const imageCandidates = recommendedBackendImages.length > 0 ? recommendedBackendImages : compatibleImages;
+  const image = imageCandidates.map((model, index) => ({
     id: model.id,
     name: model.name,
     kind: 'image' as const,
     sizeBytes: model.size,
-    fitScore: imageRecommendation.recommendedModels?.some(label => model.name.toLowerCase().includes(label)) ? 0 : index + 1,
+    fitScore: imageRecommendation.recommendedModels?.some(label =>
+      [model.name, model.repo, model.id].some(value => value?.toLowerCase().includes(label)),
+    ) ? 0 : index + 1,
     payload: model,
   }));
 

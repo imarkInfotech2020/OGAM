@@ -91,7 +91,15 @@ function selectAutoSetupPlan(
   catalog: AutoSetupCompatibleCatalog,
 ): AutoSetupPlan | null {
   const text = chooseText(tier, catalog.text);
-  const image = choose(tier, catalog.image);
+  const selectedImage = choose(tier, catalog.image);
+  const image =
+    selectedImage && /nai[\s_-]*anime/i.test(selectedImage.name)
+      ? catalog.image.find(
+          candidate =>
+            candidate.payload.backend === selectedImage.payload.backend &&
+            /absolute[\s_-]*reality/i.test(candidate.name),
+        ) ?? selectedImage
+      : selectedImage;
   const stt = choose(tier, catalog.stt);
   if (!text || !image || !stt) return null;
   const items: AutoSetupPlan['items'] = [text, image, stt];
