@@ -57,4 +57,31 @@ describe('Model download pause and resume', () => {
       downloadId: 'dl-image-pause', bytesDownloaded: 32 * MB, status: 'running',
     });
   });
+  it('keeps partial speech-model bytes when the user pauses and resumes', async () => {
+    const boundary = installNativeBoundary({ download: true, fs: true });
+    const React = require('react');
+    const { render, waitFor, fireEvent } = requireRTL();
+    const { hydrateDownloadStore } = require('../../../src/services/downloadHydration');
+    const { registerCoreDownloadProviders } = require('../../../src/services/modelDownloadService/registerProviders');
+    const { DownloadManagerScreen } = require('../../../src/screens/DownloadManagerScreen');
+
+    registerCoreDownloadProviders();
+    boundary.download!.seedActive({
+      downloadId: 'dl-speech-pause', modelId: 'base.en', fileName: 'base.en.bin',
+      modelType: 'stt', status: 'running', bytesDownloaded: 16 * MB, totalBytes: 64 * MB,
+    });
+    await hydrateDownloadStore();
+
+    const screen = render(React.createElement(DownloadManagerScreen, {}));
+    fireEvent.press(await waitFor(() => screen.getByLabelText('Pause base.en.bin')));
+    await waitFor(() => { expect(screen.getByLabelText('Resume base.en.bin')).toBeTruthy(); });
+    expect(boundary.download!.active()[0]).toMatchObject({
+      downloadId: 'dl-speech-pause', bytesDownloaded: 16 * MB, status: 'paused',
+    });
+    fireEvent.press(screen.getByLabelText('Resume base.en.bin'));
+    await waitFor(() => { expect(screen.getByLabelText('Pause base.en.bin')).toBeTruthy(); });
+    expect(boundary.download!.active()[0]).toMatchObject({
+      downloadId: 'dl-speech-pause', bytesDownloaded: 16 * MB, status: 'running',
+    });
+  });
 });
