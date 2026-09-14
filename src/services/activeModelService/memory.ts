@@ -130,7 +130,7 @@ export async function getCurrentlyLoadedMemoryGB(
 }
 
 /** Memory used by OTHER models already loaded (not the one being replaced). */
-export async function getOtherLoadedMemoryGB(
+async function getOtherLoadedMemoryGB(
   modelType: ModelType,
   ids: LoadedModelIds,
   lists: ModelLists,

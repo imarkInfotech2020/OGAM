@@ -67,7 +67,7 @@ async function preloadStt(): Promise<void> {
   await whisper.loadModel();
 }
 
-/** Warm selected models in priority order. Safe to call once at app launch. */
+/** @public Optional warm-up entry point; startup intentionally leaves it dormant. */
 export async function preloadSelectedModels(): Promise<void> {
   if (started) return;
   started = true;
@@ -94,7 +94,7 @@ export async function preloadSelectedModels(): Promise<void> {
   }
 }
 
-/** Test helper. */
+/** @public Test helper for an opt-in warm-up journey. */
 export function _resetPreloaderForTesting(): void {
   started = false;
   aborted = false;
