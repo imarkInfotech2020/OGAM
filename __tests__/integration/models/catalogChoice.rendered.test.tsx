@@ -1,7 +1,41 @@
 import { installNativeBoundary, requireRTL, GB } from '../../harness/nativeBoundary';
 import { createDownloadedModel } from '../../utils/factories';
 
+const originalFetch = globalThis.fetch;
+beforeAll(() => {
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(String(input));
+    if (url.hostname !== 'huggingface.co' || !url.pathname.startsWith('/api/models/')) {
+      throw new Error(`Unexpected network request: ${url.origin}${url.pathname}`);
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ id: decodeURIComponent(url.pathname.slice('/api/models/'.length)), downloads: 0, likes: 0, siblings: [] }),
+    } as Response;
+  }) as typeof fetch;
+});
+afterAll(() => { globalThis.fetch = originalFetch; });
+
 describe('Model choice on the phone', () => {
+  it('offers local file import as an upload action only on Models > Text', async () => {
+    installNativeBoundary({ fs: true, ram: { platform: 'android', totalBytes: 8 * GB, availBytes: 6 * GB } });
+    const React = require('react');
+    const { render, fireEvent, waitFor } = requireRTL();
+    const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
+    const screen = render(React.createElement(ModelsScreen));
+
+    const upload = await waitFor(() => screen.getByTestId('import-local-model'));
+    expect(upload.props.accessibilityLabel).toBe('Import local file');
+    fireEvent.press(upload);
+    await waitFor(() => expect(screen.getByText('Invalid File')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('Image'));
+    expect(screen.queryByTestId('import-local-model')).toBeNull();
+    fireEvent.press(screen.getByText('Text'));
+    expect(screen.getByTestId('import-local-model')).toBeTruthy();
+  });
+
   it('opens the image picker directly from the Home model summary', async () => {
     installNativeBoundary({ fs: true, ram: { platform: 'android', totalBytes: 8 * GB, availBytes: 6 * GB } });
     const React = require('react');

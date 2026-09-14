@@ -97,26 +97,40 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) 
             title="Models"
             variant="tab"
             right={
-              <TouchableOpacity
-              style={styles.downloadManagerButton}
-              hitSlop={SPACING.md}
-              onPress={() => vm.navigation.navigate('DownloadManager')}
-              testID="downloads-icon"
-            >
-              <Icon name="download" size={20} color={colors.text} />
-              {vm.downloadBadgeCount > 0 && (
-                <View style={styles.downloadBadge}>
-                  <Text testID="downloads-badge-count" style={styles.downloadBadgeText}>{vm.downloadBadgeCount}</Text>
-                </View>
-              )}
-              </TouchableOpacity>
+              <View style={styles.headerActions}>
+                {vm.activeTab === 'text' && (
+                  <TouchableOpacity
+                    style={styles.downloadManagerButton}
+                    hitSlop={SPACING.md}
+                    onPress={vm.handleImportLocalModel}
+                    disabled={vm.isImporting}
+                    accessibilityRole="button"
+                    accessibilityLabel="Import local file"
+                    testID="import-local-model"
+                  >
+                    <Icon name="upload" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.downloadManagerButton}
+                  hitSlop={SPACING.md}
+                  onPress={() => vm.navigation.navigate('DownloadManager')}
+                  testID="downloads-icon"
+                >
+                  <Icon name="download" size={20} color={colors.text} />
+                  {vm.downloadBadgeCount > 0 && (
+                    <View style={styles.downloadBadge}>
+                      <Text testID="downloads-badge-count" style={styles.downloadBadgeText}>{vm.downloadBadgeCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
             }
           />
         </HideWhenEmbedded>
 
-        {/* Import Local File */}
         <HideWhenEmbedded embedded={embedded}><View>
-          {vm.isImporting && vm.importProgress ? (
+          {vm.activeTab === 'text' && vm.isImporting && vm.importProgress && (
             <View style={styles.importProgressCard}>
               <View style={styles.importProgressHeader}>
                 <Icon name="file" size={18} color={colors.primary} />
@@ -131,11 +145,6 @@ export const ModelsScreen: React.FC<ModelsScreenProps> = ({ embedded = false }) 
                 {Math.round(vm.importProgress.fraction * 100)}%
               </Text>
             </View>
-          ) : (
-            <TouchableOpacity style={styles.importButton} onPress={vm.handleImportLocalModel} testID="import-local-model" disabled={vm.isImporting}>
-              <Icon name="folder-plus" size={20} color={colors.primary} />
-              <Text style={styles.importButtonText}>Import Local File</Text>
-            </TouchableOpacity>
           )}
         </View></HideWhenEmbedded>
 
