@@ -1028,10 +1028,16 @@ describe('Pro mobile saved-device management journey', () => {
     });
     expect(discovery.scanCount).toBe(scansBeforeConnect);
 
+    fireEvent.press(ui.getByLabelText('Back'));
+    await waitFor(() => expect(ui!.getByTestId('sync-home-card')).toBeTruthy());
     await syncService.stop();
-    ui.unmount();
-    ui = undefined;
-    await syncService.start();
+    const restarting = syncService.start();
+    await waitFor(() =>
+      expect(ui!.getByText('Sync devices')).toBeTruthy(),
+    );
+    expect(ui.getByText('Clipboard')).toBeTruthy();
+    expect(ui.queryByText('Set up Sync')).toBeNull();
+    await restarting;
     const restartedDiscovery = getDiscoveryBoundaries().at(-1);
     if (!restartedDiscovery) throw new Error('Sync discovery did not restart');
     expect(syncService.manualEndpoint(remoteDevice.id)).toEqual({
