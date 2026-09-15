@@ -109,6 +109,54 @@ const ToolCallWithThinking: React.FC<{
   );
 };
 
+const TimelineThinkingBlock: React.FC<{
+  text: string;
+  styles: ReturnType<typeof createStyles>;
+}> = ({ text, styles }) => {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <ThinkingBlock
+      parsedContent={{
+        thinking: text,
+        response: '',
+        isThinkingComplete: true,
+      }}
+      showThinking={expanded}
+      onToggle={() => setExpanded(value => !value)}
+      styles={styles}
+    />
+  );
+};
+
+const SyncedAssistantTimeline: React.FC<{
+  message: Message;
+  styles: ReturnType<typeof createStyles>;
+  colors: ReturnType<typeof useTheme>['colors'];
+}> = ({ message, styles, colors }) => (
+  <>
+    {message.timeline?.map((entry, index) => {
+      if (entry.kind === 'thinking') {
+        return (
+          <TimelineThinkingBlock
+            key={`thinking:${index}`}
+            text={entry.text}
+            styles={styles}
+          />
+        );
+      }
+      return message.toolArtifacts?.[entry.toolIndex] ? (
+        <SyncedToolArtifacts
+          key={`tool:${entry.toolIndex}`}
+          message={message}
+          indexes={[entry.toolIndex]}
+          styles={styles}
+          colors={colors}
+        />
+      ) : null;
+    })}
+  </>
+);
+
 // The rendered message bubble (attachments + content + tool row + meta). Split out of
 // ChatMessage so its per-section conditionals don't inflate ChatMessage's complexity.
 interface MessageBubbleProps {
@@ -127,6 +175,7 @@ interface MessageBubbleProps {
   showSupportingContext: boolean;
   showActions: boolean;
   showGenerationDetails: boolean;
+  hideProse?: boolean;
   metaExtra?: React.ReactNode;
   onImagePress?: (uri: string) => void;
   onTranscribeAgain?: ChatMessageProps['onTranscribeAgain'];
@@ -150,6 +199,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   showSupportingContext,
   showActions,
   showGenerationDetails,
+  hideProse,
   metaExtra,
   onImagePress,
   onTranscribeAgain,
@@ -158,6 +208,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onLongPress,
   onMenuOpen,
 }) => {
+  const hasImageAttachment = Boolean(
+    message.attachments?.some(attachment => attachment.type === 'image'),
+  );
+  const timelineHasThinking = Boolean(
+    message.timeline?.some(entry => entry.kind === 'thinking'),
+  );
+  const timelineHasTools = Boolean(
+    message.timeline?.some(entry => entry.kind === 'tool'),
+  );
   return (
     <TouchableOpacity
       testID={isUser ? 'user-message' : 'assistant-message'}
@@ -169,62 +228,118 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       onLongPress={onLongPress}
       delayLongPress={300}
     >
-      {!isUser && !!message.toolArtifacts?.length && !!parsedContent.thinking && (
-        <View style={styles.toolCallReplyContent}>
-          <ThinkingBlock
-            parsedContent={parsedContent}
-            showThinking={showThinking}
-            onToggle={onToggleThinking}
-            styles={styles}
-          />
-        </View>
-      )}
-
-      {!isUser && !!message.toolArtifacts?.length && (
-        <View style={styles.toolCallReplyContent}>
-          <SyncedToolArtifacts message={message} styles={styles} colors={colors} />
-        </View>
-      )}
-
-      <View
-        testID={message.isThinking ? undefined : 'message-bubble'}
-        style={message.isThinking ? undefined : bubbleStyle}
-      >
-        {!!supportingContextParsedContent?.thinking && (
-          <ThinkingBlock
-            parsedContent={supportingContextParsedContent}
-            showThinking={showSupportingContext}
-            onToggle={onToggleSupportingContext}
-            styles={styles}
-          />
+      {!isUser &&
+        !!message.toolArtifacts?.length &&
+        !!parsedContent.thinking &&
+        !parsedContent.thinkingLabel &&
+        !timelineHasThinking && (
+          <View style={styles.toolCallReplyContent}>
+            <ThinkingBlock
+              parsedContent={parsedContent}
+              showThinking={showThinking}
+              onToggle={onToggleThinking}
+              styles={styles}
+            />
+          </View>
         )}
 
-        {hasAttachments && (
-          <MessageAttachments
-            attachments={message.attachments!}
-            isUser={isUser}
+      {!isUser && !!message.timeline?.length && (
+        <View style={styles.toolCallReplyContent}>
+          <SyncedAssistantTimeline
+            message={message}
             styles={styles}
             colors={colors}
-            onImagePress={onImagePress}
-            onTranscribeAgain={onTranscribeAgain
-              ? attachment => onTranscribeAgain(message, attachment)
-              : undefined}
           />
+        </View>
+      )}
+
+      {!isUser && !!message.toolArtifacts?.length && !timelineHasTools && (
+        <View style={styles.toolCallReplyContent}>
+          <SyncedToolArtifacts
+            message={message}
+            styles={styles}
+            colors={colors}
+          />
+        </View>
+      )}
+
+      {!isUser &&
+        !!message.toolArtifacts?.length &&
+        !!parsedContent.thinking &&
+        !!parsedContent.thinkingLabel &&
+        !hasImageAttachment && (
+          <View style={styles.toolCallReplyContent}>
+            <ThinkingBlock
+              parsedContent={parsedContent}
+              showThinking={showThinking}
+              onToggle={onToggleThinking}
+              styles={styles}
+            />
+          </View>
         )}
 
-        <MessageContent
-          isUser={isUser}
-          isThinking={message.isThinking}
-          content={message.content}
-          isStreaming={isStreaming}
-          parsedContent={message.toolArtifacts?.length ? { ...parsedContent, thinking: '' } : parsedContent}
-          showThinking={showThinking}
-          onToggleThinking={onToggleThinking}
-          styles={styles}
-        />
-      </View>
+      {(!hideProse ||
+        hasAttachments ||
+        supportingContextParsedContent?.thinking) && (
+        <View
+          testID={message.isThinking ? undefined : 'message-bubble'}
+          style={message.isThinking ? undefined : bubbleStyle}
+        >
+          {!isUser &&
+            hasImageAttachment &&
+            !!message.toolArtifacts?.length &&
+            !!parsedContent.thinking &&
+            !!parsedContent.thinkingLabel && (
+              <ThinkingBlock
+                parsedContent={parsedContent}
+                showThinking={showThinking}
+                onToggle={onToggleThinking}
+                styles={styles}
+              />
+            )}
 
-      {!message.isThinking && (
+          {!!supportingContextParsedContent?.thinking && (
+            <ThinkingBlock
+              parsedContent={supportingContextParsedContent}
+              showThinking={showSupportingContext}
+              onToggle={onToggleSupportingContext}
+              styles={styles}
+            />
+          )}
+
+          {hasAttachments && (
+            <MessageAttachments
+              attachments={message.attachments!}
+              isUser={isUser}
+              styles={styles}
+              colors={colors}
+              onImagePress={onImagePress}
+              onTranscribeAgain={
+                onTranscribeAgain
+                  ? attachment => onTranscribeAgain(message, attachment)
+                  : undefined
+              }
+            />
+          )}
+
+          <MessageContent
+            isUser={isUser}
+            isThinking={message.isThinking}
+            content={message.content}
+            isStreaming={isStreaming}
+            parsedContent={
+              message.toolArtifacts?.length
+                ? { ...parsedContent, thinking: '' }
+                : parsedContent
+            }
+            showThinking={showThinking}
+            onToggleThinking={onToggleThinking}
+            styles={styles}
+          />
+        </View>
+      )}
+
+      {!message.isThinking && !isStreaming && !hideProse && (
         <MessageMetaRow
           message={message}
           styles={styles}
@@ -235,31 +350,39 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         />
       )}
 
-      <RoutedToolsRow
-        message={message}
-        isUser={isUser}
-        isStreaming={isStreaming}
-        styles={styles}
-        colors={colors}
-      />
-
-      {!isUser && !isStreaming && message.generationMeta?.truncated && (
-        <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
-          <Icon name="alert-triangle" size={12} color={colors.textMuted} />
-          <Text style={styles.toolStatusText}>
-            Reply cut off at the token limit. Retry to continue.
-          </Text>
-        </View>
-      )}
-
-      {showGenerationDetails && !isUser && message.generationMeta && (
-        <GenerationMeta
-          messageId={message.id}
-          generationMeta={message.generationMeta}
+      {!hideProse && (
+        <RoutedToolsRow
+          message={message}
+          isUser={isUser}
+          isStreaming={isStreaming}
           styles={styles}
           colors={colors}
         />
       )}
+
+      {!hideProse &&
+        !isUser &&
+        !isStreaming &&
+        message.generationMeta?.truncated && (
+          <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
+            <Icon name="alert-triangle" size={12} color={colors.textMuted} />
+            <Text style={styles.toolStatusText}>
+              Reply cut off at the token limit. Retry to continue.
+            </Text>
+          </View>
+        )}
+
+      {!hideProse &&
+        showGenerationDetails &&
+        !isUser &&
+        message.generationMeta && (
+          <GenerationMeta
+            messageId={message.id}
+            generationMeta={message.generationMeta}
+            styles={styles}
+            colors={colors}
+          />
+        )}
     </TouchableOpacity>
   );
 };
@@ -332,7 +455,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   const handleSaveEdit = (text: string) => {
     const trimmed = text.trim();
-    if (trimmed !== (isUser ? message.content : displayContent)) onEdit?.(message, trimmed);
+    if (trimmed !== (isUser ? message.content : displayContent))
+      onEdit?.(message, trimmed);
     setIsEditing(false);
   };
 
@@ -426,6 +550,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       showSupportingContext={showSupportingContext}
       showActions={showActions}
       showGenerationDetails={showGenerationDetails}
+      hideProse={hideProse}
       metaExtra={metaExtra}
       onImagePress={onImagePress}
       onTranscribeAgain={onTranscribeAgain}

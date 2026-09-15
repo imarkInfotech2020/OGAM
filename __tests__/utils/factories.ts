@@ -55,6 +55,7 @@ export interface MessageFactoryOptions {
   toolCallId?: string;
   toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
   toolArtifacts?: Message['toolArtifacts'];
+  timeline?: Message['timeline'];
   toolName?: string;
   reasoningContent?: string;
 }
@@ -75,6 +76,7 @@ export const createMessage = (
   toolCallId: options.toolCallId,
   toolCalls: options.toolCalls,
   toolArtifacts: options.toolArtifacts,
+  timeline: options.timeline,
   toolName: options.toolName,
   reasoningContent: options.reasoningContent,
 });

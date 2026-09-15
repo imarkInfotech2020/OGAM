@@ -1,4 +1,8 @@
-import type { RecordProvenance, SyncedToolArtifact } from '@offgrid/sync';
+import type {
+  RecordProvenance,
+  SyncedAssistantTimelineEntry,
+  SyncedToolArtifact,
+} from '@offgrid/sync';
 // Model source and credibility types
 export type ModelSource =
   | 'lmstudio'
@@ -293,6 +297,8 @@ export interface Message {
   toolCalls?: Array<{ id?: string; name: string; arguments: string }>;
   /** Completed, display-only tool artifacts admitted from synced message context. */
   toolArtifacts?: SyncedToolArtifact[];
+  /** Ordered reasoning and tool events carried by a synced assistant turn. */
+  timeline?: SyncedAssistantTimelineEntry[];
   /** Tool name (for tool result messages) */
   toolName?: string;
   /** True when this assistant message was generated while interfaceMode === 'audio' */

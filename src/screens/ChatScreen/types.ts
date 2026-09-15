@@ -23,6 +23,7 @@ const groupedImageCache = new WeakMap<
 function isSupportingContextMessage(message: Message): boolean {
   if (message.role !== 'assistant' || message.attachments?.length) return false;
   const inline = splitInlineReasoning(message.content);
+  if (!inline.reasoningLabel) return false;
   return isSupportingChatContext({
     answer: inline.answer,
     reasoning: message.reasoningContent || inline.reasoning,
@@ -238,7 +239,8 @@ function localDisplayMessages(
   if (
     streaming.isModelLoading &&
     streaming.isGeneratingForThisConversation &&
-    !streamingMessage && !streaming.hasStreamingText
+    !streamingMessage &&
+    !streaming.hasStreamingText
   ) {
     return [
       ...allMessages,
@@ -269,7 +271,9 @@ function localDisplayMessages(
     ];
   }
   if (
-    (streamingMessage || streamingReasoningContent || streaming.hasStreamingText) &&
+    (streamingMessage ||
+      streamingReasoningContent ||
+      streaming.hasStreamingText) &&
     isStreamingForThisConversation
   ) {
     if (_lastDisplayBranch !== 'streaming') {

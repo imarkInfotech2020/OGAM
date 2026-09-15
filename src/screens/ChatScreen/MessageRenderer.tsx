@@ -133,7 +133,7 @@ const MessageRendererInner: React.FC<MessageRendererProps> = props => {
 const styles = StyleSheet.create({
   remoteStatus: {
     marginLeft: SPACING.xl,
-    marginTop: SPACING.xs,
+    marginTop: SPACING.md,
   },
 });
 
