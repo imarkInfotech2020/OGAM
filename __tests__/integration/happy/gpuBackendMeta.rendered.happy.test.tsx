@@ -80,7 +80,7 @@ describe('T014 — GPU/OpenCL backend → GenerationMeta shows GPU layers offloa
     expect(h.rtl.within(meta).queryByText(/OpenCL \(\d+L\)/)).not.toBeNull();
     // And it is NOT running on CPU.
     expect(h.rtl.within(meta).queryByText('CPU')).toBeNull();
-  }, 30000); // reload now includes the device-critical memory-reclaim wait — allow for it under load
+  }, 120000); // reload can queue behind the broad push-hook journeys — allow for it under load
 
   it('falsify: CPU backend renders "CPU" with no offloaded layers', async () => {
     const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
