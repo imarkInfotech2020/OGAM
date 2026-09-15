@@ -1260,7 +1260,18 @@ async function selectEffectiveSchemas(
   builtInSchemas: any[],
   extSchemas: any[],
 ): Promise<any[]> {
-  const all = [...builtInSchemas, ...extSchemas];
+  const toolNames = new Set(
+    builtInSchemas
+      .map(schema => schema?.function?.name)
+      .filter((name): name is string => typeof name === 'string' && name.length > 0),
+  );
+  const uniqueExtSchemas = extSchemas.filter(schema => {
+    const name = schema?.function?.name;
+    if (typeof name !== 'string' || !name || toolNames.has(name)) return false;
+    toolNames.add(name);
+    return true;
+  });
+  const all = [...builtInSchemas, ...uniqueExtSchemas];
   const litertActive = isLiteRTActive();
   const llamaIosNative =
     !litertActive && Platform.OS === 'ios' && llmService.supportsToolCalling();
@@ -1273,16 +1284,16 @@ async function selectEffectiveSchemas(
   if (
     !usingRemote &&
     isMcpEnabled() &&
-    extSchemas.length > 0 &&
+    uniqueExtSchemas.length > 0 &&
     all.length > TOOL_SELECTION_THRESHOLD
   ) {
     try {
       const selected = await selectToolsByEmbedding(
         getLastUserQuery(ctx.messages),
-        extSchemas,
+        uniqueExtSchemas,
         MCP_TOOL_ROUTE_TOPK,
       );
-      const shortlist = extSchemas.filter(s =>
+      const shortlist = uniqueExtSchemas.filter(s =>
         selected.includes(s.function.name),
       );
       if (litertActive || llamaIosNative) {
@@ -1317,7 +1328,7 @@ async function selectEffectiveSchemas(
   const shouldRoute =
     !usingRemote &&
     (litertActive || llamaIosNative) &&
-    extSchemas.length > 0 &&
+    uniqueExtSchemas.length > 0 &&
     all.length > TOOL_SELECTION_THRESHOLD;
   if (!shouldRoute) return all;
 
@@ -1329,14 +1340,14 @@ async function selectEffectiveSchemas(
     // Route over the MCP/ext tools only — built-in tools are always kept.
     const selected = await selectRelevantTools(
       getLastUserQuery(ctx.messages),
-      extSchemas,
+      uniqueExtSchemas,
       generate,
     );
     if (!selected || selected.length === 0) {
       // No MCP tool named (router said "none" OR just didn't name one) → built-in only.
       return builtInSchemas;
     }
-    const filteredExt = extSchemas.filter(s =>
+    const filteredExt = uniqueExtSchemas.filter(s =>
       selected.includes(s.function.name),
     );
     return [...builtInSchemas, ...filteredExt];
