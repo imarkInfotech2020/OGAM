@@ -9,6 +9,7 @@ import type { ThemeColors } from '../../theme';
 import { TYPOGRAPHY, SPACING } from '../../constants';
 import { useResidentRows, ejectResident, type ModelRowType } from './useResidentRows';
 import { remoteServerManager } from '../../services/remoteServerManager';
+import { useRemoteServerStore } from '../../stores/remoteServerStore';
 import logger from '../../utils/logger';
 
 // Defined in useResidentRows (breaks the sheet<->hook import cycle); re-exported here so existing
@@ -81,7 +82,18 @@ export const ModelsManagerSheet: React.FC<Props> = ({
       const failed: string[] = [];
       for (const server of servers) {
         const result = await remoteServerManager.testConnection(server.id);
-        if (!result.success) failed.push(server.name);
+        if (!result.success) {
+          failed.push(server.name);
+          const selection = useRemoteServerStore.getState();
+          if (selection.activeServerId === server.id) {
+            remoteServerManager.clearActiveRemoteTextModel();
+          }
+          (['image', 'transcription', 'voice'] as const).forEach(category => {
+            if (selection.activeRemoteMediaServerIds[category] === server.id) {
+              remoteServerManager.clearActiveRemoteMediaModel(category);
+            }
+          });
+        }
       }
       if (failed.length > 0) setRefreshError(`Could not refresh ${failed.join(', ')}.`);
     } catch (error) {
