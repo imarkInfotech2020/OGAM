@@ -28,6 +28,7 @@ import {
   handleEditMessageFn,
   handleGenerateImageFromMsgFn,
   handleRetryMessageFn,
+  handleTranscribeAgainFn,
 } from './useChatMessageHandlers';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
@@ -195,6 +196,18 @@ export function useChatScreenActions({
         updateMessageContent,
         deleteMessagesAfter,
         setDebugInfo,
+      }),
+    handleTranscribeAgain: (
+      message: ChatStoreState['conversations'][number]['messages'][number],
+      attachment: MediaAttachment,
+    ) =>
+      handleTranscribeAgainFn({
+        message,
+        attachment,
+        activeConversationId,
+        updateMessageTranscription:
+          useChatStore.getState().updateMessageTranscription,
+        setAlertState,
       }),
     handleSelectProject: (project: Project | null) => {
       setPendingProjectId(project?.id);

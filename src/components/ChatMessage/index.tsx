@@ -129,6 +129,7 @@ interface MessageBubbleProps {
   showGenerationDetails: boolean;
   metaExtra?: React.ReactNode;
   onImagePress?: (uri: string) => void;
+  onTranscribeAgain?: ChatMessageProps['onTranscribeAgain'];
   onToggleThinking: () => void;
   onToggleSupportingContext: () => void;
   onLongPress: () => void;
@@ -151,6 +152,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   showGenerationDetails,
   metaExtra,
   onImagePress,
+  onTranscribeAgain,
   onToggleThinking,
   onToggleSupportingContext,
   onLongPress,
@@ -204,6 +206,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             styles={styles}
             colors={colors}
             onImagePress={onImagePress}
+            onTranscribeAgain={onTranscribeAgain
+              ? attachment => onTranscribeAgain(message, attachment)
+              : undefined}
           />
         )}
 
@@ -267,6 +272,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onCopy,
   onRetry,
   onEdit,
+  onTranscribeAgain,
   onGenerateImage,
   showActions = true,
   canGenerateImage = false,
@@ -422,6 +428,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       showGenerationDetails={showGenerationDetails}
       metaExtra={metaExtra}
       onImagePress={onImagePress}
+      onTranscribeAgain={onTranscribeAgain}
       onToggleThinking={() => setShowThinking(!showThinking)}
       onToggleSupportingContext={() =>
         setShowSupportingContext(!showSupportingContext)

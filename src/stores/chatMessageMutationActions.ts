@@ -35,6 +35,12 @@ export interface ChatMessageMutationActions {
       isAudioModeMessage?: boolean;
     },
   ) => void;
+  updateMessageTranscription: (
+    conversationId: string,
+    messageId: string,
+    attachmentId: string,
+    transcription: string,
+  ) => void;
   deleteMessage: (conversationId: string, messageId: string) => void;
   deleteMessagesAfter: (conversationId: string, messageId: string) => void;
 }
@@ -138,6 +144,33 @@ export function createMessageMutationActions(
           })),
         ),
       );
+    },
+
+    updateMessageTranscription: (
+      conversationId,
+      messageId,
+      attachmentId,
+      transcription,
+    ) => {
+      owner.updateConversations(conversations =>
+        mapConversation(conversations, conversationId, conversation =>
+          updateMessageInConversation(conversation, messageId, message => ({
+            ...message,
+            content: transcription,
+            attachments: message.attachments?.map(attachment =>
+              attachment.id === attachmentId
+                ? { ...attachment, textContent: transcription }
+                : attachment,
+            ),
+          })),
+        ),
+      );
+      const message = owner
+        .getConversationMessages(conversationId)
+        .find(candidate => candidate.id === messageId);
+      if (message) {
+        emitSyncMutation(messagePutMutation(conversationId, message));
+      }
     },
 
     deleteMessage: (conversationId, messageId) => {

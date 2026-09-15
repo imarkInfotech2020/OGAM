@@ -13,12 +13,14 @@ interface ActionMenuSheetProps {
   canRetry: boolean;
   canGenerateImage: boolean;
   canSpeak: boolean;
+  canTranscribeAgain?: boolean;
   styles: any;
   onCopy: () => void;
   onEdit: () => void;
   onRetry: () => void;
   onGenerateImage: () => void;
   onSpeak: () => void;
+  onTranscribeAgain?: () => void;
 }
 
 export function ActionMenuSheet({
@@ -29,12 +31,14 @@ export function ActionMenuSheet({
   canRetry,
   canGenerateImage,
   canSpeak,
+  canTranscribeAgain = false,
   styles,
   onCopy,
   onEdit,
   onRetry,
   onGenerateImage,
   onSpeak,
+  onTranscribeAgain,
 }: ActionMenuSheetProps) {
   const { colors } = useTheme();
 
@@ -79,6 +83,18 @@ export function ActionMenuSheet({
             <Text style={styles.actionSheetText}>
               {isUser ? 'Resend' : 'Regenerate'}
             </Text>
+          </AnimatedPressable>
+        )}
+
+        {canTranscribeAgain && onTranscribeAgain && (
+          <AnimatedPressable
+            testID="action-transcribe-again"
+            hapticType="selection"
+            style={styles.actionSheetItem}
+            onPress={onTranscribeAgain}
+          >
+            <Icon name="mic" size={18} color={colors.textSecondary} />
+            <Text style={styles.actionSheetText}>Transcribe again</Text>
           </AnimatedPressable>
         )}
 

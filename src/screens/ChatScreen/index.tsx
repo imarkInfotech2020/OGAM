@@ -239,6 +239,7 @@ export const ChatScreen: React.FC = () => {
       onCopy={chat.handleCopyMessage}
       onRetry={chat.handleRetryMessage}
       onEdit={chat.handleEditMessage}
+      onTranscribeAgain={chat.handleTranscribeAgain}
       onGenerateImage={chat.handleGenerateImageFromMessage}
       onImagePress={chat.handleImagePress}
     />

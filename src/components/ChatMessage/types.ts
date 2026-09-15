@@ -1,4 +1,4 @@
-import { Message } from '../../types';
+import { MediaAttachment, Message } from '../../types';
 
 export interface ChatMessageProps {
   /**
@@ -17,6 +17,10 @@ export interface ChatMessageProps {
   onCopy?: (content: string) => void;
   onRetry?: (message: Message) => void;
   onEdit?: (message: Message, newContent: string) => void;
+  onTranscribeAgain?: (
+    message: Message,
+    attachment: MediaAttachment,
+  ) => Promise<void>;
   onGenerateImage?: (prompt: string) => void;
   showActions?: boolean;
   canGenerateImage?: boolean;
