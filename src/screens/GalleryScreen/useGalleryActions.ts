@@ -6,6 +6,7 @@ import { useAppStore, useChatStore } from '../../stores';
 import { imageGenerationService, onnxImageGeneratorService } from '../../services';
 import type { ImageGenerationState } from '../../services';
 import { GeneratedImage } from '../../types';
+import { resolveDocumentPath } from '../../utils/resolveDocumentPath';
 
 export const formatDate = (dateStr: string): string => {
   const ts = Number(dateStr);
@@ -163,8 +164,9 @@ export const useGalleryActions = (conversationId: string | undefined) => {
 
   const handleSaveImage = useCallback(async (image: GeneratedImage) => {
     try {
+      const imagePath = resolveDocumentPath(image.imagePath);
       if (Platform.OS === 'ios') {
-        await Share.share({ url: `file://${image.imagePath}` });
+        await Share.share({ url: `file://${imagePath}` });
         return;
       }
       await PermissionsAndroid.request(
@@ -183,7 +185,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
       }
       const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
       const fileName = `generated_${timestamp}.png`;
-      await RNFS.copyFile(image.imagePath, `${picturesDir}/${fileName}`);
+      await RNFS.copyFile(imagePath, `${picturesDir}/${fileName}`);
       setAlertState(showAlert('Image Saved', `Saved to Pictures/OffgridMobile/${fileName}`));
     } catch (error: any) {
       setAlertState(showAlert('Error', `Failed to save image: ${error?.message || 'Unknown error'}`));

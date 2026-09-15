@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { AnimatedEntry } from '../../components/AnimatedEntry';
 import { useThemedStyles } from '../../theme';
 import { GeneratedImage } from '../../types';
+import { resolveDocumentPath } from '../../utils/resolveDocumentPath';
 import { createStyles } from './styles';
 
 interface GalleryGridItemProps {
@@ -26,6 +27,7 @@ export const GalleryGridItem: React.FC<GalleryGridItemProps> = ({
   const styles = useThemedStyles(createStyles);
   const [loaded, setLoaded] = useState(false);
   const imageState = loaded ? 'loaded' : 'loading';
+  const imageUri = `file://${resolveDocumentPath(item.imagePath)}`;
 
   return (
     <AnimatedEntry index={index} staggerMs={40} maxItems={15}>
@@ -39,7 +41,7 @@ export const GalleryGridItem: React.FC<GalleryGridItemProps> = ({
         testID={`gallery-image-${item.id}`}
       >
         <Image
-          source={{ uri: `file://${item.imagePath}` }}
+          source={{ uri: imageUri }}
           style={styles.gridImage}
           onLoad={() => setLoaded(true)}
         />
