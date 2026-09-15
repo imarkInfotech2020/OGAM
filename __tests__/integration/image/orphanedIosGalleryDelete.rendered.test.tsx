@@ -41,7 +41,9 @@ describe('iOS Gallery with an already-missing generated image', () => {
     rtl.fireEvent.press(await gallery.findByTestId('gallery-image-missing-image'));
     rtl.fireEvent.press(gallery.getByText('Delete'));
     await gallery.findByText('Delete Image');
-    rtl.fireEvent.press(gallery.getAllByText('Delete')[1]);
+    await rtl.act(async () => {
+      rtl.fireEvent.press(gallery.getAllByText('Delete')[1]);
+    });
 
     await rtl.waitFor(() => {
       expect(gallery.queryByTestId('gallery-image-missing-image')).toBeNull();
