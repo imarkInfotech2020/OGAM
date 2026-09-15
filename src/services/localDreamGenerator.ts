@@ -10,6 +10,7 @@ import logger from '../utils/logger';
 import { resolveOwnedDocumentPath } from '../utils/resolveDocumentPath';
 
 const { LocalDreamModule, CoreMLDiffusionModule } = NativeModules;
+const PROGRESS_LOG_SAMPLE_STEPS = 5;
 
 // Pick the right native module per platform
 const DiffusionModule = Platform.select({
@@ -117,7 +118,15 @@ class LocalDreamGeneratorService {
     return this.getEmitter().addListener(
       'LocalDreamProgress',
       (event: { step: number; totalSteps: number; progress: number; previewPath?: string }) => {
-        logger.log(`[WIRE-IMAGE-PROGRESS] ${JSON.stringify(event)}`); // [WIRE] raw LocalDreamProgress event shape
+        if (
+          !Number.isInteger(event.step) ||
+          event.step < 1 ||
+          event.step === 1 ||
+          event.step === event.totalSteps ||
+          event.step % PROGRESS_LOG_SAMPLE_STEPS === 0
+        ) {
+          logger.log(`[WIRE-IMAGE-PROGRESS] ${JSON.stringify(event)}`); // [WIRE] raw LocalDreamProgress event shape
+        }
         onProgress?.({
           step: event.step,
           totalSteps: event.totalSteps,
