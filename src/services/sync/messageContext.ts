@@ -33,6 +33,7 @@ export function serializeMessageContext(
     | 'role'
     | 'reasoningContent'
     | 'timeline'
+    | 'toolCalls'
     | 'toolArtifacts'
     | 'toolCallId'
     | 'toolName'
@@ -75,9 +76,16 @@ export function serializeMessageContext(
                 }),
           }
         : undefined,
-    toolCalls: message.toolArtifacts?.filter(
-      artifact => artifact.id !== RETRIEVAL_TOOL_ARTIFACT_ID,
-    ),
+    toolCalls: [
+      ...(message.toolCalls ?? []).map(call => ({
+        ...call,
+        result: '',
+        status: 'running' as const,
+      })),
+      ...(message.toolArtifacts?.filter(
+        artifact => artifact.id !== RETRIEVAL_TOOL_ARTIFACT_ID,
+      ) ?? []),
+    ],
     ...(message.role === 'tool'
       ? {
           tool: {

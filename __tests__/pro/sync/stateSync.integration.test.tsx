@@ -33,6 +33,7 @@ import { useProjectStore } from '../../../src/stores/projectStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import {
   CORE_SYNC_ENTITIES,
+  messagePutMutation,
   type SyncMutation,
 } from '../../../src/services/sync/mutation';
 import { syncService } from '../../../pro/sync/syncService';
@@ -213,6 +214,28 @@ describe('Pro mobile state sync journey', () => {
       context: null,
       created_at: createdAt,
     });
+    const toolRequest = messagePutMutation('remote-conversation', {
+      id: 'remote-tool-request',
+      uuid: 'remote-tool-request',
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(createdAt).getTime(),
+      toolCalls: [
+        {
+          id: 'contacts-search-call',
+          name: 'contacts_search',
+          arguments: '{"query":"ali hafizji"}',
+        },
+      ],
+    });
+    if (!toolRequest?.fields)
+      throw new Error('Tool request was not serialized');
+    remoteLog.record(
+      toolRequest.entity,
+      toolRequest.entityId,
+      toolRequest.kind,
+      toolRequest.fields,
+    );
     remoteLog.record(
       CORE_SYNC_ENTITIES.message,
       'remote-reasoning-message',
@@ -362,6 +385,7 @@ describe('Pro mobile state sync journey', () => {
     await waitFor(() =>
       expect(ui!.getByText('The field notes are ready.')).toBeTruthy(),
     );
+    expect(ui.getByText('Using contacts_search: ali hafizji')).toBeTruthy();
     expect(
       ui
         .getAllByText(/^(Thought process|Web search result)$/)
@@ -591,6 +615,7 @@ describe('Pro mobile state sync journey', () => {
     expect(ui.getByTestId('llama-temperature-value').props.children).toBe(
       winningTemperature.value,
     );
+
   });
 
   it('reconnects before slow owners finish and rejects forged task state', async () => {
@@ -765,6 +790,5 @@ describe('Pro mobile state sync journey', () => {
     expect(useTaskRunStore.getState().runs[task.taskId]?.title).toBe(
       task.title,
     );
-
   });
 });
