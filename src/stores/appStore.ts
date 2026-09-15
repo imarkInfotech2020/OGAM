@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNFS from 'react-native-fs';
 import type { RecordProvenance } from '@offgrid/sync';
 import {
@@ -276,7 +277,15 @@ export const selectIsLiteRT = (state: AppState): boolean =>
   state.downloadedModels.find(m => m.id === state.activeModelId)?.engine ===
   'litert';
 
-const appStorage = createHydrationGatedStorage<ReturnType<typeof persistedAppState>>();
+type PersistedAppState = ReturnType<typeof persistedAppState>;
+
+const appStorage = createHydrationGatedStorage<PersistedAppState>(
+  AsyncStorage,
+  (previous, next) =>
+    (Object.keys(next) as (keyof PersistedAppState)[]).every(
+      key => previous[key] === next[key],
+    ),
+);
 
 export const useAppStore = create<AppState>()(
   persist(

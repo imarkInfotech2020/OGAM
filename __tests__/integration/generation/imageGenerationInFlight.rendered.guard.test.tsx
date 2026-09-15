@@ -75,6 +75,51 @@ describe('while an image is generating', () => {
     h.boundary.diffusion.releaseGeneration();
   });
 
+  it('keeps unrelated chat controls responsive through a burst of progress updates', async () => {
+    const h = await setupChatScreen({ engine: 'litert', platform: 'ios' });
+    const {
+      ImageQualityBasicSliders,
+    } = require('../../../src/components/GenerationSettingsModal/ImageQualitySliders');
+    const imageSettings = h.rtl.render(
+      h.React.createElement(ImageQualityBasicSliders),
+    );
+    h.rtl.fireEvent.press(
+      imageSettings.getByTestId('image-steps-value-button'),
+    );
+    h.rtl.fireEvent.changeText(
+      imageSettings.getByTestId('image-steps-input'),
+      '50',
+    );
+    h.rtl.fireEvent(
+      imageSettings.getByTestId('image-steps-input'),
+      'submitEditing',
+    );
+    imageSettings.unmount();
+
+    await h.generateImageViaUI({ prompt: 'a fox in the snow', hold: true });
+
+    await h.rtl.act(async () => {
+      for (let step = 1; step < 50; step += 1) {
+        h.boundary.litertEvents.emit('LocalDreamProgress', {
+          step,
+          totalSteps: 50,
+          progress: step / 50,
+        });
+      }
+    });
+
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(/Generating image \(49\/50\)/)).not.toBeNull();
+    });
+
+    h.rtl.fireEvent.press(h.view!.getByTestId('chat-settings-icon'));
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText('Chat Settings')).not.toBeNull();
+    });
+
+    h.boundary.diffusion.releaseGeneration();
+  });
+
   it('does not start a second diffusion when the user sends again mid-generation', async () => {
     const h = await setupChatScreen({ engine: 'litert', platform: 'ios' });
     await h.generateImageViaUI({ prompt: 'a fox in the snow', hold: true });

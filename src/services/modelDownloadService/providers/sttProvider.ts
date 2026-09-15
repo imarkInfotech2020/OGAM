@@ -29,7 +29,7 @@ const STT_CAPABILITIES = {
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 /** The store keys STT models as `whisper-<id>`; the uniform id uses the bare id. */
 const bareId = (storeModelId: string): string => storeModelId.replace(/^whisper-/, '');
-const downloadId = (id: string): string => id.replace(/^stt:/, '');
+const downloadId = (id: string): string => bareId(id.replace(/^stt:/, ''));
 
 /** Find the in-flight store entry for a bare STT model id, if any. */
 function findEntry(modelId: string) {
@@ -88,10 +88,12 @@ export const sttProvider: DownloadProvider = {
   },
 
   async cancel(id: string): Promise<void> {
-    const entry = findEntry(downloadId(id));
+    const modelId = downloadId(id);
+    const entry = findEntry(modelId);
     if (!entry) return;
     await backgroundDownloadService.cancelDownload(entry.downloadId)
       .catch(err => logger.log(`[DL-SM] ${id} cancel: native cancel failed err=${msg(err)}`));
+    await useWhisperStore.getState().cancelDownload(modelId);
     useDownloadStore.getState().remove(entry.modelKey);
   },
 
