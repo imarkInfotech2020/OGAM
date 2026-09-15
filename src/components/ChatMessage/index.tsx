@@ -230,7 +230,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 showThinking={showThinking}
                 onToggle={onToggleThinking}
                 styles={styles}
-                embedded
               />
             )}
 
@@ -240,7 +239,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               showThinking={showSupportingContext}
               onToggle={onToggleSupportingContext}
               styles={styles}
-              embedded
             />
           )}
 
