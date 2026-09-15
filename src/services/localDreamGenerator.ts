@@ -251,6 +251,12 @@ class LocalDreamGeneratorService {
       ) {
         return false;
       }
+
+      try {
+        if (!(await RNFS.exists(resolvedPath))) return true;
+      } catch {
+        // Let the native store decide when the filesystem check is unavailable.
+      }
     }
 
     return await DiffusionModule.deleteGeneratedImage(imageId);
