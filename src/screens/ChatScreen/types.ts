@@ -63,31 +63,6 @@ function withPendingGeneratedImage(message: Message): Message {
   };
 }
 
-/** Keep peer reasoning beside a separately labelled inline block instead of choosing one. */
-function exposePeerReasoning(
-  messages: readonly (Message | ChatMessageItem)[],
-): (Message | ChatMessageItem)[] {
-  return messages.flatMap(message => {
-    if (message.role !== 'assistant' || !message.reasoningContent?.trim()) {
-      return [message];
-    }
-    const inline = splitInlineReasoning(message.content);
-    if (!inline.reasoning?.trim() || !inline.reasoningLabel) return [message];
-    if (inline.reasoning.trim() === message.reasoningContent.trim()) {
-      return [{ ...message, reasoningContent: undefined }];
-    }
-    return [
-      {
-        id: `${message.id}:peer-reasoning`,
-        role: 'assistant' as const,
-        content: `<think>${message.reasoningContent}</think>`,
-        timestamp: message.timestamp,
-      },
-      { ...message, reasoningContent: undefined },
-    ];
-  });
-}
-
 /**
  * Keep durable chat records unchanged, but present an image turn as one assistant result.
  *
@@ -239,12 +214,10 @@ export function getDisplayMessages(
 ): (Message | ChatMessageItem)[] {
   return withRemotePreviews(
     groupSupportingContextWithImage(
-      exposePeerReasoning(
-        localDisplayMessages(
-          // The same rule the list rows use, so the thread and its preview never disagree.
-          [...visibleMessages(allMessages, streaming.localDeviceId)],
-          streaming,
-        ),
+      localDisplayMessages(
+        // The same rule the list rows use, so the thread and its preview never disagree.
+        [...visibleMessages(allMessages, streaming.localDeviceId)],
+        streaming,
       ),
     ),
     streaming.remotePreviews,

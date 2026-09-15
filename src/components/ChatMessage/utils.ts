@@ -61,6 +61,6 @@ function parseMessageData(message: Message): MessageData {
   const parsed = parseModelOutput(message.content, message.reasoningContent);
   return {
     displayContent: parsed.answer,
-    parsedContent: { thinking: parsed.reasoning, response: parsed.answer, isThinkingComplete: parsed.isReasoningComplete, thinkingLabel: parsed.reasoningLabel },
+    parsedContent: { thinking: parsed.reasoning, response: parsed.answer, isThinkingComplete: message.isStreaming ? parsed.isReasoningComplete : true, thinkingLabel: parsed.reasoningLabel },
   };
 }

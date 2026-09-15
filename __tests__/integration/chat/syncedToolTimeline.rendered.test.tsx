@@ -5,6 +5,7 @@ import { ChatMessage } from '../../../src/components/ChatMessage';
 import { getDisplayMessages } from '../../../src/screens/ChatScreen/types';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { MobileStateMaterializer } from '../../../pro/sync/mobileStateMaterializer';
+import { MessageAudioMode } from '../../../pro/audio/ui/MessageAudioMode';
 import { createGenerationMeta, createMessage } from '../../utils/factories';
 
 describe('synced assistant tool timeline', () => {
@@ -17,20 +18,44 @@ describe('synced assistant tool timeline', () => {
       updated_at: '2026-09-15T02:00:01.000Z',
       project_id: null,
     });
-    materializer.put('message', 'synced-image-answer', {
+    materializer.put('message', 'synced-image-thinking-before', {
+      conversation_id: 'synced-image-chat',
+      role: 'assistant',
+      content: '<think>Plan the image request.</think>',
+      context: null,
+      created_at: '2026-09-15T02:00:00.100Z',
+    });
+    materializer.put('message', 'synced-image-tool', {
+      conversation_id: 'synced-image-chat',
+      role: 'tool',
+      content: 'Created the requested image.',
+      context: JSON.stringify({
+        tool: { name: 'generate_image', status: 'completed' },
+      }),
+      created_at: '2026-09-15T02:00:00.200Z',
+    });
+    materializer.put('message', 'synced-image-thinking-after', {
+      conversation_id: 'synced-image-chat',
+      role: 'assistant',
+      content: '<think>Verify the generated result.</think>',
+      context: null,
+      created_at: '2026-09-15T02:00:00.300Z',
+    });
+    materializer.put('message', 'synced-image-prompt', {
       conversation_id: 'synced-image-chat',
       role: 'assistant',
       content:
-        '<think>__LABEL:Enhanced prompt__\nA cinematic horse at sunset.</think>\n\nGenerated for: a horse',
+        '<think>__LABEL:Enhanced prompt__\nA cinematic horse at sunset.</think>',
+      context: null,
+      created_at: '2026-09-15T02:00:00.400Z',
+    });
+    materializer.put('message', 'synced-image-answer', {
+      conversation_id: 'synced-image-chat',
+      role: 'assistant',
+      content: 'Generated image for: a horse',
       context: JSON.stringify({
-        reasoning: 'Plan the image request, then verify the result.',
-        toolCalls: [
-          {
-            name: 'generate_image',
-            result: 'Created the requested image.',
-            status: 'completed',
-          },
-        ],
+        toolsOffered: ['generate_image'],
+        metrics: { modelName: 'Qwen3 8B', totalSeconds: 2.6 },
       }),
       created_at: '2026-09-15T02:00:01.000Z',
     });
@@ -46,15 +71,73 @@ describe('synced assistant tool timeline', () => {
     const view = render(
       <View>
         {display.map(item => (
-          <ChatMessage key={item.id} message={item} />
+          <ChatMessage
+            key={item.id}
+            message={item}
+            supportingContext={
+              'supportingContext' in item ? item.supportingContext : undefined
+            }
+          />
         ))}
       </View>,
     );
 
-    expect(view.getAllByText('Thought process')).toHaveLength(1);
+    expect(view.getAllByText('Thought process')).toHaveLength(2);
     expect(view.getAllByText('Enhanced prompt')).toHaveLength(1);
     expect(view.getAllByText('Generated image')).toHaveLength(1);
-    expect(view.getByText('Generated for: a horse')).toBeTruthy();
+    expect(view.getByText('Generated image for: a horse')).toBeTruthy();
+
+    view.unmount();
+    const voiceView = render(
+      <View>
+        {display.map(item => (
+          <MessageAudioMode
+            key={item.id}
+            msg={item}
+            supportingContext={
+              'supportingContext' in item ? item.supportingContext : undefined
+            }
+            isStreamingThis={false}
+            shouldAnimate={false}
+            showGenerationDetails
+            onCopy={() => {}}
+            onRetry={() => {}}
+            onEdit={() => {}}
+            onGenerateImage={() => {}}
+            onImagePress={() => {}}
+          />
+        ))}
+      </View>,
+    );
+
+    expect(voiceView.getAllByText('Thought process')).toHaveLength(2);
+    expect(voiceView.getAllByText('Enhanced prompt')).toHaveLength(1);
+    expect(voiceView.getAllByText('Generated image')).toHaveLength(1);
+    expect(voiceView.getAllByTestId('message-meta-row')).toHaveLength(1);
+    expect(voiceView.getAllByTestId('tools-sent-collapsible')).toHaveLength(1);
+    expect(voiceView.getAllByTestId('generation-details-toggle')).toHaveLength(
+      1,
+    );
+
+    const renderedOrder = voiceView.root
+      .findAll(node =>
+        [
+          'tool-message',
+          'audio-bubble-synced-image-answer',
+          'message-meta-row',
+          'tools-sent-collapsible',
+          'generation-details-toggle',
+        ].includes(node.props.testID),
+      )
+      .map(node => node.props.testID)
+      .filter((testID, index, all) => index === 0 || testID !== all[index - 1]);
+    expect(renderedOrder).toEqual([
+      'tool-message',
+      'audio-bubble-synced-image-answer',
+      'message-meta-row',
+      'tools-sent-collapsible',
+      'generation-details-toggle',
+    ]);
   });
 
   it('shows thought, tools, answer, time, and details in that order and opens each disclosure', () => {

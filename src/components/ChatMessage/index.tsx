@@ -257,7 +257,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         </View>
       )}
 
-      {!message.isThinking && (
+      {!message.isThinking && !hideProse && (
         <MessageMetaRow
           message={message}
           styles={styles}
@@ -268,31 +268,39 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         />
       )}
 
-      <RoutedToolsRow
-        message={message}
-        isUser={isUser}
-        isStreaming={isStreaming}
-        styles={styles}
-        colors={colors}
-      />
-
-      {!isUser && !isStreaming && message.generationMeta?.truncated && (
-        <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
-          <Icon name="alert-triangle" size={12} color={colors.textMuted} />
-          <Text style={styles.toolStatusText}>
-            Reply cut off at the token limit. Retry to continue.
-          </Text>
-        </View>
-      )}
-
-      {showGenerationDetails && !isUser && message.generationMeta && (
-        <GenerationMeta
-          messageId={message.id}
-          generationMeta={message.generationMeta}
+      {!hideProse && (
+        <RoutedToolsRow
+          message={message}
+          isUser={isUser}
+          isStreaming={isStreaming}
           styles={styles}
           colors={colors}
         />
       )}
+
+      {!hideProse &&
+        !isUser &&
+        !isStreaming &&
+        message.generationMeta?.truncated && (
+          <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
+            <Icon name="alert-triangle" size={12} color={colors.textMuted} />
+            <Text style={styles.toolStatusText}>
+              Reply cut off at the token limit. Retry to continue.
+            </Text>
+          </View>
+        )}
+
+      {!hideProse &&
+        showGenerationDetails &&
+        !isUser &&
+        message.generationMeta && (
+          <GenerationMeta
+            messageId={message.id}
+            generationMeta={message.generationMeta}
+            styles={styles}
+            colors={colors}
+          />
+        )}
     </TouchableOpacity>
   );
 };

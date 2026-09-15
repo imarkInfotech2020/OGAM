@@ -1,5 +1,4 @@
 import {
-  parseSyncedMessageContext,
   projectSyncedMessageTurn,
   serializeSyncedMessageContext,
   type SyncedRetrievalSource,
@@ -113,9 +112,5 @@ export function projectMessageTurn(
         .map(part => part.text)
         .join('\n')
     : input.content;
-  const projected = projectSyncedMessageTurn({ ...input, content });
-  const contextReasoning = parseSyncedMessageContext(input.context)?.reasoning;
-  return projected && projected.reasoningLabel && contextReasoning
-    ? { ...projected, reasoning: contextReasoning }
-    : projected;
+  return projectSyncedMessageTurn({ ...input, content });
 }
