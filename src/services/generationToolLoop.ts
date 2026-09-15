@@ -369,9 +369,17 @@ function getLastUserQuery(messages: Message[]): string {
  * handler behave identically: success/empty/error all become a typed result whose
  * model-facing string (toolResultModelContent) explicitly states failure/empty.
  */
-async function executeToolCallSafely(tc: ToolCall): Promise<ToolResult> {
+async function executeToolCallSafely(
+  tc: ToolCall,
+  enabledBuiltInToolIds: readonly string[] = [],
+): Promise<ToolResult> {
+  const builtInOwnsCall = getToolsAsOpenAISchema(enabledBuiltInToolIds).some(
+    schema => schema.function.name === tc.name,
+  );
   const exts = getToolExtensions();
-  const ext = exts.find(e => e.canHandle(tc.name));
+  const ext = builtInOwnsCall
+    ? undefined
+    : exts.find(e => e.canHandle(tc.name));
   const start = Date.now();
   try {
     const raw = ext ? await ext.execute(tc) : await executeToolCall(tc);
@@ -416,7 +424,7 @@ async function executeToolCalls(
       ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
     };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
-    const result = await executeToolCallSafely(tc);
+    const result = await executeToolCallSafely(tc, ctx.enabledToolIds);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
     const settings = useAppStore.getState().settings;
     const resultBudget = toolResultCharBudget({
@@ -733,7 +741,7 @@ function buildLiteRTToolCallHandler(
     // the model (toolResultModelContent) is never empty — a failure/empty is stated
     // explicitly rather than sent as "" or a bare "Error: ...", so the model can't
     // mistake it for a successful answer.
-    const result = await executeToolCallSafely(toolCall);
+    const result = await executeToolCallSafely(toolCall, ctx.enabledToolIds);
     ctx.callbacks?.onToolCallComplete?.(name, result);
     const settings = useAppStore.getState().settings;
     const resultBudget = toolResultCharBudget({
