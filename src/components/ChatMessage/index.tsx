@@ -257,7 +257,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         </View>
       )}
 
-      {!message.isThinking && !hideProse && (
+      {!message.isThinking && !isStreaming && !hideProse && (
         <MessageMetaRow
           message={message}
           styles={styles}

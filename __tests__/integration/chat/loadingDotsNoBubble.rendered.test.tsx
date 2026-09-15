@@ -42,6 +42,7 @@ it('shows only dots beneath reasoning while the answer is still loading', () => 
         role: 'assistant',
         content: '<think>I should answer this greeting.',
         timestamp: 3,
+        isStreaming: true,
       }}
       isStreaming
     />,
@@ -49,4 +50,5 @@ it('shows only dots beneath reasoning while the answer is still loading', () => 
   const loader = view.getByTestId('streaming-thinking-hint');
   expect(within(loader).getByLabelText('Working')).toBeTruthy();
   expect(within(loader).queryByText('Thinking...')).toBeNull();
+  expect(view.queryByTestId('message-meta-row')).toBeNull();
 });
