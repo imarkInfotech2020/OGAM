@@ -275,6 +275,8 @@ export interface Message {
   content: string;
   /** Reasoning/thinking content parsed by llama.rn (separate from response content) */
   reasoningContent?: string;
+  /** Transient provider reasoning used to continue a remote tool-call round. */
+  reasoningDetails?: Array<Record<string, unknown>>;
   timestamp: number;
   isStreaming?: boolean;
   isThinking?: boolean;

@@ -482,7 +482,11 @@ function remoteGenerateOnce(
     thinkingEnabled: boolean;
     onStream?: (data: StreamToken) => void;
   },
-): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+): Promise<{
+  fullResponse: string;
+  toolCalls: ToolCall[];
+  reasoningDetails?: Array<Record<string, unknown>>;
+}> {
   const { messages, tools, thinkingEnabled, onStream } = args;
   const settings = useAppStore.getState().settings;
   const options: GenerationOptions = {
@@ -518,7 +522,11 @@ function remoteGenerateOnce(
                 : tc.arguments,
           }));
         }
-        resolve({ fullResponse: result.content, toolCalls });
+        resolve({
+          fullResponse: result.content,
+          toolCalls,
+          reasoningDetails: result.reasoningDetails,
+        });
       },
       onError: (error: Error) => {
         logger.error(`[ToolLoop] onError — ${error.message}`);
@@ -534,7 +542,11 @@ async function callRemoteLLMWithTools(
   messages: Message[],
   tools: any[],
   opts?: { onStream?: (data: StreamToken) => void; disableThinking?: boolean },
-): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+): Promise<{
+  fullResponse: string;
+  toolCalls: ToolCall[];
+  reasoningDetails?: Array<Record<string, unknown>>;
+}> {
   const activeServerId = useRemoteServerStore.getState().activeServerId;
   if (!activeServerId) throw new Error('No remote provider active');
   const provider = providerRegistry.getProvider(activeServerId);
@@ -1041,6 +1053,7 @@ async function callLLMWithRetry(
   toolStepLimitReached?: boolean;
   completedToolMessages?: Message[];
   completedToolResults?: string[];
+  reasoningDetails?: Array<Record<string, unknown>>;
 }> {
   // Append tool-use behavioral guidance to the system prompt when tools are present.
   // Only covers the "when and how" — schemas are injected separately by each engine.
@@ -1415,6 +1428,7 @@ export async function runToolLoop(
     const {
       fullResponse,
       toolCalls,
+      reasoningDetails,
       interrupted,
       toolStepLimitReached,
       completedToolMessages,
@@ -1522,7 +1536,10 @@ export async function runToolLoop(
         arguments: JSON.stringify(tc.arguments),
       })),
     };
-    loopMessages.push(assistantMsg);
+    loopMessages.push({
+      ...assistantMsg,
+      ...(reasoningDetails?.length ? { reasoningDetails } : {}),
+    });
     chatStore.addMessage(ctx.conversationId, assistantMsg);
 
     totalToolCalls += await executeToolCalls(ctx, {
