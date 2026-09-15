@@ -33,6 +33,8 @@ function getToolIcon(toolName?: string): string {
       return 'smartphone';
     case 'model_fallback':
       return 'shuffle';
+    case 'generate_image':
+      return 'image';
     default:
       return 'tool';
   }
@@ -59,6 +61,8 @@ function getToolLabel(toolName?: string, content?: string): string {
       return 'Computer Use';
     case 'model_fallback':
       return 'Model changed';
+    case 'generate_image':
+      return 'Generated image';
     default:
       return toolName || 'Tool result';
   }
