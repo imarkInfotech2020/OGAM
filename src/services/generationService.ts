@@ -227,10 +227,12 @@ class GenerationService {
             await remoteServerManager.setActiveRemoteTextModel(route.serverId, route.id);
           } else {
             await activeModelService.loadTextModel(route.id);
+            // Loading a local fallback selects it. Clear the prior remote route
+            // before an abort can return and leave both routes selected.
+            remoteServerManager.clearActiveRemoteTextModel();
             if (this.abortRequested) return;
             await prepareActiveConversation(conversationId);
             if (this.abortRequested) return;
-            remoteServerManager.clearActiveRemoteTextModel();
           }
         } catch (error) {
           lastError = error;
