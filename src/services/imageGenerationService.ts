@@ -91,17 +91,6 @@ class ImageGenerationService {
       logger.log(imagePhaseTransitionLog(prevPhase, this.state));
     }
     this.notifyListeners();
-    // appStore mirror is a one-way PROJECTION of phase (the UI reads it). Computed
-    // from phase, never a second stored source.
-    const appStore = useAppStore.getState();
-    if ('phase' in partial)
-      appStore.setIsGeneratingImage(isInFlight(this.state.phase));
-    if ('progress' in partial)
-      appStore.setImageGenerationProgress(this.state.progress);
-    if ('status' in partial)
-      appStore.setImageGenerationStatus(this.state.status);
-    if ('previewPath' in partial)
-      appStore.setImagePreviewPath(this.state.previewPath);
   }
 
   /** Own the terminal error state and its retry actions. */
