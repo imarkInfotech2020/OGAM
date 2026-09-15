@@ -240,7 +240,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         <View style={styles.toolCallReplyContent}>
           <Accordion
             key={isStreaming ? 'live' : 'done'}
-            title={isStreaming ? 'Working' : 'Work done'}
+            title={
+              isStreaming
+                ? 'Working'
+                : message.turnStatus === 'cancelled'
+                  ? 'Work stopped'
+                  : 'Work done'
+            }
             defaultOpen={Boolean(isStreaming)}
             variant="plain"
             testID="assistant-work-toggle"
@@ -496,7 +502,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       >
         <View style={styles.toolCallReplyContent}>
           <Accordion
-            title="Work done"
+            title={
+              message.turnStatus === 'cancelled'
+                ? 'Work stopped'
+                : 'Work done'
+            }
             variant="plain"
             testID="assistant-work-toggle"
           >

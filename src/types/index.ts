@@ -2,6 +2,7 @@ import type {
   RecordProvenance,
   SyncedAssistantTimelineEntry,
   SyncedToolArtifact,
+  SyncedTurnStatus,
 } from '@offgrid/sync';
 // Model source and credibility types
 export type ModelSource =
@@ -301,6 +302,8 @@ export interface Message {
   toolArtifacts?: SyncedToolArtifact[];
   /** Ordered reasoning and tool events carried by a synced assistant turn. */
   timeline?: SyncedAssistantTimelineEntry[];
+  /** Terminal outcome for this turn, including a deliberate user stop. */
+  turnStatus?: SyncedTurnStatus;
   /** Tool name (for tool result messages) */
   toolName?: string;
   /** True when this assistant message was generated while interfaceMode === 'audio' */
