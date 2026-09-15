@@ -832,11 +832,18 @@ export async function setupChatScreen(opts: ChatHarnessOptions) {
       if (via === 'longpress') {
         rtl.fireEvent(target, 'longPress');
       } else {
-        // The 3-dots '•••' lives inside THIS message's element — scope to it (not the global-last dots,
-        // which would be a different message's button).
-        const dots = await rtl.waitFor(() =>
-          rtl.within(target).getByText('•••'),
-        );
+        // Generation can replace the final assistant row while this wait runs. Re-read the last
+        // row so the gesture reaches the current message instead of a detached render node.
+        const dots = await rtl.waitFor(() => {
+          const currentBubbles = view.queryAllByTestId(testId);
+          const currentTarget = currentBubbles[currentBubbles.length - 1];
+          const scopedDots = rtl.within(currentTarget).queryByText('•••');
+          if (scopedDots) return scopedDots;
+          // Audio mode owns its full message bubble outside the core role wrapper. Its latest
+          // visible action control still belongs to the last rendered message in this journey.
+          const visibleDots = view.getAllByText('•••');
+          return visibleDots[visibleDots.length - 1];
+        });
         rtl.fireEvent.press(dots);
       }
       await rtl.waitFor(() => {
