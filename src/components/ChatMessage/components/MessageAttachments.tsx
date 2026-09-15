@@ -20,6 +20,7 @@ import { MediaAttachment } from '../../../types';
 import { viewDocument } from '@react-native-documents/viewer';
 import logger from '../../../utils/logger';
 import { AnimatedPressable } from '../../AnimatedPressable';
+import { resolveDocumentPath } from '../../../utils/resolveDocumentPath';
 
 interface FadeInImageProps {
   uri: string;
@@ -29,7 +30,12 @@ interface FadeInImageProps {
   onPress?: () => void;
 }
 
+function resolveMediaUri(uri: string): string {
+  return uri.includes('/Documents/') ? `file://${resolveDocumentPath(uri)}` : uri;
+}
+
 function FadeInImage({ uri, imageStyle, testID, wrapperTestID, onPress }: FadeInImageProps) {
+  const displayUri = resolveMediaUri(uri);
   const opacity = useSharedValue(0);
   const [loaded, setLoaded] = React.useState(false);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
@@ -48,7 +54,7 @@ function FadeInImage({ uri, imageStyle, testID, wrapperTestID, onPress }: FadeIn
       >
         <Image
           testID={testID}
-          source={{ uri }}
+          source={{ uri: displayUri }}
           style={imageStyle}
           resizeMode="cover"
           onLoad={() => {
@@ -115,7 +121,7 @@ function AudioAttachment({
 
   React.useEffect(() => {
     let mounted = true;
-    const path = attachment.uri.replace(/^file:\/\//, '');
+    const path = resolveDocumentPath(attachment.uri);
     RNFS.exists(path)
       .then(exists => {
         if (mounted) setFileExists(exists);
@@ -328,7 +334,7 @@ export function MessageAttachments({
             ]}
             wrapperTestID={isUser ? `message-attachment-${index}` : 'generated-image'}
             testID={isUser ? `message-image-${index}` : 'generated-image-content'}
-            onPress={() => onImagePress?.(attachment.uri)}
+            onPress={() => onImagePress?.(resolveMediaUri(attachment.uri))}
           />
         )
       )}

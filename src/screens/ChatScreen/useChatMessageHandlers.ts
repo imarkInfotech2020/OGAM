@@ -19,6 +19,7 @@ import { useWhisperStore } from '../../stores/whisperStore';
 import { whisperService } from '../../services/whisperService';
 import { activeModelService } from '../../services/activeModelService';
 import { ensureWhisperForTranscription } from '../../components/ChatInput/ensureWhisperForTranscription';
+import { resolveDocumentPath } from '../../utils/resolveDocumentPath';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -109,7 +110,19 @@ export async function handleEditMessageFn(genDeps: GenerationDeps, p: EditParams
     .getState()
     .getConversationMessages(p.activeConversationId);
   const recordedKind = recordedTurnKind(messages, p.message.id);
-  p.updateMessageContent(p.activeConversationId, p.message.id, p.newContent);
+  const audioAttachment = p.message.attachments?.find(
+    attachment => attachment.type === 'audio',
+  );
+  if (audioAttachment) {
+    useChatStore.getState().updateMessageTranscription(
+      p.activeConversationId,
+      p.message.id,
+      audioAttachment.id,
+      p.newContent,
+    );
+  } else {
+    p.updateMessageContent(p.activeConversationId, p.message.id, p.newContent);
+  }
   p.deleteMessagesAfter(p.activeConversationId, p.message.id);
   await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: { ...p.message, content: p.newContent }, recordedKind });
 }
@@ -127,7 +140,7 @@ export async function handleTranscribeAgainFn(p: {
   setAlertState: SetState<AlertState>;
 }): Promise<void> {
   if (!p.activeConversationId) return;
-  const path = p.attachment.uri.replace(/^file:\/\//, '');
+  const path = resolveDocumentPath(p.attachment.uri);
   if (!path || !(await RNFS.exists(path).catch(() => false))) {
     p.setAlertState(
       showAlert('Audio unavailable', 'This voice message is no longer on this device.'),
