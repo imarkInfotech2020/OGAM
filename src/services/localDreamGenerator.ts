@@ -1,4 +1,5 @@
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+import RNFS from 'react-native-fs';
 import {
   ImageGenerationParams,
   ImageGenerationProgress,
@@ -6,6 +7,7 @@ import {
 } from '../types';
 import { generateRandomSeed } from '../utils/generateId';
 import logger from '../utils/logger';
+import { resolveOwnedDocumentPath } from '../utils/resolveDocumentPath';
 
 const { LocalDreamModule, CoreMLDiffusionModule } = NativeModules;
 
@@ -230,8 +232,27 @@ class LocalDreamGeneratorService {
     }
   }
 
-  async deleteGeneratedImage(imageId: string): Promise<boolean> {
+  async deleteGeneratedImage(imageId: string, storedImagePath?: string): Promise<boolean> {
     if (!this.isAvailable()) return false;
+
+    if (storedImagePath !== undefined) {
+      const generatedImageDirectory = `${RNFS.DocumentDirectoryPath}/generated_images`;
+      const resolvedPath = resolveOwnedDocumentPath(
+        storedImagePath,
+        generatedImageDirectory,
+      );
+      const expectedPath = `${generatedImageDirectory}/${imageId}.png`;
+      if (
+        !resolvedPath ||
+        resolvedPath !== expectedPath ||
+        !imageId ||
+        imageId.includes('/') ||
+        imageId.includes('\0')
+      ) {
+        return false;
+      }
+    }
+
     return await DiffusionModule.deleteGeneratedImage(imageId);
   }
 

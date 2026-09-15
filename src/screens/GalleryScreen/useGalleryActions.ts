@@ -83,9 +83,14 @@ export const useGalleryActions = (conversationId: string | undefined) => {
   const handleDelete = useCallback((image: GeneratedImage) => {
     const doDelete = async () => {
       setAlertState(hideAlert());
-      await onnxImageGeneratorService.deleteGeneratedImage(image.id);
-      removeGeneratedImage(image.id);
-      if (selectedImage?.id === image.id) setSelectedImage(null);
+      const deleted = await onnxImageGeneratorService.deleteGeneratedImage(
+        image.id,
+        image.imagePath,
+      );
+      if (deleted) {
+        removeGeneratedImage(image.id);
+        if (selectedImage?.id === image.id) setSelectedImage(null);
+      }
     };
     setAlertState(showAlert(
       'Delete Image',
@@ -134,9 +139,13 @@ export const useGalleryActions = (conversationId: string | undefined) => {
           onPress: () => {
             const doDeleteSelected = async () => {
               setAlertState(hideAlert());
-              for (const imageId of selectedIds) {
-                await onnxImageGeneratorService.deleteGeneratedImage(imageId);
-                removeGeneratedImage(imageId);
+              const selectedImages = displayImages.filter(image => selectedIds.has(image.id));
+              for (const image of selectedImages) {
+                const deleted = await onnxImageGeneratorService.deleteGeneratedImage(
+                  image.id,
+                  image.imagePath,
+                );
+                if (deleted) removeGeneratedImage(image.id);
               }
               setSelectedIds(new Set());
               setIsSelectMode(false);
@@ -146,7 +155,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
         },
       ]
     ));
-  }, [selectedIds, removeGeneratedImage]);
+  }, [selectedIds, displayImages, removeGeneratedImage]);
 
   const selectAll = useCallback(() => {
     setSelectedIds(new Set(displayImages.map(img => img.id)));
