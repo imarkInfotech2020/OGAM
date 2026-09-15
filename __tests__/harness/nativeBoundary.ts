@@ -682,16 +682,19 @@ export interface DiffusionFake {
   generationHeld(): boolean;
   /** How many times native cancelGeneration was asked for — the far side of the user's STOP. */
   cancelCount(): number;
+  /** Images returned by the native gallery scan. Their stored path may name an older iOS container. */
+  seedGeneratedImages(images: Array<Record<string, unknown>>): void;
 }
 
 function makeDiffusionFake(
-  seedFile?: (path: string, sizeBytes: number) => void,
+  fs?: NativeFileSystemBoundary,
 ): DiffusionFake {
   const calls: DiffusionFake['calls'] = { generateImage: [] };
   let seedCounter = 0;
   let holdNext = false;
   let held: (() => void) | null = null;
   let cancels = 0;
+  let generatedImages: Array<Record<string, unknown>> = [];
   const module: Record<string, jest.Mock> = {
     isModelLoaded: jest.fn().mockResolvedValue(true),
     getLoadedModelPath: jest.fn().mockResolvedValue(null),
@@ -705,8 +708,15 @@ function makeDiffusionFake(
       held = null;
       return Promise.resolve(true);
     }),
-    getGeneratedImages: jest.fn().mockResolvedValue([]),
-    deleteGeneratedImage: jest.fn().mockResolvedValue(true),
+    getGeneratedImages: jest.fn(async () => generatedImages),
+    deleteGeneratedImage: jest.fn(async (imageId: string) => {
+      if (!fs) return true;
+      const path = `${fs.DocumentDirectoryPath}/generated_images/${imageId}.png`;
+      if (!(await fs.exists(path))) return false;
+      await fs.module.unlink(path);
+      generatedImages = generatedImages.filter(image => image.id !== imageId);
+      return true;
+    }),
     hasOpenCLCache: jest.fn().mockResolvedValue(true),
     clearOpenCLCache: jest.fn().mockResolvedValue(0),
     getConstants: jest.fn().mockReturnValue({
@@ -729,7 +739,7 @@ function makeDiffusionFake(
       const imagePath = `/generated/img-${seedCounter}.png`;
       // The real native module writes the rendered PNG to disk — mirror that so the app's
       // downstream file reads (save-to-gallery, thumbnails) find a real file.
-      seedFile?.(imagePath, 1024);
+      fs?.seedFile(imagePath, 1024);
       // Native renders at exactly the requested size — echo it back so the meta reflects reality.
       return Promise.resolve({
         id: `img-${seedCounter}`,
@@ -754,6 +764,9 @@ function makeDiffusionFake(
     },
     generationHeld: () => held !== null,
     cancelCount: () => cancels,
+    seedGeneratedImages: images => {
+      generatedImages = [...images];
+    },
   };
 }
 
@@ -1068,7 +1081,7 @@ export function installNativeBoundary(opts: InstallOpts = {}): NativeBoundary {
   if (fsFake) jest.doMock('react-native-fs', () => fsFake.module);
 
   // Diffusion writes its rendered PNG to the (memfs) disk when fs is present, like the native module.
-  const diffusion = makeDiffusionFake(fsFake?.seedFile);
+  const diffusion = makeDiffusionFake(fsFake);
 
   // Scriptable llama.rn: override the global stub so completion output is under test control.
   const llamaFake = opts.llama

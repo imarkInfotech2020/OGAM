@@ -6,6 +6,7 @@ import { useAppStore, useChatStore } from '../../stores';
 import { imageGenerationService, onnxImageGeneratorService } from '../../services';
 import type { ImageGenerationState } from '../../services';
 import { GeneratedImage } from '../../types';
+import { resolveDocumentPath } from '../../utils/resolveDocumentPath';
 
 export const formatDate = (dateStr: string): string => {
   const ts = Number(dateStr);
@@ -83,9 +84,14 @@ export const useGalleryActions = (conversationId: string | undefined) => {
   const handleDelete = useCallback((image: GeneratedImage) => {
     const doDelete = async () => {
       setAlertState(hideAlert());
-      await onnxImageGeneratorService.deleteGeneratedImage(image.id);
-      removeGeneratedImage(image.id);
-      if (selectedImage?.id === image.id) setSelectedImage(null);
+      const deleted = await onnxImageGeneratorService.deleteGeneratedImage(
+        image.id,
+        image.imagePath,
+      );
+      if (deleted) {
+        removeGeneratedImage(image.id);
+        if (selectedImage?.id === image.id) setSelectedImage(null);
+      }
     };
     setAlertState(showAlert(
       'Delete Image',
@@ -134,9 +140,13 @@ export const useGalleryActions = (conversationId: string | undefined) => {
           onPress: () => {
             const doDeleteSelected = async () => {
               setAlertState(hideAlert());
-              for (const imageId of selectedIds) {
-                await onnxImageGeneratorService.deleteGeneratedImage(imageId);
-                removeGeneratedImage(imageId);
+              const selectedImages = displayImages.filter(image => selectedIds.has(image.id));
+              for (const image of selectedImages) {
+                const deleted = await onnxImageGeneratorService.deleteGeneratedImage(
+                  image.id,
+                  image.imagePath,
+                );
+                if (deleted) removeGeneratedImage(image.id);
               }
               setSelectedIds(new Set());
               setIsSelectMode(false);
@@ -146,7 +156,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
         },
       ]
     ));
-  }, [selectedIds, removeGeneratedImage]);
+  }, [selectedIds, displayImages, removeGeneratedImage]);
 
   const selectAll = useCallback(() => {
     setSelectedIds(new Set(displayImages.map(img => img.id)));
@@ -154,8 +164,9 @@ export const useGalleryActions = (conversationId: string | undefined) => {
 
   const handleSaveImage = useCallback(async (image: GeneratedImage) => {
     try {
+      const imagePath = resolveDocumentPath(image.imagePath);
       if (Platform.OS === 'ios') {
-        await Share.share({ url: `file://${image.imagePath}` });
+        await Share.share({ url: `file://${imagePath}` });
         return;
       }
       await PermissionsAndroid.request(
@@ -174,7 +185,7 @@ export const useGalleryActions = (conversationId: string | undefined) => {
       }
       const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
       const fileName = `generated_${timestamp}.png`;
-      await RNFS.copyFile(image.imagePath, `${picturesDir}/${fileName}`);
+      await RNFS.copyFile(imagePath, `${picturesDir}/${fileName}`);
       setAlertState(showAlert('Image Saved', `Saved to Pictures/OffgridMobile/${fileName}`));
     } catch (error: any) {
       setAlertState(showAlert('Error', `Failed to save image: ${error?.message || 'Unknown error'}`));
