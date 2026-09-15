@@ -12,6 +12,13 @@ import {
 import type { GenerationDeps } from './useChatGenerationActions';
 import { supersedeSyncedReplies } from '../../services/sync/supersedeSyncedReplies';
 import { useChatStore } from '../../stores/chatStore';
+import { useRemoteServerStore } from '../../stores/remoteServerStore';
+import type { MediaAttachment } from '../../types';
+import RNFS from 'react-native-fs';
+import { useWhisperStore } from '../../stores/whisperStore';
+import { whisperService } from '../../services/whisperService';
+import { activeModelService } from '../../services/activeModelService';
+import { ensureWhisperForTranscription } from '../../components/ChatInput/ensureWhisperForTranscription';
 
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
@@ -105,6 +112,79 @@ export async function handleEditMessageFn(genDeps: GenerationDeps, p: EditParams
   p.updateMessageContent(p.activeConversationId, p.message.id, p.newContent);
   p.deleteMessagesAfter(p.activeConversationId, p.message.id);
   await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: { ...p.message, content: p.newContent }, recordedKind });
+}
+
+export async function handleTranscribeAgainFn(p: {
+  message: Message;
+  attachment: MediaAttachment;
+  activeConversationId: string | null | undefined;
+  updateMessageTranscription: (
+    conversationId: string,
+    messageId: string,
+    attachmentId: string,
+    transcription: string,
+  ) => void;
+  setAlertState: SetState<AlertState>;
+}): Promise<void> {
+  if (!p.activeConversationId) return;
+  const path = p.attachment.uri.replace(/^file:\/\//, '');
+  if (!path || !(await RNFS.exists(path).catch(() => false))) {
+    p.setAlertState(
+      showAlert('Audio unavailable', 'This voice message is no longer on this device.'),
+    );
+    return;
+  }
+
+  try {
+    const remote = useRemoteServerStore
+      .getState()
+      .getActiveRemoteMediaServer('transcription');
+    if (!remote?.mediaModels?.transcription) {
+      const whisper = useWhisperStore.getState();
+      const ready = await ensureWhisperForTranscription({
+        isSelectedModelLoaded: () =>
+          !!whisper.downloadedModelId &&
+          whisperService.getLoadedModelPath() ===
+            whisperService.getModelPath(whisper.downloadedModelId),
+        hasDownloadedModel: () => !!whisper.downloadedModelId,
+        loadWhisper: () => useWhisperStore.getState().loadModel(),
+        freeGenerationModels: () =>
+          activeModelService.unloadAllModels(true).then(() => {}),
+      });
+      if (!ready) {
+        p.setAlertState(
+          showAlert(
+            'Speech model unavailable',
+            'Download a speech model in Models, then try again.',
+          ),
+        );
+        return;
+      }
+    }
+
+    const transcription = (
+      await whisperService.transcribeFile(path, {
+        language: useWhisperStore.getState().transcriptionLanguage,
+      })
+    ).trim();
+    if (!transcription) {
+      p.setAlertState(
+        showAlert('No speech found', 'The audio did not contain clear speech.'),
+      );
+      return;
+    }
+    p.updateMessageTranscription(
+      p.activeConversationId,
+      p.message.id,
+      p.attachment.id,
+      transcription,
+    );
+  } catch (error) {
+    logger.error('[Voice] Failed to transcribe saved message:', error);
+    p.setAlertState(
+      showAlert('Transcription failed', 'The voice message could not be transcribed.'),
+    );
+  }
 }
 
 export function handleDeleteConversationFn(

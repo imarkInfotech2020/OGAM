@@ -21,6 +21,10 @@ type MessageRendererProps = {
   onCopy: (content: string) => void;
   onRetry: (message: Message) => void;
   onEdit: (message: Message, newContent: string) => void;
+  onTranscribeAgain?: (
+    message: Message,
+    attachment: NonNullable<Message['attachments']>[number],
+  ) => Promise<void>;
   onGenerateImage: (prompt: string) => void;
   onImagePress: (uri: string) => void;
 };
@@ -38,6 +42,7 @@ const MessageRendererInner: React.FC<MessageRendererProps> = props => {
     onCopy,
     onRetry,
     onEdit,
+    onTranscribeAgain,
     onGenerateImage,
     onImagePress,
   } = props;
@@ -66,6 +71,7 @@ const MessageRendererInner: React.FC<MessageRendererProps> = props => {
         onCopy={onCopy}
         onRetry={onRetry}
         onEdit={onEdit}
+        onTranscribeAgain={onTranscribeAgain}
         onGenerateImage={onGenerateImage}
         onImagePress={onImagePress}
       />
@@ -103,6 +109,7 @@ const MessageRendererInner: React.FC<MessageRendererProps> = props => {
       onCopy={onCopy}
       onRetry={onRetry}
       onEdit={onEdit}
+      onTranscribeAgain={onTranscribeAgain}
       onGenerateImage={onGenerateImage}
       onImagePress={onImagePress}
       canGenerateImage={imageModelLoaded && !isStreaming && !isGeneratingImage}
