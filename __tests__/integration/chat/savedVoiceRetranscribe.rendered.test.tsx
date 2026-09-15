@@ -15,6 +15,8 @@ import { createAudioAttachment } from '../../utils/factories';
 import { MessageAudioMode } from '../../../pro/audio/ui/MessageAudioMode';
 
 const AUDIO_PATH = '/mock/documents/audio-input/input_saved.wav';
+const STALE_AUDIO_PATH =
+  '/var/mobile/Containers/Data/Application/OLD-CONTAINER/Documents/audio-input/input_saved.wav';
 
 function ReopenedSavedVoiceMessage() {
   const conversationId = useChatStore(state => state.activeConversationId);
@@ -38,7 +40,19 @@ function ReopenedSavedVoiceMessage() {
         showGenerationDetails={false}
         onCopy={() => {}}
         onRetry={() => {}}
-        onEdit={() => {}}
+        onEdit={(targetMessage, newContent) => {
+          const audioAttachment = targetMessage.attachments?.find(
+            attachment => attachment.type === 'audio',
+          );
+          if (conversationId && audioAttachment) {
+            useChatStore.getState().updateMessageTranscription(
+              conversationId,
+              targetMessage.id,
+              audioAttachment.id,
+              newContent,
+            );
+          }
+        }}
         onGenerateImage={() => {}}
         onImagePress={() => {}}
         onTranscribeAgain={(targetMessage, attachment) =>
@@ -92,7 +106,7 @@ describe('saved voice message transcription after reopening chat', () => {
       attachments: [
         createAudioAttachment({
           id: 'saved-audio',
-          uri: `file://${AUDIO_PATH}`,
+          uri: `file://${STALE_AUDIO_PATH}`,
           textContent: 'first transcript',
         }),
       ],
@@ -149,5 +163,37 @@ describe('saved voice message transcription after reopening chat', () => {
     );
     fireEvent.press(reopened.getByText('•••'));
     expect(reopened.queryByTestId('action-transcribe-again')).toBeNull();
+  });
+
+  it('edits a saved voice transcript and keeps it after reopening chat', async () => {
+    const chat = useChatStore.getState();
+    const conversationId = chat.createConversation('saved-voice-model');
+    chat.addMessage(conversationId, {
+      role: 'user',
+      content: 'draw a hose',
+      attachments: [
+        createAudioAttachment({
+          id: 'editable-audio',
+          uri: `file://${STALE_AUDIO_PATH}`,
+          textContent: 'draw a hose',
+        }),
+      ],
+    });
+
+    const firstOpen = render(<ReopenedSavedVoiceMessage />);
+    fireEvent.press(firstOpen.getByText('•••'));
+    fireEvent.press(await firstOpen.findByText('Edit'));
+    const input = await firstOpen.findByPlaceholderText('Enter message...');
+    fireEvent.changeText(input, 'draw a horse');
+    fireEvent.press(firstOpen.getByText('SAVE & RESEND'));
+    fireEvent.press(firstOpen.getByText('Show transcript'));
+    expect(await firstOpen.findByText('draw a horse')).toBeTruthy();
+    firstOpen.unmount();
+
+    chat.setActiveConversation(null);
+    chat.setActiveConversation(conversationId);
+    const reopened = render(<ReopenedSavedVoiceMessage />);
+    fireEvent.press(reopened.getByText('Show transcript'));
+    expect(await reopened.findByText('draw a horse')).toBeTruthy();
   });
 });
