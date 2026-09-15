@@ -111,7 +111,7 @@ function groupSupportingContextWithImage(
 
 const groupedWorkCache = new WeakMap<
   Message,
-  { work: readonly Message[]; item: Message }
+  { work: readonly Message[]; live: boolean; item: Message }
 >();
 
 /** Present the tool records between one user prompt and its answer as one assistant timeline. */
@@ -148,6 +148,7 @@ function groupAssistantTurnWork(
     const cached = groupedWorkCache.get(owner);
     if (
       cached &&
+      cached.live === live &&
       cached.work.length === work.length &&
       cached.work.every((message, index) => message === work[index])
     ) {
@@ -216,7 +217,7 @@ function groupAssistantTurnWork(
         ),
       ],
     };
-    groupedWorkCache.set(owner, { work: [...work], item });
+    groupedWorkCache.set(owner, { work: [...work], live, item });
     grouped.push(item);
     work = [];
   };
