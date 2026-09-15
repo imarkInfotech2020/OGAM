@@ -23,6 +23,7 @@ const groupedImageCache = new WeakMap<
 function isSupportingContextMessage(message: Message): boolean {
   if (message.role !== 'assistant' || message.attachments?.length) return false;
   const inline = splitInlineReasoning(message.content);
+  if (!inline.reasoningLabel) return false;
   return isSupportingChatContext({
     answer: inline.answer,
     reasoning: message.reasoningContent || inline.reasoning,
@@ -60,6 +61,31 @@ function withPendingGeneratedImage(message: Message): Message {
       },
     ],
   };
+}
+
+/** Keep peer reasoning beside a separately labelled inline block instead of choosing one. */
+function exposePeerReasoning(
+  messages: readonly (Message | ChatMessageItem)[],
+): (Message | ChatMessageItem)[] {
+  return messages.flatMap(message => {
+    if (message.role !== 'assistant' || !message.reasoningContent?.trim()) {
+      return [message];
+    }
+    const inline = splitInlineReasoning(message.content);
+    if (!inline.reasoning?.trim() || !inline.reasoningLabel) return [message];
+    if (inline.reasoning.trim() === message.reasoningContent.trim()) {
+      return [{ ...message, reasoningContent: undefined }];
+    }
+    return [
+      {
+        id: `${message.id}:peer-reasoning`,
+        role: 'assistant' as const,
+        content: `<think>${message.reasoningContent}</think>`,
+        timestamp: message.timestamp,
+      },
+      { ...message, reasoningContent: undefined },
+    ];
+  });
 }
 
 /**
@@ -213,10 +239,12 @@ export function getDisplayMessages(
 ): (Message | ChatMessageItem)[] {
   return withRemotePreviews(
     groupSupportingContextWithImage(
-      localDisplayMessages(
-        // The same rule the list rows use, so the thread and its preview never disagree.
-        [...visibleMessages(allMessages, streaming.localDeviceId)],
-        streaming,
+      exposePeerReasoning(
+        localDisplayMessages(
+          // The same rule the list rows use, so the thread and its preview never disagree.
+          [...visibleMessages(allMessages, streaming.localDeviceId)],
+          streaming,
+        ),
       ),
     ),
     streaming.remotePreviews,
@@ -238,7 +266,8 @@ function localDisplayMessages(
   if (
     streaming.isModelLoading &&
     streaming.isGeneratingForThisConversation &&
-    !streamingMessage && !streaming.hasStreamingText
+    !streamingMessage &&
+    !streaming.hasStreamingText
   ) {
     return [
       ...allMessages,
@@ -269,7 +298,9 @@ function localDisplayMessages(
     ];
   }
   if (
-    (streamingMessage || streamingReasoningContent || streaming.hasStreamingText) &&
+    (streamingMessage ||
+      streamingReasoningContent ||
+      streaming.hasStreamingText) &&
     isStreamingForThisConversation
   ) {
     if (_lastDisplayBranch !== 'streaming') {
