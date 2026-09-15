@@ -16,6 +16,46 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 describe('happy — a tool runs and its result renders (heavy entry point)', () => {
+  it('web search shows intentionally escaped entity text literally', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      text: async () => `<html><body>
+        <div class="result-wrapper">
+          <a class="result-title" href="https://example.com/docs?label=&amp;lt;literal&amp;gt;">
+            Escaped &amp;lt;literal&amp;gt; URL
+          </a>
+          <p class="snippet">A result with intentionally escaped URL text.</p>
+        </div>
+      </body></html>`,
+    }) as Response;
+
+    try {
+      const h = await setupChatScreen({ engine: 'litert' });
+      h.enableToolViaUI('web_search');
+      h.render();
+
+      await h.send('find the escaped URL', {
+        toolCalls: [{ name: 'web_search', arguments: { query: 'escaped URL' } }],
+        content: 'I found the result.',
+      });
+
+      await h.rtl.waitFor(() => {
+        expect(h.view!.queryByText(/I found the result\./)).not.toBeNull();
+      });
+      const webResults = h.view!.getAllByTestId(
+        'tool-result-accordion-web_search',
+      );
+      h.rtl.fireEvent.press(
+        webResults[webResults.length - 1],
+      );
+      expect(
+        h.view!.getAllByText('Escaped <literal> URL').length,
+      ).toBeGreaterThan(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('calculator: tool call executes and the answer renders', async () => {
     const h = await setupChatScreen({ engine: 'litert' });
     // Arrive-via-UI: enable the calculator on the real Tools screen (flip its switch), then chat.
