@@ -28,8 +28,21 @@ jest.mock('react-native-zeroconf', () => {
 });
 
 describe('Desktop task card Stop', () => {
+  let stopSync: (() => Promise<void>) | undefined;
+
+  afterEach(async () => {
+    await stopSync?.();
+    stopSync = undefined;
+  });
+
   it('ends the Mobile generation that is waiting for the Desktop task', async () => {
     const h = await setupChatScreen({ engine: 'litert', pro: true });
+    const { syncService } = require('../../../pro/sync/syncService');
+    const { chatStreamService } = require('../../../pro/sync/chatStreamService');
+    stopSync = async () => {
+      await chatStreamService.stop();
+      await syncService.stop();
+    };
     const { TASK_RUN_ENTITY } = require('@offgrid/sync');
     const {
       MobileStateMaterializer,
