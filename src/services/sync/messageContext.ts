@@ -32,6 +32,7 @@ export function serializeMessageContext(
     Message,
     | 'role'
     | 'reasoningContent'
+    | 'timeline'
     | 'toolArtifacts'
     | 'toolCallId'
     | 'toolName'
@@ -42,6 +43,7 @@ export function serializeMessageContext(
 ): string | null {
   return serializeSyncedMessageContext({
     reasoning: message.reasoningContent,
+    timeline: message.timeline,
     // "Model loaded: …" is the app talking, not the model. Only the device that wrote it knows
     // that, so it travels: without it the peer sees a plain assistant turn and draws a bubble,
     // and the same conversation reads differently on each device.

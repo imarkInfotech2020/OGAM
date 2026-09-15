@@ -15,6 +15,11 @@ describe('synced assistant tool timeline', () => {
       content:
         '<think>__LABEL:Enhanced prompt__\nVibrant orange Lamborghini in the desert.</think>\n\nGenerated for: a lamborghini',
       reasoningContent: 'Vibrant orange Lamborghini in the desert.',
+      timeline: [
+        { kind: 'thinking', text: 'Plan the image request.' },
+        { kind: 'tool', toolIndex: 0 },
+        { kind: 'thinking', text: 'Verify the generated result.' },
+      ],
       toolArtifacts: [
         {
           name: 'generate_image',
@@ -42,9 +47,19 @@ describe('synced assistant tool timeline', () => {
     expect(
       within(resultBubble!).getByText('Generated for: a lamborghini'),
     ).toBeTruthy();
+    expect(
+      view
+        .getAllByText(/^(Thought process|Generated image|Enhanced prompt)$/)
+        .map(node => React.Children.toArray(node.props.children).join('')),
+    ).toEqual([
+      'Thought process',
+      'Generated image',
+      'Thought process',
+      'Enhanced prompt',
+    ]);
   });
 
-  it('shows peer thinking, enhanced prompt, image tool, and answer without a new sync field', () => {
+  it('keeps legacy peer rows coherent when no portable timeline is present', () => {
     const materializer = new MobileStateMaterializer();
     useChatStore.getState().clearAllConversations();
     materializer.put('conversation', 'synced-image-chat', {

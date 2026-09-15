@@ -10,6 +10,7 @@ import {
   TASK_LAUNCH_ENTITY,
   TASK_RUN_ENTITY,
   TASK_VISUAL_STEP_ENTITY,
+  serializeSyncedMessageContext,
   taskVisualStepId,
   type DeviceInfo,
   type Materializer,
@@ -218,8 +219,26 @@ describe('Pro mobile state sync journey', () => {
         conversation_id: 'remote-conversation',
         role: 'assistant',
         content: 'The field notes are ready.',
-        context: JSON.stringify({
+        context: serializeSyncedMessageContext({
           reasoning: 'I should confirm the notes before answering.',
+          timeline: [
+            {
+              kind: 'thinking',
+              text: 'I should confirm the notes before searching.',
+            },
+            { kind: 'tool', toolIndex: 0 },
+            {
+              kind: 'thinking',
+              text: 'The search result is enough to answer.',
+            },
+          ],
+          toolCalls: [
+            {
+              name: 'web_search',
+              result: 'The field notes were found.',
+              status: 'completed',
+            },
+          ],
           metrics: { modelName: 'Field Model', decodeTokensPerSecond: 42.5, completionTokens: 128 },
         }),
         created_at: createdAt,
@@ -341,10 +360,14 @@ describe('Pro mobile state sync journey', () => {
     await waitFor(() =>
       expect(ui!.getByText('The field notes are ready.')).toBeTruthy(),
     );
-    expect(ui.getByText('Thought process')).toBeTruthy();
-    fireEvent.press(ui.getByTestId('thinking-block-toggle'));
     expect(
-      ui.getByText('I should confirm the notes before answering.'),
+      ui
+        .getAllByText(/^(Thought process|Web search result)$/)
+        .map(node => React.Children.toArray(node.props.children).join('')),
+    ).toEqual(['Thought process', 'Web search result', 'Thought process']);
+    fireEvent.press(ui.getAllByTestId('thinking-block-toggle')[0]);
+    expect(
+      ui.getByText('I should confirm the notes before searching.'),
     ).toBeTruthy();
     fireEvent.press(ui.getByText('Generation details'));
     expect(ui.getByText('42.5 tok/s')).toBeTruthy();

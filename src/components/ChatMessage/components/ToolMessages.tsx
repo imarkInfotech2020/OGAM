@@ -236,13 +236,15 @@ export const ToolResultMessage: React.FC<{
 
 export const SyncedToolArtifacts: React.FC<{
   message: Message;
+  indexes?: readonly number[];
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
-}> = ({ message, styles, colors }) => {
+}> = ({ message, indexes, styles, colors }) => {
   const TaskToolDetail = useSlot(SLOTS.taskToolDetail);
   return (
     <>
       {message.toolArtifacts?.map((artifact, index) => {
+        if (indexes && !indexes.includes(index)) return null;
         const running = artifact.status === 'running';
         const isTaskTool = isTaskToolName(artifact.name);
         const taskDetail =

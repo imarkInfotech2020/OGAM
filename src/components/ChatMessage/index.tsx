@@ -109,6 +109,54 @@ const ToolCallWithThinking: React.FC<{
   );
 };
 
+const TimelineThinkingBlock: React.FC<{
+  text: string;
+  styles: ReturnType<typeof createStyles>;
+}> = ({ text, styles }) => {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <ThinkingBlock
+      parsedContent={{
+        thinking: text,
+        response: '',
+        isThinkingComplete: true,
+      }}
+      showThinking={expanded}
+      onToggle={() => setExpanded(value => !value)}
+      styles={styles}
+    />
+  );
+};
+
+const SyncedAssistantTimeline: React.FC<{
+  message: Message;
+  styles: ReturnType<typeof createStyles>;
+  colors: ReturnType<typeof useTheme>['colors'];
+}> = ({ message, styles, colors }) => (
+  <>
+    {message.timeline?.map((entry, index) => {
+      if (entry.kind === 'thinking') {
+        return (
+          <TimelineThinkingBlock
+            key={`thinking:${index}`}
+            text={entry.text}
+            styles={styles}
+          />
+        );
+      }
+      return message.toolArtifacts?.[entry.toolIndex] ? (
+        <SyncedToolArtifacts
+          key={`tool:${entry.toolIndex}`}
+          message={message}
+          indexes={[entry.toolIndex]}
+          styles={styles}
+          colors={colors}
+        />
+      ) : null;
+    })}
+  </>
+);
+
 // The rendered message bubble (attachments + content + tool row + meta). Split out of
 // ChatMessage so its per-section conditionals don't inflate ChatMessage's complexity.
 interface MessageBubbleProps {
@@ -163,6 +211,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const hasImageAttachment = Boolean(
     message.attachments?.some(attachment => attachment.type === 'image'),
   );
+  const timelineHasThinking = Boolean(
+    message.timeline?.some(entry => entry.kind === 'thinking'),
+  );
+  const timelineHasTools = Boolean(
+    message.timeline?.some(entry => entry.kind === 'tool'),
+  );
   return (
     <TouchableOpacity
       testID={isUser ? 'user-message' : 'assistant-message'}
@@ -177,7 +231,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       {!isUser &&
         !!message.toolArtifacts?.length &&
         !!parsedContent.thinking &&
-        !parsedContent.thinkingLabel && (
+        !parsedContent.thinkingLabel &&
+        !timelineHasThinking && (
           <View style={styles.toolCallReplyContent}>
             <ThinkingBlock
               parsedContent={parsedContent}
@@ -188,7 +243,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           </View>
         )}
 
-      {!isUser && !!message.toolArtifacts?.length && (
+      {!isUser && !!message.timeline?.length && (
+        <View style={styles.toolCallReplyContent}>
+          <SyncedAssistantTimeline
+            message={message}
+            styles={styles}
+            colors={colors}
+          />
+        </View>
+      )}
+
+      {!isUser && !!message.toolArtifacts?.length && !timelineHasTools && (
         <View style={styles.toolCallReplyContent}>
           <SyncedToolArtifacts
             message={message}
