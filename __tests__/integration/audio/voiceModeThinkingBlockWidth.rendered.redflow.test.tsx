@@ -72,6 +72,7 @@ describe('T086 (rendered) — voice-mode thinking block matches voice-note bubbl
       expect(node).not.toBeNull();
       return node!;
     }, { timeout: 8000 });
+    expect(h.rtl.within(audioBubble).getByTestId('thinking-block')).toBeTruthy();
 
     // The voice-note bubble's rendered width + alignment (the shape the thinking block must match).
     const bubbleStyle = flatStyle(audioBubble as never);
