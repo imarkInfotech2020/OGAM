@@ -8,6 +8,7 @@ interface ThinkingBlockProps {
   showThinking: boolean;
   onToggle: () => void;
   styles: any;
+  embedded?: boolean;
 }
 
 export function ThinkingBlock({
@@ -15,9 +16,16 @@ export function ThinkingBlock({
   showThinking,
   onToggle,
   styles,
+  embedded = false,
 }: Readonly<ThinkingBlockProps>) {
   return (
-    <View testID="thinking-block" style={styles.thinkingBlock}>
+    <View
+      testID="thinking-block"
+      style={[
+        styles.thinkingBlock,
+        embedded && styles.embeddedThinkingBlock,
+      ]}
+    >
       <TouchableOpacity
         testID="thinking-block-toggle"
         style={styles.thinkingHeader}

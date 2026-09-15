@@ -160,6 +160,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onLongPress,
   onMenuOpen,
 }) => {
+  const hasImageAttachment = Boolean(
+    message.attachments?.some(attachment => attachment.type === 'image'),
+  );
   return (
     <TouchableOpacity
       testID={isUser ? 'user-message' : 'assistant-message'}
@@ -198,7 +201,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       {!isUser &&
         !!message.toolArtifacts?.length &&
         !!parsedContent.thinking &&
-        !!parsedContent.thinkingLabel && (
+        !!parsedContent.thinkingLabel &&
+        !hasImageAttachment && (
           <View style={styles.toolCallReplyContent}>
             <ThinkingBlock
               parsedContent={parsedContent}
@@ -216,12 +220,27 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           testID={message.isThinking ? undefined : 'message-bubble'}
           style={message.isThinking ? undefined : bubbleStyle}
         >
+          {!isUser &&
+            hasImageAttachment &&
+            !!message.toolArtifacts?.length &&
+            !!parsedContent.thinking &&
+            !!parsedContent.thinkingLabel && (
+              <ThinkingBlock
+                parsedContent={parsedContent}
+                showThinking={showThinking}
+                onToggle={onToggleThinking}
+                styles={styles}
+                embedded
+              />
+            )}
+
           {!!supportingContextParsedContent?.thinking && (
             <ThinkingBlock
               parsedContent={supportingContextParsedContent}
               showThinking={showSupportingContext}
               onToggle={onToggleSupportingContext}
               styles={styles}
+              embedded
             />
           )}
 

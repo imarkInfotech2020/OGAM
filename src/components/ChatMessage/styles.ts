@@ -273,6 +273,14 @@ const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     marginBottom: 8,
     width: '100%' as const,
   },
+  embeddedThinkingBlock: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderRadius: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+  },
   /** Full-width ThinkingBlock when rendered outside a message bubble (e.g. ToolCallWithThinking).
    *  Uses alignSelf:'stretch' (NOT a percentage width) because the parent systemInfoContainer
    *  centers its children (alignItems:'center'); a percentage width + alignSelf there fails to

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, within } from '@testing-library/react-native';
 import { ChatMessage } from '../../../src/components/ChatMessage';
 import { getDisplayMessages } from '../../../src/screens/ChatScreen/types';
 import { useChatStore } from '../../../src/stores/chatStore';
@@ -9,6 +9,41 @@ import { MessageAudioMode } from '../../../pro/audio/ui/MessageAudioMode';
 import { createGenerationMeta, createMessage } from '../../utils/factories';
 
 describe('synced assistant tool timeline', () => {
+  it('keeps an inline enhanced prompt and completed image in one result bubble', () => {
+    const message = createMessage({
+      role: 'assistant',
+      content:
+        '<think>__LABEL:Enhanced prompt__\nVibrant orange Lamborghini in the desert.</think>\n\nGenerated for: a lamborghini',
+      reasoningContent: 'Vibrant orange Lamborghini in the desert.',
+      toolArtifacts: [
+        {
+          name: 'generate_image',
+          result: 'Image generation started - it will appear in the chat.',
+          status: 'completed',
+        },
+      ],
+      attachments: [
+        {
+          id: 'lamborghini-image',
+          type: 'image',
+          uri: 'file:///tmp/lamborghini.png',
+          width: 768,
+          height: 768,
+        },
+      ],
+    });
+    const view = render(<ChatMessage message={message} />);
+    const resultBubble = view
+      .getAllByTestId('message-bubble')
+      .find(bubble => within(bubble).queryByText('Enhanced prompt'));
+
+    expect(resultBubble).toBeTruthy();
+    expect(within(resultBubble!).getByTestId('generated-image')).toBeTruthy();
+    expect(
+      within(resultBubble!).getByText('Generated for: a lamborghini'),
+    ).toBeTruthy();
+  });
+
   it('shows peer thinking, enhanced prompt, image tool, and answer without a new sync field', () => {
     const materializer = new MobileStateMaterializer();
     useChatStore.getState().clearAllConversations();
@@ -86,6 +121,11 @@ describe('synced assistant tool timeline', () => {
     expect(view.getAllByText('Enhanced prompt')).toHaveLength(1);
     expect(view.getAllByText('Generated image')).toHaveLength(1);
     expect(view.getByText('Generated image for: a horse')).toBeTruthy();
+    const resultBubble = view
+      .getAllByTestId('message-bubble')
+      .find(bubble => within(bubble).queryByText('Enhanced prompt'));
+    expect(resultBubble).toBeTruthy();
+    expect(within(resultBubble!).getByTestId('message-attachments')).toBeTruthy();
 
     view.unmount();
     const voiceView = render(
