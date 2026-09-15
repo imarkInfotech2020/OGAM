@@ -277,6 +277,7 @@ const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     backgroundColor: 'transparent',
     borderWidth: 0,
     borderRadius: 0,
+    boxShadow: 'none',
     shadowOpacity: 0,
     shadowRadius: 0,
     elevation: 0,
