@@ -215,6 +215,9 @@ export const AppSheet: React.FC<AppSheetProps> = ({
 
   // Track whether we should animate on next onShow
   const pendingAnimateIn = useRef(false);
+  const pendingAnimationFrame = useRef<ReturnType<
+    typeof requestAnimationFrame
+  > | null>(null);
 
   const animateInIfPending = useCallback(() => {
     if (!pendingAnimateIn.current) return;
@@ -225,8 +228,23 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   const showModal = useCallback(() => {
     setModalVisible(true);
     // Modal.onShow is not guaranteed when a transparent modal is reused.
-    requestAnimationFrame(animateInIfPending);
+    if (pendingAnimationFrame.current !== null) {
+      cancelAnimationFrame(pendingAnimationFrame.current);
+    }
+    pendingAnimationFrame.current = requestAnimationFrame(() => {
+      pendingAnimationFrame.current = null;
+      animateInIfPending();
+    });
   }, [animateInIfPending]);
+
+  useEffect(
+    () => () => {
+      if (pendingAnimationFrame.current !== null) {
+        cancelAnimationFrame(pendingAnimationFrame.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (visible) {
