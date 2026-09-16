@@ -264,10 +264,12 @@ export const ChatsListScreen: React.FC = () => {
             <View style={styles.headerActions}>
               {conversations.length > 0 ? (
                 <Button
-                  title="Select"
+                  title=""
+                  accessibilityLabel="Select chats"
                   variant="secondary"
                   size="small"
                   onPress={() => setSelecting(true)}
+                  icon={<Icon name="check-square" size={16} color={colors.text} />}
                 />
               ) : null}
               <Button
@@ -340,22 +342,21 @@ export const ChatsListScreen: React.FC = () => {
                 variant="ghost"
                 size="small"
                 onPress={() => {
-                  setSelectedIds(current => {
-                    const next = new Set(current);
-                    for (const conversation of visibleConversations) {
-                      if (allVisibleSelected) next.delete(conversation.id);
-                      else next.add(conversation.id);
-                    }
-                    return next;
-                  });
+                  setSelectedIds(
+                    allVisibleSelected
+                      ? new Set()
+                      : new Set(visibleConversations.map(conversation => conversation.id)),
+                  );
                 }}
               />
               <Button
-                title="Delete"
+                title=""
+                accessibilityLabel="Delete selected chats"
                 variant="danger"
                 size="small"
                 disabled={selectedIds.size === 0}
                 onPress={handleBulkDelete}
+                icon={<Icon name="trash-2" size={16} color={colors.error} />}
               />
             </View>
           ) : null}

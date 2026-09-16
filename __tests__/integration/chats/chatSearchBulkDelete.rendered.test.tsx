@@ -1,6 +1,6 @@
 /**
- * The real chat store hydrates two conversations from the native persistence boundary.
- * The user searches, selects the visible chats, and confirms one bulk delete through the real UI.
+ * The real chat store hydrates thirteen conversations from the native persistence boundary.
+ * The user searches, selects all visible chats, and confirms one bulk delete through the real UI.
  */
 import {
   installNativeBoundary,
@@ -19,46 +19,35 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 describe('Chats list search and bulk delete', () => {
-  it('finds chat content and deletes the selected chats together', async () => {
+  it('selects and deletes only the chats in the filtered list', async () => {
     installNativeBoundary({ fs: true });
     const AsyncStorage = require('@react-native-async-storage/async-storage');
     await AsyncStorage.clear();
+    const conversations = Array.from({ length: 13 }, (_, index) => {
+      const position = index + 1;
+      const updatedAt = new Date(Date.parse('2026-09-15T12:00:00.000Z') - index * 60_000).toISOString();
+      const isAurora = index !== 2;
+      return {
+        id: `chat-${position}`,
+        title: isAurora ? `Aurora notes ${position}` : 'Cedar notes',
+        modelId: 'local-model',
+        messages: [
+          {
+            id: `message-${position}`,
+            role: 'user',
+            content: isAurora ? 'Plan the aurora launch' : 'Review the cedar budget',
+            timestamp: Date.parse(updatedAt),
+          },
+        ],
+        createdAt: updatedAt,
+        updatedAt,
+      };
+    });
     await AsyncStorage.setItem(
       'local-llm-chat-storage',
       JSON.stringify({
         state: {
-          conversations: [
-            {
-              id: 'aurora-chat',
-              title: 'Launch notes',
-              modelId: 'local-model',
-              messages: [
-                {
-                  id: 'aurora-message',
-                  role: 'user',
-                  content: 'Plan the aurora launch',
-                  timestamp: Date.parse('2026-09-15T10:00:00.000Z'),
-                },
-              ],
-              createdAt: '2026-09-15T10:00:00.000Z',
-              updatedAt: '2026-09-15T10:00:00.000Z',
-            },
-            {
-              id: 'cedar-chat',
-              title: 'Budget notes',
-              modelId: 'local-model',
-              messages: [
-                {
-                  id: 'cedar-message',
-                  role: 'user',
-                  content: 'Review the cedar budget',
-                  timestamp: Date.parse('2026-09-15T09:00:00.000Z'),
-                },
-              ],
-              createdAt: '2026-09-15T09:00:00.000Z',
-              updatedAt: '2026-09-15T09:00:00.000Z',
-            },
-          ],
+          conversations,
           activeConversationId: null,
         },
         version: 2,
@@ -72,24 +61,29 @@ describe('Chats list search and bulk delete', () => {
     const { ChatsListScreen } = require('../../../src/screens/ChatsListScreen');
     const chats = rtl.render(React.createElement(ChatsListScreen));
 
-    rtl.fireEvent.changeText(chats.getByTestId('chat-search-input'), 'aurora');
-    expect(chats.getByText('Launch notes')).toBeTruthy();
-    expect(chats.queryByText('Budget notes')).toBeNull();
+    rtl.fireEvent.press(chats.getByLabelText('Select chats'));
+    rtl.fireEvent.press(chats.getByTestId('conversation-item-2'));
+    expect(chats.getByText('1 selected')).toBeTruthy();
 
-    rtl.fireEvent.press(chats.getByLabelText('Clear chat search'));
-    rtl.fireEvent.press(chats.getByText('Select'));
+    rtl.fireEvent.changeText(chats.getByTestId('chat-search-input'), 'aurora');
+    expect(chats.getByText('Aurora notes 1')).toBeTruthy();
+    expect(chats.queryByText('Cedar notes')).toBeNull();
+
     rtl.fireEvent.press(chats.getByText('Select all'));
+    expect(chats.getByText('12 selected')).toBeTruthy();
+    rtl.fireEvent.press(chats.getByText('Clear'));
+    rtl.fireEvent.press(chats.getByTestId('conversation-item-0'));
+    rtl.fireEvent.press(chats.getByTestId('conversation-item-1'));
     expect(chats.getByText('2 selected')).toBeTruthy();
 
-    rtl.fireEvent.press(chats.getByText('Delete'));
+    rtl.fireEvent.press(chats.getByLabelText('Delete selected chats'));
     expect(chats.getByText('Delete Chats')).toBeTruthy();
     await rtl.act(() => new Promise(resolve => setTimeout(resolve, 350)));
-    const deleteButtons = chats.getAllByText('Delete');
-    rtl.fireEvent.press(deleteButtons[deleteButtons.length - 1]!);
+    rtl.fireEvent.press(chats.getByText('Delete'));
 
-    await rtl.waitFor(() =>
-      expect(chats.getByText('No Chats Yet')).toBeTruthy(),
-    );
+    await rtl.waitFor(() => expect(chats.queryByText('Aurora notes 1')).toBeNull());
+    rtl.fireEvent.press(chats.getByLabelText('Clear chat search'));
+    expect(chats.getByText('Cedar notes')).toBeTruthy();
     await rtl.act(() => new Promise(resolve => setTimeout(resolve, 250)));
   });
 });
