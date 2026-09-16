@@ -25,10 +25,12 @@ describe('Q2 (behavioral) — unquoted-key tool call renders no result bubble', 
     // The model emits its visible reply "Calculating." plus a tool call with an UNQUOTED key in arguments.
     await h.send('what is 2 + 2', { text: 'Calculating. <tool_call>{"name": "calculator", "arguments": {expression: "2+2"}}</tool_call>' });
 
-    // Wait on a USER-VISIBLE signal that the turn finished: the model's reply text "Calculating." appears on
-    // screen. (We can't "wait for absence"; we wait for the turn to complete, then assert the tool bubble.)
-    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Calculating\./)).not.toBeNull(); });
+    // Wait on the completed work control, then inspect the tool result it contains.
+    await h.rtl.waitFor(() => {
+      expect(h.view!.getByTestId('assistant-work-toggle').props.accessibilityLabel).toBe('Work done');
+    });
     await h.settle(); // let the tool loop finish after the visible reply
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
     // Correct: the calculator ran, so its result bubble is shown. Today the unquoted-key call is dropped by
     // the parser → the tool never runs → no tool-result bubble → RED. (A quoted key DOES render it — the
     // falsification control confirms this same assertion passes when the key is quoted.)

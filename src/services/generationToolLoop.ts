@@ -369,9 +369,17 @@ function getLastUserQuery(messages: Message[]): string {
  * handler behave identically: success/empty/error all become a typed result whose
  * model-facing string (toolResultModelContent) explicitly states failure/empty.
  */
-async function executeToolCallSafely(tc: ToolCall): Promise<ToolResult> {
+async function executeToolCallSafely(
+  tc: ToolCall,
+  enabledBuiltInToolIds: readonly string[] = [],
+): Promise<ToolResult> {
+  const builtInOwnsCall = getToolsAsOpenAISchema(enabledBuiltInToolIds).some(
+    schema => schema.function.name === tc.name,
+  );
   const exts = getToolExtensions();
-  const ext = exts.find(e => e.canHandle(tc.name));
+  const ext = builtInOwnsCall
+    ? undefined
+    : exts.find(e => e.canHandle(tc.name));
   const start = Date.now();
   try {
     const raw = ext ? await ext.execute(tc) : await executeToolCall(tc);
@@ -416,7 +424,7 @@ async function executeToolCalls(
       ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
     };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
-    const result = await executeToolCallSafely(tc);
+    const result = await executeToolCallSafely(tc, ctx.enabledToolIds);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
     const settings = useAppStore.getState().settings;
     const resultBudget = toolResultCharBudget({
@@ -482,7 +490,11 @@ function remoteGenerateOnce(
     thinkingEnabled: boolean;
     onStream?: (data: StreamToken) => void;
   },
-): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+): Promise<{
+  fullResponse: string;
+  toolCalls: ToolCall[];
+  reasoningDetails?: Array<Record<string, unknown>>;
+}> {
   const { messages, tools, thinkingEnabled, onStream } = args;
   const settings = useAppStore.getState().settings;
   const options: GenerationOptions = {
@@ -518,7 +530,11 @@ function remoteGenerateOnce(
                 : tc.arguments,
           }));
         }
-        resolve({ fullResponse: result.content, toolCalls });
+        resolve({
+          fullResponse: result.content,
+          toolCalls,
+          reasoningDetails: result.reasoningDetails,
+        });
       },
       onError: (error: Error) => {
         logger.error(`[ToolLoop] onError — ${error.message}`);
@@ -534,16 +550,20 @@ async function callRemoteLLMWithTools(
   messages: Message[],
   tools: any[],
   opts?: { onStream?: (data: StreamToken) => void; disableThinking?: boolean },
-): Promise<{ fullResponse: string; toolCalls: ToolCall[] }> {
+): Promise<{
+  fullResponse: string;
+  toolCalls: ToolCall[];
+  reasoningDetails?: Array<Record<string, unknown>>;
+}> {
   const activeServerId = useRemoteServerStore.getState().activeServerId;
   if (!activeServerId) throw new Error('No remote provider active');
   const provider = providerRegistry.getProvider(activeServerId);
   if (!provider) throw new Error('Remote provider not found');
   const settings = useAppStore.getState().settings;
   const thinkingEnabled =
-    !opts?.disableThinking &&
-    settings.thinkingEnabled &&
-    provider.capabilities.supportsThinking;
+    provider.capabilities.supportsThinking &&
+    (provider.capabilities.thinkingLevelsOnly ||
+      (!opts?.disableThinking && settings.thinkingEnabled));
   try {
     return await remoteGenerateOnce(provider, {
       messages,
@@ -721,7 +741,7 @@ function buildLiteRTToolCallHandler(
     // the model (toolResultModelContent) is never empty — a failure/empty is stated
     // explicitly rather than sent as "" or a bare "Error: ...", so the model can't
     // mistake it for a successful answer.
-    const result = await executeToolCallSafely(toolCall);
+    const result = await executeToolCallSafely(toolCall, ctx.enabledToolIds);
     ctx.callbacks?.onToolCallComplete?.(name, result);
     const settings = useAppStore.getState().settings;
     const resultBudget = toolResultCharBudget({
@@ -839,14 +859,9 @@ async function callLiteRTForLoop(
         completedToolResults: outcome.results,
       };
     }
-    // Native SDK handles all tool→model cycles internally; toolCalls always empty here.
-    // If the model ran a tool but then produced NO final answer, surface the fetched
-    // data instead of discarding it (the user would otherwise see a blank / "(No
-    // response)" turn — Q5). The tool result is the honest answer the model failed to
-    // phrase; better a visible result than a dead end.
-    if (!fullResponse.trim() && outcome.results.length > 0) {
-      return { fullResponse: outcome.results.join('\n\n'), toolCalls: [] };
-    }
+    // Native SDK handles all tool→model cycles internally; toolCalls always empty here. Keep an
+    // empty final response empty: completed tool output already has a visible owner in the Work
+    // timeline and must not also be presented as if it were the model's answer.
     return { fullResponse, toolCalls: [] };
   } catch (e: any) {
     if (outcome.limitReached) {
@@ -1041,6 +1056,7 @@ async function callLLMWithRetry(
   toolStepLimitReached?: boolean;
   completedToolMessages?: Message[];
   completedToolResults?: string[];
+  reasoningDetails?: Array<Record<string, unknown>>;
 }> {
   // Append tool-use behavioral guidance to the system prompt when tools are present.
   // Only covers the "when and how" — schemas are injected separately by each engine.
@@ -1238,7 +1254,7 @@ async function emitToolLimitFinalAnswer(
   emitFinalResponse(
     ctx,
     state,
-    finalResponseFromToolResults(displayResponse, state.successfulToolResults),
+    displayResponse,
   );
   return { interrupted: false };
 }
@@ -1260,7 +1276,18 @@ async function selectEffectiveSchemas(
   builtInSchemas: any[],
   extSchemas: any[],
 ): Promise<any[]> {
-  const all = [...builtInSchemas, ...extSchemas];
+  const toolNames = new Set(
+    builtInSchemas
+      .map(schema => schema?.function?.name)
+      .filter((name): name is string => typeof name === 'string' && name.length > 0),
+  );
+  const uniqueExtSchemas = extSchemas.filter(schema => {
+    const name = schema?.function?.name;
+    if (typeof name !== 'string' || !name || toolNames.has(name)) return false;
+    toolNames.add(name);
+    return true;
+  });
+  const all = [...builtInSchemas, ...uniqueExtSchemas];
   const litertActive = isLiteRTActive();
   const llamaIosNative =
     !litertActive && Platform.OS === 'ios' && llmService.supportsToolCalling();
@@ -1273,16 +1300,16 @@ async function selectEffectiveSchemas(
   if (
     !usingRemote &&
     isMcpEnabled() &&
-    extSchemas.length > 0 &&
+    uniqueExtSchemas.length > 0 &&
     all.length > TOOL_SELECTION_THRESHOLD
   ) {
     try {
       const selected = await selectToolsByEmbedding(
         getLastUserQuery(ctx.messages),
-        extSchemas,
+        uniqueExtSchemas,
         MCP_TOOL_ROUTE_TOPK,
       );
-      const shortlist = extSchemas.filter(s =>
+      const shortlist = uniqueExtSchemas.filter(s =>
         selected.includes(s.function.name),
       );
       if (litertActive || llamaIosNative) {
@@ -1317,7 +1344,7 @@ async function selectEffectiveSchemas(
   const shouldRoute =
     !usingRemote &&
     (litertActive || llamaIosNative) &&
-    extSchemas.length > 0 &&
+    uniqueExtSchemas.length > 0 &&
     all.length > TOOL_SELECTION_THRESHOLD;
   if (!shouldRoute) return all;
 
@@ -1329,14 +1356,14 @@ async function selectEffectiveSchemas(
     // Route over the MCP/ext tools only — built-in tools are always kept.
     const selected = await selectRelevantTools(
       getLastUserQuery(ctx.messages),
-      extSchemas,
+      uniqueExtSchemas,
       generate,
     );
     if (!selected || selected.length === 0) {
       // No MCP tool named (router said "none" OR just didn't name one) → built-in only.
       return builtInSchemas;
     }
-    const filteredExt = extSchemas.filter(s =>
+    const filteredExt = uniqueExtSchemas.filter(s =>
       selected.includes(s.function.name),
     );
     return [...builtInSchemas, ...filteredExt];
@@ -1401,19 +1428,64 @@ export async function runToolLoop(
     state.reasoningContent = '';
 
     const onStream = buildStreamHandler(ctx, state);
+    let completion;
+    try {
+      completion = await callLLMWithRetry(loopMessages, effectiveSchemas, {
+        onStream,
+        forceRemote: ctx.forceRemote,
+        conversationId: ctx.conversationId,
+        ctx,
+      });
+    } catch (error) {
+      const corruptedSignature =
+        error instanceof Error &&
+        error.message.toLowerCase().includes('corrupted thought signature');
+      if (!corruptedSignature || state.successfulToolResults.length === 0) {
+        throw error;
+      }
+      logger.warn(
+        '[ToolLoop] Signed reasoning chain was rejected; synthesizing from completed tool results',
+      );
+      ctx.onStreamReset?.();
+      state.streamedContent = '';
+      state.reasoningContent = '';
+      state.firstTokenFired = false;
+      const recoveryMessages: Message[] = [
+        ...ctx.messages,
+        {
+          id: `signature-recovery-${Date.now()}`,
+          role: 'user',
+          content:
+            'Answer the original request using only these completed tool results. Do not call more tools.\n\n' +
+            finalResponseFromToolResults('', state.successfulToolResults),
+          timestamp: Date.now(),
+        },
+      ];
+      const recovered = await callLLMWithRetry(recoveryMessages, [], {
+        onStream: buildStreamHandler(ctx, state),
+        forceRemote: ctx.forceRemote,
+        conversationId: ctx.conversationId,
+        finalAnswerOnly: true,
+      });
+      if (recovered.interrupted || ctx.isAborted()) {
+        return { interrupted: true };
+      }
+      emitFinalResponse(
+        ctx,
+        state,
+        resolveToolCalls(recovered.fullResponse, []).displayResponse,
+      );
+      return { interrupted: false };
+    }
     const {
       fullResponse,
       toolCalls,
+      reasoningDetails,
       interrupted,
       toolStepLimitReached,
       completedToolMessages,
       completedToolResults,
-    } = await callLLMWithRetry(loopMessages, effectiveSchemas, {
-      onStream,
-      forceRemote: ctx.forceRemote,
-      conversationId: ctx.conversationId,
-      ctx,
-    });
+    } = completion;
 
     // A user STOP landing mid-completion returns `interrupted` — the turn is OVER. Before this
     // guard, the interrupted (usually empty) result fell into the no-tools fallback below and
@@ -1475,10 +1547,7 @@ export async function runToolLoop(
         emitFinalResponse(
           ctx,
           state,
-          finalResponseFromToolResults(
-            fallbackResp,
-            state.successfulToolResults,
-          ),
+          fallbackResp,
         );
         return { interrupted: false };
       }
@@ -1511,7 +1580,10 @@ export async function runToolLoop(
         arguments: JSON.stringify(tc.arguments),
       })),
     };
-    loopMessages.push(assistantMsg);
+    loopMessages.push({
+      ...assistantMsg,
+      ...(reasoningDetails?.length ? { reasoningDetails } : {}),
+    });
     chatStore.addMessage(ctx.conversationId, assistantMsg);
 
     totalToolCalls += await executeToolCalls(ctx, {

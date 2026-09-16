@@ -12,7 +12,7 @@
  * wiring bug between stream → store → render; this can.
  */
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { ChatMessage } from '../../../src/components/ChatMessage';
 import { REASONING_DELIMITERS } from '../../../src/utils/messageContent';
@@ -56,10 +56,11 @@ describe('reasoning pipeline — stream → finalize → render, real seams', ()
         expect(msg.content).not.toContain(open.trim());
         expect(msg.content).not.toContain(close.trim());
 
-        const { getByText, queryByText } = render(
+        const { getByText, getByTestId, queryByText } = render(
           <ChatMessage message={msg} />,
         );
         expect(getByText(ANSWER)).toBeTruthy(); // clean answer is visible
+        fireEvent.press(getByTestId('assistant-work-toggle'));
         expect(getByText(new RegExp(REASONING.slice(0, 20)))).toBeTruthy(); // reasoning survived into the block
         expect(
           queryByText(

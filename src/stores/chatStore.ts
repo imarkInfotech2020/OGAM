@@ -128,6 +128,7 @@ export interface ChatState extends ChatMessageMutationActions {
     conversationId: string,
     generationTimeMs?: number,
     generationMeta?: GenerationMeta,
+    turnStatus?: Message['turnStatus'],
   ) => void;
   clearStreamingMessage: () => void;
   getStreamingState: () => StreamingSnapshot;
@@ -385,6 +386,7 @@ export const useChatStore = create<ChatState>()(
         conversationId,
         generationTimeMs,
         generationMeta,
+        turnStatus,
       ) => {
         const {
           streamingMessage,
@@ -394,12 +396,17 @@ export const useChatStore = create<ChatState>()(
           addMessage,
         } = get();
 
-        const { persisted, content, reasoningContent } = finalizeStreamedReply({
+        const finalized = finalizeStreamedReply({
           streamingMessage,
           streamingReasoningContent,
           streamingForConversationId,
           conversationId,
         });
+        const { content, reasoningContent } = finalized;
+        const persisted =
+          finalized.persisted ||
+          ((turnStatus === 'failed' || turnStatus === 'cancelled') &&
+            streamingForConversationId === conversationId);
         // End the ephemeral reply before the durable mutation leaves this device. Both use the same
         // peer link. This order guarantees a receiver sees the final stream frame first and then the
         // record that replaces it, never the reverse order that could recreate a retired preview.
@@ -411,6 +418,7 @@ export const useChatStore = create<ChatState>()(
             reasoningContent,
             generationTimeMs,
             generationMeta,
+            turnStatus,
             // The SAME id the live frames carried. `createPersistedMessage` keeps a supplied uuid, so
             // the reply is stored under the identity its peers have already seen.
             ...(streamingMessageUuid ? { uuid: streamingMessageUuid } : {}),

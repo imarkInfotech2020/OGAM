@@ -31,6 +31,15 @@ function isSupportingContextMessage(message: Message): boolean {
   });
 }
 
+function isReasoningOnlyMessage(message: Message): boolean {
+  if (message.role !== 'assistant' || message.attachments?.length) return false;
+  const inline = splitInlineReasoning(message.content);
+  return Boolean(
+    (message.reasoningContent || inline.reasoning || '').trim() &&
+      !inline.answer.trim(),
+  );
+}
+
 function hasImageAttachment(message: Message): boolean {
   return (
     message.role === 'assistant' &&
@@ -97,6 +106,183 @@ function groupSupportingContextWithImage(
     }
     grouped.push(message);
   }
+  return grouped;
+}
+
+const groupedWorkCache = new WeakMap<
+  Message,
+  { work: readonly Message[]; live: boolean; item: Message }
+>();
+
+/** Present the tool records between one user prompt and its answer as one assistant timeline. */
+function groupAssistantTurnWork(
+  messages: readonly (Message | ChatMessageItem)[],
+  live: boolean,
+): (Message | ChatMessageItem)[] {
+  const grouped: (Message | ChatMessageItem)[] = [];
+  let work: Message[] = [];
+  const flush = (final?: Message | ChatMessageItem) => {
+    if (!work.length) {
+      if (final) grouped.push(final);
+      return;
+    }
+    const response =
+      final ??
+      [...work]
+        .reverse()
+        .find(
+          message =>
+            message.role === 'assistant' &&
+            !isSupportingContextMessage(message) &&
+            Boolean(message.content.trim() || message.attachments?.length),
+        );
+    const terminal = [...work]
+      .reverse()
+      .find(
+        message =>
+          message.role === 'assistant' &&
+          (message.turnStatus === 'failed' ||
+            message.turnStatus === 'cancelled'),
+      );
+    if (!response && !terminal && !live) {
+      grouped.push(...work);
+      work = [];
+      return;
+    }
+    const owner = response ?? terminal ?? {
+      ...work.at(-1)!,
+      role: 'assistant' as const,
+      content: '',
+    };
+    const supportingContext =
+      (response as ChatMessageItem | undefined)?.supportingContext ??
+      work.find(isSupportingContextMessage);
+    const cached = groupedWorkCache.get(owner);
+    if (
+      cached &&
+      cached.live === live &&
+      cached.work.length === work.length &&
+      cached.work.every((message, index) => message === work[index])
+    ) {
+      grouped.push(cached.item);
+      work = [];
+      return;
+    }
+    const artifacts: NonNullable<Message['toolArtifacts']> = [];
+    const timeline: NonNullable<Message['timeline']> = [];
+    const artifactByCallId = new Map<string, number>();
+    for (const message of work) {
+      if (message.role === 'assistant') {
+        const inline = splitInlineReasoning(message.content);
+        const reasoning = message.reasoningContent || inline.reasoning || '';
+        if (
+          message !== supportingContext &&
+          reasoning.trim() &&
+          !message.timeline?.some(entry => entry.kind === 'thinking')
+        ) {
+          timeline.push({ kind: 'thinking', text: reasoning });
+        }
+        for (const call of message.toolCalls ?? []) {
+          const toolIndex = artifacts.length;
+          artifacts.push({
+            id: call.id,
+            name: call.name,
+            arguments: call.arguments,
+            result: '',
+            status: live ? 'running' : 'completed',
+          });
+          if (call.id) artifactByCallId.set(call.id, toolIndex);
+          timeline.push({ kind: 'tool', toolIndex });
+        }
+        continue;
+      }
+      const matchingIndex = message.toolCallId
+        ? artifactByCallId.get(message.toolCallId)
+        : undefined;
+      if (matchingIndex !== undefined) {
+        artifacts[matchingIndex] = {
+          ...artifacts[matchingIndex]!,
+          result: message.content,
+          status: 'completed',
+          durationMs: message.generationTimeMs,
+        };
+      } else {
+        timeline.push({ kind: 'tool', toolIndex: artifacts.length });
+        artifacts.push({
+          id: message.toolCallId,
+          name: message.toolName ?? 'unknown',
+          result: message.content,
+          status: 'completed',
+          durationMs: message.generationTimeMs,
+        });
+      }
+    }
+    const ownerArtifacts = owner.toolArtifacts ?? [];
+    let replacedOwnerArtifactCount = 0;
+    while (
+      replacedOwnerArtifactCount < artifacts.length &&
+      replacedOwnerArtifactCount < ownerArtifacts.length &&
+      artifacts[replacedOwnerArtifactCount]?.name ===
+        ownerArtifacts[replacedOwnerArtifactCount]?.name
+    ) {
+      replacedOwnerArtifactCount += 1;
+    }
+    const ownerTimeline: NonNullable<Message['timeline']> = [];
+    for (const entry of owner.timeline ?? []) {
+      if (entry.kind !== 'tool') {
+        ownerTimeline.push(entry);
+      } else if (entry.toolIndex >= replacedOwnerArtifactCount) {
+        ownerTimeline.push({
+          ...entry,
+          toolIndex:
+            entry.toolIndex - replacedOwnerArtifactCount + artifacts.length,
+        });
+      }
+    }
+    const item: ChatMessageItem = {
+      ...owner,
+      ...(supportingContext ? { supportingContext } : {}),
+      content: response && (!live || owner.isStreaming) ? owner.content : '',
+      isStreaming: live || owner.isStreaming,
+      toolCalls: undefined,
+      toolArtifacts: [
+        ...artifacts,
+        ...ownerArtifacts.slice(replacedOwnerArtifactCount),
+      ],
+      timeline: [
+        ...timeline,
+        ...ownerTimeline,
+      ],
+    };
+    groupedWorkCache.set(owner, { work: [...work], live, item });
+    grouped.push(item);
+    work = [];
+  };
+
+  for (const message of messages) {
+    if (message.role === 'user') {
+      flush();
+      grouped.push(message);
+      continue;
+    }
+    if (work.length && message.role === 'assistant') {
+      work.push(message);
+      continue;
+    }
+    if (
+      message.role === 'tool' ||
+      (message.role === 'assistant' &&
+        (message.toolCalls?.length ||
+          isSupportingContextMessage(message) ||
+          isReasoningOnlyMessage(message)))
+    ) {
+      work.push(message);
+      continue;
+    }
+    flush();
+    grouped.push(message);
+  }
+  flush();
   return grouped;
 }
 
@@ -181,11 +367,12 @@ function remotePreviewMessage(preview: RemoteStreamItem): ChatMessageItem {
     preview.phase === 'waiting' ||
     (isStatusPhase && !hasMessageBody && !preview.reasoning) ||
     (preview.phase === 'thinking' && !preview.reasoning && !preview.content);
+  const visibleStatus = preview.phase === 'thinking' ? '' : phaseLabel ?? '';
   return {
     // The id comes from the shared projection, so it is stable across frames.
     id: preview.id,
     role: 'assistant',
-    content: isStatusOnly ? phaseLabel ?? '' : preview.content,
+    content: isStatusOnly ? visibleStatus : preview.content,
     reasoningContent: preview.reasoning || undefined,
     timestamp: Date.now(),
     isThinking: isStatusOnly,
@@ -203,7 +390,7 @@ function remotePreviewMessage(preview: RemoteStreamItem): ChatMessageItem {
           })),
         }
       : {}),
-    ...(isStatusPhase && phaseLabel ? { statusText: phaseLabel } : {}),
+    ...(isStatusPhase && visibleStatus ? { statusText: visibleStatus } : {}),
   };
 }
 
@@ -212,15 +399,24 @@ export function getDisplayMessages(
   allMessages: Message[],
   streaming: StreamingState,
 ): (Message | ChatMessageItem)[] {
-  return withRemotePreviews(
-    groupSupportingContextWithImage(
-      localDisplayMessages(
+  const live = Boolean(
+    streaming.isThinking ||
+      streaming.isStreamingForThisConversation ||
+      streaming.isGeneratingForThisConversation ||
+      streaming.remotePreviews?.length,
+  );
+  return groupAssistantTurnWork(
+    withRemotePreviews(
+      groupSupportingContextWithImage(
+        localDisplayMessages(
         // The same rule the list rows use, so the thread and its preview never disagree.
-        [...visibleMessages(allMessages, streaming.localDeviceId)],
-        streaming,
+          [...visibleMessages(allMessages, streaming.localDeviceId)],
+          streaming,
+        ),
       ),
+      streaming.remotePreviews,
     ),
-    streaming.remotePreviews,
+    live,
   );
 }
 
@@ -288,6 +484,27 @@ function localDisplayMessages(
         reasoningContent: streamingReasoningContent || undefined,
         timestamp: Date.now(),
         isStreaming: true,
+      },
+    ];
+  }
+  // A remote tool-capable model can clear its initial thinking phase before it has emitted text,
+  // reasoning, or a durable tool row. The generation session still owns this conversation, so keep
+  // one local loader row until one of those displayable records replaces it.
+  if (
+    isStreamingForThisConversation ||
+    streaming.isGeneratingForThisConversation
+  ) {
+    if (_lastDisplayBranch !== 'thinking') {
+      _lastDisplayBranch = 'thinking';
+    }
+    return [
+      ...allMessages,
+      {
+        id: 'thinking',
+        role: 'assistant' as const,
+        content: '',
+        timestamp: Date.now(),
+        isThinking: true,
       },
     ];
   }

@@ -9,6 +9,173 @@ import { MessageAudioMode } from '../../../pro/audio/ui/MessageAudioMode';
 import { createGenerationMeta, createMessage } from '../../utils/factories';
 
 describe('synced assistant tool timeline', () => {
+  it('groups durable peer work with its live preview under one Working accordion', () => {
+    const display = getDisplayMessages(
+      [
+        createMessage({
+          id: 'peer-tool-call',
+          role: 'assistant',
+          content: '',
+          reasoningContent: 'I am checking the live sources.',
+          toolCalls: [
+            {
+              id: 'peer-search',
+              name: 'web_search',
+              arguments: '{"query":"latest news"}',
+            },
+          ],
+        }),
+        createMessage({
+          id: 'peer-tool-result',
+          role: 'tool',
+          content: 'The first search is complete.',
+          toolCallId: 'peer-search',
+          toolName: 'web_search',
+        }),
+      ],
+      {
+        isThinking: false,
+        streamingMessage: '',
+        streamingReasoningContent: '',
+        isStreamingForThisConversation: false,
+        remotePreviews: [
+          {
+            id: 'remote-stream:peer-reply',
+            messageId: 'peer-reply',
+            content: '',
+            reasoning: '',
+            phase: 'thinking',
+            deviceId: 'peer-phone',
+            tools: [
+              { name: 'web_search', status: 'running' },
+            ],
+          },
+        ],
+      },
+    );
+    const view = render(
+      <View>
+        {display.map(item => (
+          <ChatMessage key={item.id} message={item} />
+        ))}
+      </View>,
+    );
+
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    expect(view.getByText('Working')).toBeTruthy();
+    expect(view.getByTestId('thinking-indicator')).toBeTruthy();
+    expect(view.queryByText('Thinking...')).toBeNull();
+    expect(view.getByText('I am checking the live sources.')).toBeTruthy();
+    expect(view.getAllByText('Web search result')).toHaveLength(1);
+  });
+
+  it('closes failed peer work under one Work failed accordion', () => {
+    const display = getDisplayMessages(
+      [
+        createMessage({
+          id: 'failed-tool-call',
+          role: 'assistant',
+          content: '',
+          reasoningContent: 'I checked the request.',
+          toolCalls: [
+            {
+              id: 'failed-search',
+              name: 'web_search',
+              arguments: '{"query":"latest news"}',
+            },
+          ],
+        }),
+        createMessage({
+          id: 'failed-tool-result',
+          role: 'tool',
+          content: 'The search completed.',
+          toolCallId: 'failed-search',
+          toolName: 'web_search',
+        }),
+        {
+          ...createMessage({
+            id: 'failed-terminal',
+            role: 'assistant',
+            content: '',
+          }),
+          turnStatus: 'failed' as const,
+        },
+      ],
+      {
+        isThinking: false,
+        streamingMessage: '',
+        streamingReasoningContent: '',
+        isStreamingForThisConversation: false,
+      },
+    );
+    const view = render(
+      <View>
+        {display.map(item => (
+          <ChatMessage key={item.id} message={item} />
+        ))}
+      </View>,
+    );
+
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    expect(view.getByText('Work failed')).toBeTruthy();
+    expect(view.queryByText('I checked the request.')).toBeNull();
+    fireEvent.press(view.getByTestId('assistant-work-toggle'));
+    expect(view.getByText('I checked the request.')).toBeTruthy();
+    expect(view.getByText('Web search result')).toBeTruthy();
+  });
+
+  it('shows stopped peer work without an empty answer card', () => {
+    const display = getDisplayMessages(
+      [
+        createMessage({
+          id: 'stopped-tool-call',
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            {
+              id: 'stopped-search',
+              name: 'web_search',
+              arguments: '{"query":"latest news"}',
+            },
+          ],
+        }),
+        createMessage({
+          id: 'stopped-tool-result',
+          role: 'tool',
+          content: 'The search completed.',
+          toolCallId: 'stopped-search',
+          toolName: 'web_search',
+        }),
+        {
+          ...createMessage({
+            id: 'stopped-terminal',
+            role: 'assistant',
+            content: '',
+          }),
+          turnStatus: 'cancelled' as const,
+        },
+      ],
+      {
+        isThinking: false,
+        streamingMessage: '',
+        streamingReasoningContent: '',
+        isStreamingForThisConversation: false,
+      },
+    );
+    const view = render(
+      <View>
+        {display.map(item => (
+          <ChatMessage key={item.id} message={item} />
+        ))}
+      </View>,
+    );
+
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    expect(view.getByText('Work stopped')).toBeTruthy();
+    expect(view.queryByTestId('message-bubble')).toBeNull();
+    expect(view.queryByTestId('message-meta-row')).toBeNull();
+  });
+
   it('keeps an inline enhanced prompt and completed image in one result bubble', () => {
     const message = createMessage({
       role: 'assistant',
@@ -38,15 +205,15 @@ describe('synced assistant tool timeline', () => {
       ],
     });
     const view = render(<ChatMessage message={message} />);
-    const resultBubble = view
-      .getAllByTestId('message-bubble')
-      .find(bubble => within(bubble).queryByText('Enhanced prompt'));
+    const resultBubble = view.getByTestId('message-bubble');
 
     expect(resultBubble).toBeTruthy();
-    expect(within(resultBubble!).getByTestId('generated-image')).toBeTruthy();
+    expect(within(resultBubble).getByTestId('generated-image')).toBeTruthy();
     expect(
-      within(resultBubble!).getByText('Generated for: a lamborghini'),
+      within(resultBubble).getByText('Generated for: a lamborghini'),
     ).toBeTruthy();
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    fireEvent.press(view.getByTestId('assistant-work-toggle'));
     expect(
       view
         .getAllByText(/^(Thought process|Generated image|Enhanced prompt)$/)
@@ -132,15 +299,15 @@ describe('synced assistant tool timeline', () => {
       </View>,
     );
 
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    fireEvent.press(view.getByTestId('assistant-work-toggle'));
     expect(view.getAllByText('Thought process')).toHaveLength(2);
     expect(view.getAllByText('Enhanced prompt')).toHaveLength(1);
     expect(view.getAllByText('Generated image')).toHaveLength(1);
     expect(view.getByText('Generated image for: a horse')).toBeTruthy();
-    const resultBubble = view
-      .getAllByTestId('message-bubble')
-      .find(bubble => within(bubble).queryByText('Enhanced prompt'));
+    const resultBubble = view.getByTestId('message-bubble');
     expect(resultBubble).toBeTruthy();
-    expect(within(resultBubble!).getByTestId('message-attachments')).toBeTruthy();
+    expect(within(resultBubble).getByTestId('message-attachments')).toBeTruthy();
 
     view.unmount();
     const voiceView = render(
@@ -165,6 +332,8 @@ describe('synced assistant tool timeline', () => {
       </View>,
     );
 
+    expect(voiceView.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    fireEvent.press(voiceView.getByTestId('assistant-work-toggle'));
     expect(voiceView.getAllByText('Thought process')).toHaveLength(2);
     expect(voiceView.getAllByText('Enhanced prompt')).toHaveLength(1);
     expect(voiceView.getAllByText('Generated image')).toHaveLength(1);
@@ -195,7 +364,7 @@ describe('synced assistant tool timeline', () => {
     ]);
   });
 
-  it('shows thought, tools, answer, time, and details in that order and opens each disclosure', () => {
+  it('keeps completed work closed while the answer and footer controls stay available', () => {
     const message = createMessage({
       id: 'synced-tool-reply',
       role: 'assistant',
@@ -213,45 +382,16 @@ describe('synced assistant tool timeline', () => {
     const view = render(
       <ChatMessage message={message} showGenerationDetails />,
     );
-    const row = view.getByTestId('assistant-message');
-    const visibleOrder = row
-      .findAll(node =>
-        [
-          'thinking-block',
-          'tool-message',
-          'message-bubble',
-          'message-meta-row',
-          'tools-sent-collapsible',
-          'generation-details-toggle',
-        ].includes(node.props.testID),
-      )
-      .map(node => node.props.testID);
-
-    const firstPosition = (testID: string): number =>
-      visibleOrder.indexOf(testID);
-    expect(
-      [
-        'thinking-block',
-        'tool-message',
-        'message-bubble',
-        'message-meta-row',
-        'tools-sent-collapsible',
-        'generation-details-toggle',
-      ].map(firstPosition),
-    ).toEqual(
-      [
-        ...[
-          'thinking-block',
-          'tool-message',
-          'message-bubble',
-          'message-meta-row',
-          'tools-sent-collapsible',
-          'generation-details-toggle',
-        ].map(firstPosition),
-      ].sort((a, b) => a - b),
-    );
-    expect(view.getAllByText('Web search result')).toHaveLength(2);
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    expect(view.queryByTestId('thinking-block')).toBeNull();
     expect(view.getByText('The answer is ready.')).toBeTruthy();
+    expect(view.getByTestId('message-meta-row')).toBeTruthy();
+    expect(view.getByTestId('tools-sent-collapsible')).toBeTruthy();
+    expect(view.getByTestId('generation-details-toggle')).toBeTruthy();
+
+    fireEvent.press(view.getByTestId('assistant-work-toggle'));
+    expect(view.getByTestId('thinking-block')).toBeTruthy();
+    expect(view.getAllByText('Web search result')).toHaveLength(2);
 
     fireEvent.press(view.getAllByText('Web search result')[0]);
     expect(view.getByText('First source.')).toBeTruthy();

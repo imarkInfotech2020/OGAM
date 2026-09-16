@@ -41,6 +41,7 @@ describe('context full in a tool-enabled chat', () => {
     await h.tapSend('Hi');
 
     await h.rtl.waitFor(() => expect(h.view!.queryByText('Answer after compaction.')).not.toBeNull());
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
     const firstThought = h.view!.getAllByTestId('thinking-block')[0];
     h.rtl.fireEvent.press(h.rtl.within(firstThought).getByTestId('thinking-block-toggle'));
     expect(h.rtl.within(firstThought).getByTestId('thinking-block-content'))

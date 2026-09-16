@@ -811,6 +811,7 @@ export async function startGenerationFn(
       deps.addMessage(targetConversationId, {
         role: 'assistant',
         content: msg,
+        turnStatus: 'failed',
       });
       deps.setAlertState(
         showAlert(
@@ -1035,6 +1036,8 @@ export async function handleStopFn(
   // The image X is also the remote stop signal. Start both cancellations now; waiting for the text
   // engine first leaves every paired device showing image progress while that stop call drains.
   const stops: Promise<unknown>[] = [generationService.stopGeneration()];
+  const taskStop = callHook<Promise<void>>(HOOKS.taskStopActive);
+  if (taskStop !== undefined) stops.push(taskStop);
   if (deps.isGeneratingImage)
     stops.push(imageGenerationService.cancelGeneration());
   try {
@@ -1094,8 +1097,11 @@ export async function regenerateResponseFn(
     logger.log('[RESEND-SM] regenerate BAIL: no conv or no active model');
     return;
   }
-  await modelResidencyManager.reclaimSttForGeneration(); // free idle Whisper before the LLM reload (memory-tight)
   const targetConversationId = deps.activeConversationId;
+  // Resend starts before memory reclaim, routing, and remote preparation. Publish that fact now so
+  // the existing thinking loader covers the full wait instead of appearing only when generation starts.
+  generationSession.begin(targetConversationId);
+  await modelResidencyManager.reclaimSttForGeneration(); // free idle Whisper before the LLM reload (memory-tight)
   const messageTextForRoute = appendAttachmentText(
     userMessage.content,
     userMessage.attachments,
@@ -1123,21 +1129,28 @@ export async function regenerateResponseFn(
       deps.setPendingMessage?.(userMessage.content, userMessage.attachments);
     },
   });
-  if (result.handled) return;
+  if (result.handled) {
+    generationSession.end('handled');
+    return;
+  }
   const messageText = result.messageText;
   // Same vision gate as the send path: resending a turn whose message carries an image must not push it to a
   // model that can't do vision (would crash with "Multimodal support not enabled"). Shared gate → identical UX.
-  if (blockedImageForNonVisionModel(deps, userMessage.attachments)) return;
+  if (blockedImageForNonVisionModel(deps, userMessage.attachments)) {
+    generationSession.end('vision-blocked');
+    return;
+  }
   if (
     !deps.activeModelInfo?.isRemote &&
     deps.activeModel &&
     !(await ensureReadyOrAlert(deps, 'regenerate', () => {
       regenerateResponseFn(deps, call);
     }))
-  )
+  ) {
+    generationSession.end('not-ready');
     return;
+  }
   logger.log('[RESEND-SM] regenerate → reached LLM generate path');
-  generationSession.begin(targetConversationId);
   // LiteRT: native history must be rewound to match the JS messages we're about to replay.
   // Dispatched via the service (no engine branch here); a no-op for engines without a KV cache.
   invalidateActiveConversation();

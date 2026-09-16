@@ -33,6 +33,7 @@ import { useProjectStore } from '../../../src/stores/projectStore';
 import { buildSyncEngine } from '../../../src/services/sync/engine';
 import {
   CORE_SYNC_ENTITIES,
+  messagePutMutation,
   type SyncMutation,
 } from '../../../src/services/sync/mutation';
 import { syncService } from '../../../pro/sync/syncService';
@@ -164,6 +165,7 @@ describe('Pro mobile state sync journey', () => {
       now: () => Date.now(),
     });
     let remoteState: StateSync;
+    let remoteStateOpsSent = 0;
     remote = buildSyncEngine({
       pairingEntitlement: mesh.joiner({
         name: remoteDevice.name,
@@ -179,6 +181,7 @@ describe('Pro mobile state sync journey', () => {
     remoteState = new StateSync({
       oplog: remoteLog,
       send: (deviceId, message) => {
+        if (message.t === 'ops') remoteStateOpsSent += message.ops.length;
         remote!.engine.sendApp(deviceId, 'state', message);
       },
     });
@@ -211,6 +214,28 @@ describe('Pro mobile state sync journey', () => {
       context: null,
       created_at: createdAt,
     });
+    const toolRequest = messagePutMutation('remote-conversation', {
+      id: 'remote-tool-request',
+      uuid: 'remote-tool-request',
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(createdAt).getTime(),
+      toolCalls: [
+        {
+          id: 'contacts-search-call',
+          name: 'contacts_search',
+          arguments: '{"query":"ali hafizji"}',
+        },
+      ],
+    });
+    if (!toolRequest?.fields)
+      throw new Error('Tool request was not serialized');
+    remoteLog.record(
+      toolRequest.entity,
+      toolRequest.entityId,
+      toolRequest.kind,
+      toolRequest.fields,
+    );
     remoteLog.record(
       CORE_SYNC_ENTITIES.message,
       'remote-reasoning-message',
@@ -360,6 +385,8 @@ describe('Pro mobile state sync journey', () => {
     await waitFor(() =>
       expect(ui!.getByText('The field notes are ready.')).toBeTruthy(),
     );
+    fireEvent.press(ui.getByTestId('assistant-work-toggle'));
+    expect(ui.getByText('contacts_search')).toBeTruthy();
     expect(
       ui
         .getAllByText(/^(Thought process|Web search result)$/)
@@ -389,8 +416,10 @@ describe('Pro mobile state sync journey', () => {
     remoteState.sendRecord(mobile.id, CORE_SYNC_ENTITIES.message, 'newer-gap-message');
     await waitFor(() => expect(ui!.getByText('A newer turn arrived.')).toBeTruthy());
     expect(ui.queryByText('An older turn was missed.')).toBeNull();
+    const sentBeforeGapRepair = remoteStateOpsSent;
     remoteState.requestSync(mobile.id);
     await waitFor(() => expect(ui!.getByText('An older turn was missed.')).toBeTruthy());
+    expect(remoteStateOpsSent - sentBeforeGapRepair).toBe(1);
     fireEvent.press(ui.getByLabelText('Back'));
 
     useChatStore.getState().addMessage('remote-conversation', {
@@ -587,6 +616,7 @@ describe('Pro mobile state sync journey', () => {
     expect(ui.getByTestId('llama-temperature-value').props.children).toBe(
       winningTemperature.value,
     );
+
   });
 
   it('reconnects before slow owners finish and rejects forged task state', async () => {
@@ -594,7 +624,7 @@ describe('Pro mobile state sync journey', () => {
     const slowStartup = new Promise<void>(resolve => {
       releaseSlowStartup = resolve;
     });
-    await stateSyncService.start(slowStartup);
+    await stateSyncService.start(() => slowStartup);
     await syncService.start();
     expect(syncService.isRunning()).toBe(true);
 
@@ -761,6 +791,5 @@ describe('Pro mobile state sync journey', () => {
     expect(useTaskRunStore.getState().runs[task.taskId]?.title).toBe(
       task.title,
     );
-
   });
 });

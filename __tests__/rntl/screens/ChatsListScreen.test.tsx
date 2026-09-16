@@ -520,24 +520,8 @@ describe('ChatsListScreen', () => {
         generatedImages: [],
       });
 
-      render(<ChatsListScreen />);
-      // The Swipeable mock renders renderRightActions inline, which contains
-      // a trash button. Find it and press it.
-      const { TouchableOpacity } = require('react-native');
-      // Since we render right actions inline, find all touchables
-      // and look for the trash-related one
       const tree = render(<ChatsListScreen />);
-      const touchables = tree.UNSAFE_getAllByType(TouchableOpacity);
-      // The delete action button should be among them
-      // Find the one that triggers the delete alert
-      for (const btn of touchables) {
-        mockShowAlert.mockClear();
-        fireEvent.press(btn);
-        if (mockShowAlert.mock.calls.length > 0 &&
-            mockShowAlert.mock.calls[0][0] === 'Delete Chat') {
-          break;
-        }
-      }
+      fireEvent.press(tree.getByLabelText('Delete Delete Me'));
 
       expect(mockShowAlert).toHaveBeenCalledWith(
         'Delete Chat',
@@ -554,17 +538,7 @@ describe('ChatsListScreen', () => {
       });
 
       const tree = render(<ChatsListScreen />);
-      const { TouchableOpacity } = require('react-native');
-      const touchables = tree.UNSAFE_getAllByType(TouchableOpacity);
-
-      for (const btn of touchables) {
-        mockShowAlert.mockClear();
-        fireEvent.press(btn);
-        if (mockShowAlert.mock.calls.length > 0 &&
-            mockShowAlert.mock.calls[0][0] === 'Delete Chat') {
-          break;
-        }
-      }
+      fireEvent.press(tree.getByLabelText('Delete To Delete'));
 
       const alertButtons = mockShowAlert.mock.calls[0]?.[2];
       const deleteBtn = alertButtons?.find((b: any) => b.text === 'Delete');

@@ -57,6 +57,10 @@ describe('T087 (rendered) — voice mode: no empty/"#"-only bubble after a tool 
       content: '#',
     });
 
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByTestId('assistant-work-toggle')).not.toBeNull();
+    });
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
     // PRE-CONDITION 1 — the flow WORKED: the calculator ran and its result bubble (the correct answer) is on
     // screen. This is what B32 confirms is 100% correct, and it stops a false green (nothing-rendered).
     await h.rtl.waitFor(() => {

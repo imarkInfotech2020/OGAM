@@ -11,6 +11,8 @@ import {
   initialAlertState,
 } from '../CustomAlert';
 import { AnimatedEntry } from '../AnimatedEntry';
+import { Accordion } from '../Accordion';
+import { ThinkingIndicator } from '../ThinkingIndicator';
 import { triggerHaptic } from '../../utils/haptics';
 import { createStyles } from './styles';
 import { MessageAttachments } from './components/MessageAttachments';
@@ -208,15 +210,29 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onLongPress,
   onMenuOpen,
 }) => {
-  const hasImageAttachment = Boolean(
-    message.attachments?.some(attachment => attachment.type === 'image'),
-  );
   const timelineHasThinking = Boolean(
     message.timeline?.some(entry => entry.kind === 'thinking'),
   );
   const timelineHasTools = Boolean(
     message.timeline?.some(entry => entry.kind === 'tool'),
   );
+  const hasAssistantWork = Boolean(
+    !isUser &&
+      (message.timeline?.length ||
+        message.toolArtifacts?.length ||
+        parsedContent.thinking ||
+        supportingContextParsedContent?.thinking),
+  );
+  const answerParsedContent = hasAssistantWork
+    ? { ...parsedContent, thinking: '' }
+    : parsedContent;
+  const hasVisibleAnswer = Boolean(
+    hasAttachments || answerParsedContent.response.trim(),
+  );
+  const showAnswerBubble =
+    hasVisibleAnswer ||
+    (message.isThinking && !hasAssistantWork) ||
+    (isStreaming && !hasAssistantWork);
   return (
     <TouchableOpacity
       testID={isUser ? 'user-message' : 'assistant-message'}
@@ -228,85 +244,70 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       onLongPress={onLongPress}
       delayLongPress={300}
     >
-      {!isUser &&
-        !!message.toolArtifacts?.length &&
-        !!parsedContent.thinking &&
-        !parsedContent.thinkingLabel &&
-        !timelineHasThinking && (
-          <View style={styles.toolCallReplyContent}>
-            <ThinkingBlock
-              parsedContent={parsedContent}
-              showThinking={showThinking}
-              onToggle={onToggleThinking}
-              styles={styles}
-            />
-          </View>
-        )}
-
-      {!isUser && !!message.timeline?.length && (
+      {hasAssistantWork && (
         <View style={styles.toolCallReplyContent}>
-          <SyncedAssistantTimeline
-            message={message}
-            styles={styles}
-            colors={colors}
-          />
+          <Accordion
+            key={isStreaming ? 'live' : 'done'}
+            title={
+              isStreaming
+                ? 'Working'
+                : message.turnStatus === 'failed'
+                  ? 'Work failed'
+                : message.turnStatus === 'cancelled'
+                  ? 'Work stopped'
+                  : 'Work done'
+            }
+            defaultOpen={Boolean(isStreaming)}
+            variant="plain"
+            testID="assistant-work-toggle"
+          >
+            {!!message.timeline?.length && (
+              <SyncedAssistantTimeline
+                message={message}
+                styles={styles}
+                colors={colors}
+              />
+            )}
+            {!!message.toolArtifacts?.length && !timelineHasTools && (
+              <SyncedToolArtifacts
+                message={message}
+                styles={styles}
+                colors={colors}
+              />
+            )}
+            {!!parsedContent.thinking &&
+              (!timelineHasThinking || parsedContent.thinkingLabel) && (
+                <ThinkingBlock
+                  parsedContent={parsedContent}
+                  showThinking={showThinking}
+                  onToggle={onToggleThinking}
+                  styles={styles}
+                />
+              )}
+            {!!supportingContextParsedContent?.thinking && (
+              <ThinkingBlock
+                parsedContent={supportingContextParsedContent}
+                showThinking={showSupportingContext}
+                onToggle={onToggleSupportingContext}
+                styles={styles}
+              />
+            )}
+          </Accordion>
+          {isStreaming && !hasVisibleAnswer && (
+            <View testID="streaming-thinking-hint" style={styles.streamingThinkingHint}>
+              <View testID="thinking-indicator">
+                <ThinkingIndicator />
+              </View>
+            </View>
+          )}
         </View>
       )}
 
-      {!isUser && !!message.toolArtifacts?.length && !timelineHasTools && (
-        <View style={styles.toolCallReplyContent}>
-          <SyncedToolArtifacts
-            message={message}
-            styles={styles}
-            colors={colors}
-          />
-        </View>
-      )}
-
-      {!isUser &&
-        !!message.toolArtifacts?.length &&
-        !!parsedContent.thinking &&
-        !!parsedContent.thinkingLabel &&
-        !hasImageAttachment && (
-          <View style={styles.toolCallReplyContent}>
-            <ThinkingBlock
-              parsedContent={parsedContent}
-              showThinking={showThinking}
-              onToggle={onToggleThinking}
-              styles={styles}
-            />
-          </View>
-        )}
-
-      {(!hideProse ||
-        hasAttachments ||
-        supportingContextParsedContent?.thinking) && (
+      {(!hideProse || hasAttachments) && showAnswerBubble && (
         <View
           testID={message.isThinking ? undefined : 'message-bubble'}
           style={message.isThinking ? undefined : bubbleStyle}
         >
-          {!isUser &&
-            hasImageAttachment &&
-            !!message.toolArtifacts?.length &&
-            !!parsedContent.thinking &&
-            !!parsedContent.thinkingLabel && (
-              <ThinkingBlock
-                parsedContent={parsedContent}
-                showThinking={showThinking}
-                onToggle={onToggleThinking}
-                styles={styles}
-              />
-            )}
-
-          {!!supportingContextParsedContent?.thinking && (
-            <ThinkingBlock
-              parsedContent={supportingContextParsedContent}
-              showThinking={showSupportingContext}
-              onToggle={onToggleSupportingContext}
-              styles={styles}
-            />
-          )}
-
           {hasAttachments && (
             <MessageAttachments
               attachments={message.attachments!}
@@ -327,11 +328,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             isThinking={message.isThinking}
             content={message.content}
             isStreaming={isStreaming}
-            parsedContent={
-              message.toolArtifacts?.length
-                ? { ...parsedContent, thinking: '' }
-                : parsedContent
-            }
+            parsedContent={answerParsedContent}
             showThinking={showThinking}
             onToggleThinking={onToggleThinking}
             styles={styles}
@@ -339,7 +336,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         </View>
       )}
 
-      {!message.isThinking && !isStreaming && !hideProse && (
+      {!message.isThinking && !isStreaming && !hideProse && hasVisibleAnswer && (
         <MessageMetaRow
           message={message}
           styles={styles}
@@ -390,7 +387,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   supportingContext,
-  isStreaming,
+  isStreaming: isStreamingProp,
   onImagePress,
   onCopy,
   onRetry,
@@ -409,6 +406,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const ttsCanSpeak = callHook<boolean>(HOOKS.audioCanSpeak) ?? false;
+  const isStreaming = Boolean(isStreamingProp || message.isStreaming);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showThinking, setShowThinking] = useState(!!isStreaming);
@@ -519,13 +517,25 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         testID="assistant-message"
         style={[styles.container, styles.assistantContainer]}
       >
-        <View testID="message-bubble" style={bubbleStyle}>
-          <ThinkingBlock
-            parsedContent={parsedContent}
-            showThinking={showThinking}
-            onToggle={() => setShowThinking(!showThinking)}
-            styles={styles}
-          />
+        <View style={styles.toolCallReplyContent}>
+          <Accordion
+            title={
+              message.turnStatus === 'cancelled'
+                ? 'Work stopped'
+                : message.turnStatus === 'failed'
+                  ? 'Work failed'
+                  : 'Work done'
+            }
+            variant="plain"
+            testID="assistant-work-toggle"
+          >
+            <ThinkingBlock
+              parsedContent={parsedContent}
+              showThinking={showThinking}
+              onToggle={() => setShowThinking(!showThinking)}
+              styles={styles}
+            />
+          </Accordion>
         </View>
       </View>
     );

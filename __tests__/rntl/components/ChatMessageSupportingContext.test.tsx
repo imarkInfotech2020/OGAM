@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text } from 'react-native';
-import { render, within } from '@testing-library/react-native';
+import { fireEvent, render, within } from '@testing-library/react-native';
 import {
   _clearSlotsForTesting,
   registerSlot,
@@ -44,7 +44,7 @@ describe('<ChatMessage/> supporting context', () => {
   it('keeps an enhanced prompt inside an assistant bubble before the image result exists', () => {
     const view = renderItem(enhancedPrompt);
 
-    expect(view.getByTestId('message-bubble')).toBeTruthy();
+    fireEvent.press(view.getByTestId('assistant-work-toggle'));
     expect(view.getByText('Enhanced prompt')).toBeTruthy();
     expect(view.queryByText('•••')).toBeNull();
   });
@@ -75,9 +75,10 @@ describe('<ChatMessage/> supporting context', () => {
 
     const view = renderItem(item);
 
+    fireEvent.press(view.getByTestId('assistant-work-toggle'));
     const bubble = view.getByTestId('message-bubble');
     const result = within(bubble);
-    expect(result.getByText('Enhanced prompt')).toBeTruthy();
+    expect(view.getByText('Enhanced prompt')).toBeTruthy();
     expect(result.getByTestId('generated-image')).toBeTruthy();
     expect(
       result.getByText('Generated image for: a lighthouse in a winter storm'),
@@ -114,9 +115,10 @@ describe('<ChatMessage/> supporting context', () => {
     });
 
     const view = renderItem(item);
+    fireEvent.press(view.getByTestId('assistant-work-toggle'));
     const result = within(view.getByTestId('message-bubble'));
 
-    expect(result.getByText('Enhanced prompt')).toBeTruthy();
+    expect(view.getByText('Enhanced prompt')).toBeTruthy();
     expect(result.getByTestId('attachment-pending-0')).toBeTruthy();
     expect(
       result.getByText('Generated image for: a lighthouse in a winter storm'),

@@ -194,16 +194,8 @@ describe('batch2 ChatsListScreen — sort, timestamp format, delete, empty', () 
     const b = createConversation({ title: 'Bravo', updatedAt: new Date('2024-06-01T10:00:00Z').toISOString() });
     useChatStore.setState({ conversations: [a, b] });
 
-    const { UNSAFE_getAllByType } = render(<ChatsListScreen />);
-    const { TouchableOpacity } = require('react-native');
-    const touchables = UNSAFE_getAllByType(TouchableOpacity);
-
-    // Press each touchable until one raises the "Delete Chat" confirm alert (the
-    // swipe-delete action). Row 0 is the newest ("Alpha").
-    for (const t of touchables) {
-      fireEvent.press(t);
-      if (mockShowAlert.mock.calls.some(c => c[0] === 'Delete Chat')) break;
-    }
+    const { getByLabelText } = render(<ChatsListScreen />);
+    fireEvent.press(getByLabelText('Delete Alpha'));
 
     expect(mockShowAlert).toHaveBeenCalledWith(
       'Delete Chat',

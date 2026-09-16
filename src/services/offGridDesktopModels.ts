@@ -22,6 +22,11 @@ interface GatewayCatalogModel {
   files: string[];
 }
 
+interface GatewayLiveModel {
+  capabilities: string[];
+  reasoningMandatory: boolean;
+}
+
 export interface OffGridDesktopModelState {
   catalog: RemoteModelCatalog;
   active: RemoteMediaModelIds;
@@ -88,6 +93,27 @@ function parseInstalled(value: unknown): Set<string> | null {
       (id): id is string => typeof id === 'string' && id.trim().length > 0,
     ),
   );
+}
+
+function parseLiveModels(value: unknown): Map<string, GatewayLiveModel> {
+  const payload = record(value);
+  const result = new Map<string, GatewayLiveModel>();
+  if (!payload || !Array.isArray(payload.data)) return result;
+  for (const item of payload.data) {
+    const candidate = record(item);
+    if (typeof candidate?.id !== 'string') continue;
+    const capabilities = Array.isArray(candidate.capabilities)
+      ? candidate.capabilities.filter(
+          (capability): capability is string => typeof capability === 'string',
+        )
+      : [];
+    const reasoning = record(candidate.reasoning);
+    result.set(candidate.id, {
+      capabilities,
+      reasoningMandatory: reasoning?.mandatory === true,
+    });
+  }
+  return result;
 }
 
 function parseActive(value: unknown): Record<string, string | null> | null {
@@ -185,11 +211,18 @@ function textModels(
   serverId: string,
   models: readonly GatewayCatalogModel[],
   installed: ReadonlySet<string>,
+  liveModels: ReadonlyMap<string, GatewayLiveModel>,
 ): RemoteModel[] {
   return models.flatMap(model => {
     if (!installed.has(model.id) || categoryForKind(model.kind) !== 'text') {
       return [];
     }
+    const desktopRemoteModel = model.id.startsWith('remote-vision:');
+    const live = liveModels.get(model.id);
+    const supportsThinking =
+      desktopRemoteModel &&
+      (live?.capabilities.includes('reasoning') ||
+        live?.reasoningMandatory === true);
     return [
       {
         id: model.id,
@@ -198,7 +231,11 @@ function textModels(
         capabilities: {
           supportsVision: model.kind === 'vision',
           supportsToolCalling: true,
-          supportsThinking: false,
+          supportsThinking,
+          acceptsThinkingKwarg: supportsThinking,
+          ...(live?.reasoningMandatory
+            ? { thinkingLevelsOnly: true }
+            : {}),
         },
         lastUpdated: new Date().toISOString(),
       },
@@ -211,11 +248,12 @@ export async function readOffGridDesktopModelState(
   server: Pick<RemoteServer, 'id' | 'endpoint' | 'apiKey'>,
 ): Promise<OffGridDesktopModelState | null> {
   try {
-    const [catalogResponse, installedResponse, activeResponse] =
+    const [catalogResponse, installedResponse, activeResponse, liveResponse] =
       await Promise.all([
         gatewayFetch(server, '/v1/models/catalog'),
         gatewayFetch(server, '/v1/models/installed'),
         gatewayFetch(server, '/v1/models/active'),
+        gatewayFetch(server, '/v1/models'),
       ]);
     if (
       !catalogResponse.ok ||
@@ -233,12 +271,15 @@ export async function readOffGridDesktopModelState(
     const models = parseCatalog(catalogPayload);
     const installed = parseInstalled(installedPayload);
     const activeValues = parseActive(activePayload);
+    const liveModels = liveResponse.ok
+      ? parseLiveModels(await liveResponse.json().catch(() => null))
+      : new Map<string, GatewayLiveModel>();
     if (!models || !installed || !activeValues) return null;
     const catalog = optionFor(models, installed);
     return {
       catalog,
       active: projectActive(catalog, activeValues),
-      textModels: textModels(server.id, models, installed),
+      textModels: textModels(server.id, models, installed, liveModels),
     };
   } catch {
     return null;
