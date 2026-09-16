@@ -27,6 +27,11 @@ import {
   _clearHooksForTesting,
   registerHook,
 } from '../../../src/bootstrap/hookRegistry';
+import {
+  SLOTS,
+  _clearSlotsForTesting,
+  registerSlot,
+} from '../../../src/bootstrap/slotRegistry';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useProjectStore } from '../../../src/stores/projectStore';
@@ -45,6 +50,7 @@ import { useTaskRunStore } from '../../../pro/tasks/taskRunStore';
 import { useSyncStore } from '../../../pro/sync/syncStore';
 import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
+import { HomeNotificationsButton } from '../../../pro/ui/HomeNotificationsButton';
 import { ProRoot } from '../../../pro/ui/ProRoot';
 import {
   getDiscoveryBoundaries,
@@ -106,6 +112,8 @@ describe('Pro mobile state sync journey', () => {
     resetDiscoveryBoundaries();
     _clearScreensForTesting();
     _clearSectionsForTesting();
+    _clearSlotsForTesting();
+    registerSlot(SLOTS.homeNotificationsButton, HomeNotificationsButton);
     registerScreen({ name: 'Sync', component: SyncScreen });
     registerScreen({
       name: 'SyncSharingSettings',
@@ -145,6 +153,7 @@ describe('Pro mobile state sync journey', () => {
     await syncService.stop();
     _clearScreensForTesting();
     _clearSectionsForTesting();
+    _clearSlotsForTesting();
   });
 
   it('converges state and honors visible sharing controls through the rendered app', async () => {
@@ -166,6 +175,7 @@ describe('Pro mobile state sync journey', () => {
     });
     let remoteState: StateSync;
     let remoteStateOpsSent = 0;
+    let remoteBackfillDelayMs = 0;
     remote = buildSyncEngine({
       pairingEntitlement: mesh.joiner({
         name: remoteDevice.name,
@@ -180,6 +190,11 @@ describe('Pro mobile state sync journey', () => {
     });
     remoteState = new StateSync({
       oplog: remoteLog,
+      backfillBatchSize: 1,
+      scheduleBackfill: send => {
+        if (remoteBackfillDelayMs > 0) setTimeout(send, remoteBackfillDelayMs);
+        else send();
+      },
       send: (deviceId, message) => {
         if (message.t === 'ops') remoteStateOpsSent += message.ops.length;
         remote!.engine.sendApp(deviceId, 'state', message);
@@ -588,6 +603,31 @@ describe('Pro mobile state sync journey', () => {
       ).toMatchObject({ value_json: winningTemperature.json }),
     );
 
+    fireEvent.press(ui.getByLabelText('Back'));
+    fireEvent.press(ui.getByTestId('home-tab'));
+    remoteBackfillDelayMs = 100;
+    const progressSettings = [
+      ['topP', '0.8'],
+      ['repeatPenalty', '1.1'],
+      ['maxTokens', '2048'],
+      ['thinkingEnabled', 'true'],
+    ] as const;
+    for (const [setting, valueJson] of progressSettings) {
+      remoteLog.record(CORE_SYNC_ENTITIES.modelSetting, setting, 'put', {
+        value_json: valueJson,
+      });
+    }
+    remoteState.requestSync(mobile.id);
+    await waitFor(() =>
+      expect(ui!.getByText(/^(?:[1-9]\d?|100)%$/)).toBeTruthy(),
+    );
+    expect(
+      ui.getByLabelText(/^Syncing, (?:[1-9]\d?|100) percent\. Notifications$/),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(ui!.queryByTestId('home-notifications-syncing')).toBeNull(),
+    );
+
     const persistedOpCount = stateSyncService.opCount();
     ui.unmount();
     ui = undefined;
@@ -598,7 +638,7 @@ describe('Pro mobile state sync journey', () => {
     // dropped and only the winner for each record is kept. What has to survive is the state itself,
     // which the temperature below is read for. A log that came back empty, or bigger, would be wrong.
     expect(stateSyncService.opCount()).toBeGreaterThan(0);
-    expect(stateSyncService.opCount()).toBeLessThanOrEqual(persistedOpCount);
+    expect(stateSyncService.opCount()).toBeLessThan(persistedOpCount);
     useAppStore
       .getState()
       .setDownloadedModels([createDownloadedModel({ engine: 'litert' })]);

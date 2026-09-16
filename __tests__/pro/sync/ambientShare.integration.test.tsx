@@ -447,6 +447,13 @@ describe('mobile ambient sharing journey', () => {
     });
     receivedFiles.splice(0);
 
+    // UI eviction enters this same production lifecycle. Reconnecting the stable installation id
+    // must not turn its completed files into a new late-pair backlog.
+    await ambientShareService.forgetDevice(desktopDevice.id);
+    await ambientShareService.connected(desktopDevice.id);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(receivedFiles).toEqual([]);
+
     // A new image follows the same order as production: Gallery is written first, then the chat
     // message that owns the attachment. The first store notification must not publish a gallery-only
     // record. The second must send one linked control and the real bytes to the connected Desktop.
