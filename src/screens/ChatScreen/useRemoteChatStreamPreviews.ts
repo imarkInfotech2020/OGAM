@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
 import { chatStreamPreviewRows } from '@offgrid/sync';
+import { useShallow } from 'zustand/react/shallow';
 import { useRemoteChatStreamStore } from '../../stores/remoteChatStreamStore';
 import type { RemoteStreamItem } from './types';
 
@@ -13,9 +13,9 @@ import type { RemoteStreamItem } from './types';
 export function useRemoteChatStreamPreviews(
   activeConversationId: string | null,
 ): readonly RemoteStreamItem[] {
-  const previews = useRemoteChatStreamStore(state => state.previews);
-  return useMemo(
-    () => chatStreamPreviewRows(previews, activeConversationId),
-    [previews, activeConversationId],
+  return useRemoteChatStreamStore(
+    useShallow(state =>
+      chatStreamPreviewRows(state.previews, activeConversationId),
+    ),
   );
 }

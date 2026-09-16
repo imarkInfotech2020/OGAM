@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   NavigationProp,
   useNavigation,
@@ -126,9 +127,15 @@ export const useChatScreen = () => {
     return s.servers.find(server => server.id === id && !!server.mediaModels?.image);
   });
 
-  const activeConversationId = useChatStore(s => s.activeConversationId);
-  const conversations = useChatStore(s => s.conversations);
-  const activeConversation = useMemo(() => conversations.find(c => c.id === activeConversationId), [conversations, activeConversationId]);
+  const [activeConversationId, activeConversation] = useChatStore(
+    useShallow(state => {
+      const id = state.activeConversationId;
+      return [
+        id,
+        state.conversations.find(conversation => conversation.id === id),
+      ] as const;
+    }),
+  );
   const hasStreamingText = useChatStore(s =>
     Boolean(s.streamingMessage || s.streamingReasoningContent),
   );

@@ -25,7 +25,11 @@ describe('context full in a tool-enabled chat', () => {
       expect(h.view!.queryByText('Answer from selected model.')).not.toBeNull();
     }, { timeout: 8000 });
     expect(h.view!.queryByTestId('tool-result-label-model_fallback')).toBeNull();
-    h.rtl.fireEvent.press(h.view!.getByText('Generation details'));
+    const answerMessage = h.view!.getAllByTestId('assistant-message').find(
+      message => h.rtl.within(message).queryByText('Answer from selected model.') !== null,
+    );
+    expect(answerMessage).toBeDefined();
+    h.rtl.fireEvent.press(h.rtl.within(answerMessage!).getByText('Generation details'));
     expect(h.view!.queryByText('Test Model')).not.toBeNull();
   });
 

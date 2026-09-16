@@ -233,6 +233,7 @@ export const ChatsListScreen: React.FC = () => {
             name={selecting ? (selected ? 'check-square' : 'square') : 'chevron-right'}
             size={20}
             color={selected ? colors.primary : colors.textMuted}
+            style={selecting ? styles.selectionIcon : undefined}
           />
         </AnimatedListItem>
       </Swipeable>
@@ -259,15 +260,24 @@ export const ChatsListScreen: React.FC = () => {
         variant="tab"
         right={
           selecting ? (
-            <Button title="Cancel" variant="secondary" size="small" onPress={stopSelecting} />
+            <Button
+              title=""
+              accessibilityLabel="Cancel selection"
+              variant="ghost"
+              size="small"
+              onPress={stopSelecting}
+              icon={<Icon name="x" size={16} color={colors.text} />}
+            />
           ) : (
             <View style={styles.headerActions}>
               {conversations.length > 0 ? (
                 <Button
-                  title="Select"
-                  variant="secondary"
+                  title=""
+                  accessibilityLabel="Select chats"
+                  variant="ghost"
                   size="small"
                   onPress={() => setSelecting(true)}
+                  icon={<Icon name="check-square" size={16} color={colors.text} />}
                 />
               ) : null}
               <Button
@@ -340,22 +350,21 @@ export const ChatsListScreen: React.FC = () => {
                 variant="ghost"
                 size="small"
                 onPress={() => {
-                  setSelectedIds(current => {
-                    const next = new Set(current);
-                    for (const conversation of visibleConversations) {
-                      if (allVisibleSelected) next.delete(conversation.id);
-                      else next.add(conversation.id);
-                    }
-                    return next;
-                  });
+                  setSelectedIds(
+                    allVisibleSelected
+                      ? new Set()
+                      : new Set(visibleConversations.map(conversation => conversation.id)),
+                  );
                 }}
               />
               <Button
-                title="Delete"
-                variant="danger"
+                title=""
+                accessibilityLabel="Delete selected chats"
+                variant="ghost"
                 size="small"
                 disabled={selectedIds.size === 0}
                 onPress={handleBulkDelete}
+                icon={<Icon name="trash-2" size={16} color={colors.error} />}
               />
             </View>
           ) : null}
@@ -452,6 +461,9 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     ...TYPOGRAPHY.meta,
     color: colors.textSecondary,
     flex: 1,
+  },
+  selectionIcon: {
+    marginLeft: SPACING.sm,
   },
   noMatches: {
     ...TYPOGRAPHY.bodySmall,

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -33,6 +33,7 @@ export function AnimatedEntry({
   children,
 }: AnimatedEntryProps) {
   const reducedMotion = useReducedMotion();
+  const animatesOnEntry = useRef(index < maxItems).current;
   const opacity = useSharedValue((from as any).opacity ?? 1);
   const translateY = useSharedValue((from as any).translateY ?? 0);
 
@@ -40,7 +41,7 @@ export function AnimatedEntry({
   const duration = transition?.duration ?? 300;
 
   useEffect(() => {
-    if (reducedMotion || index >= maxItems) return;
+    if (reducedMotion || !animatesOnEntry) return;
     // Reset to initial values before animating
     opacity.value = (from as any).opacity ?? 1;
     translateY.value = (from as any).translateY ?? 0;
@@ -49,6 +50,8 @@ export function AnimatedEntry({
     opacity.value = withDelay(computedDelay, withTiming(targetOpacity, { duration }));
     translateY.value = withDelay(computedDelay, withTiming(targetTranslateY, { duration }));
 
+    // Entry settings are fixed for this mount. Only an explicit trigger replays the animation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -56,7 +59,7 @@ export function AnimatedEntry({
     transform: [{ translateY: translateY.value }],
   }));
 
-  if (reducedMotion || index >= maxItems) {
+  if (reducedMotion || !animatesOnEntry) {
     return <>{children}</>;
   }
 

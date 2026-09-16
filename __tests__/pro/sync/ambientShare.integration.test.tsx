@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import {
+  act,
   fireEvent,
   render,
   waitFor,
@@ -372,7 +373,6 @@ describe('mobile ambient sharing journey', () => {
         stateSyncService.sendSharedFileRecord(deviceId, syncId),
     });
     await stateSyncService.start();
-    await syncService.start();
 
     ui = render(
       <>
@@ -381,6 +381,15 @@ describe('mobile ambient sharing journey', () => {
           <AppNavigator />
         </NavigationContainer>
       </>,
+    );
+    let syncStart = Promise.resolve();
+    act(() => {
+      syncStart = syncService.start();
+    });
+    expect(ui.getByTestId('home-notifications-syncing')).toBeTruthy();
+    await act(async () => syncStart);
+    await waitFor(() =>
+      expect(ui!.queryByTestId('home-notifications-syncing')).toBeNull(),
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
@@ -437,6 +446,13 @@ describe('mobile ambient sharing journey', () => {
       ).toBe(true);
     });
     receivedFiles.splice(0);
+
+    // UI eviction enters this same production lifecycle. Reconnecting the stable installation id
+    // must not turn its completed files into a new late-pair backlog.
+    await ambientShareService.forgetDevice(desktopDevice.id);
+    await ambientShareService.connected(desktopDevice.id);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(receivedFiles).toEqual([]);
 
     // A new image follows the same order as production: Gallery is written first, then the chat
     // message that owns the attachment. The first store notification must not publish a gallery-only

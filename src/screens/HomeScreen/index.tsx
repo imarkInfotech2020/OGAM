@@ -74,7 +74,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     downloadedImageModels,
     activeImageModelId,
     generatedImages,
-    conversations,
+    conversationCount,
     activeTextModelId,
     activeTextModelName,
     activeImageModel,
@@ -272,7 +272,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <AnimatedEntry index={3} staggerMs={50} trigger={focusTrigger}>
               <RecentConversations
                 conversations={recentConversations}
-                totalCount={conversations.length}
+                totalCount={conversationCount}
                 focusTrigger={focusTrigger}
                 onContinueChat={continueChat}
                 onDeleteConversation={handleDeleteConversation}

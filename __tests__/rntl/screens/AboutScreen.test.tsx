@@ -9,7 +9,7 @@ import React from 'react';
 import { Linking } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 // Same shared constants the screen uses — assert against the single source of truth, not re-hardcoded strings.
-import { FOLLOW_X_URL, SLACK_INVITE_URL } from '../../../src/utils/sharePrompt';
+import { FOLLOW_X_URL } from '../../../src/utils/sharePrompt';
 
 // Navigation is globally mocked in jest.setup.ts.
 jest.mock('../../../src/hooks/useFocusTrigger', () => ({ useFocusTrigger: () => 0 }));
@@ -44,6 +44,8 @@ describe('AboutScreen — Follow / Community', () => {
     const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
     const { getByTestId } = render(<AboutScreen />);
     fireEvent.press(getByTestId('about-join-slack'));
-    expect(openURL).toHaveBeenCalledWith(SLACK_INVITE_URL);
+    expect(openURL).toHaveBeenCalledWith(
+      'https://join.slack.com/t/off-grid-mobile/shared_invite/zt-3swt3s84k-R0CHRwISaUpExV2~3qUUdQ',
+    );
   });
 });

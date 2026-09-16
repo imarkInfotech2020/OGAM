@@ -41,7 +41,7 @@ export function doMockRealSqlite(setupSql?: string): void {
           return { rows: [], insertId: undefined, rowsAffected: 0 };
         }
         const stmt = db.prepare(sql);
-        if (/^\s*SELECT/i.test(sql)) {
+        if (/^\s*(SELECT|WITH)\b/i.test(sql)) {
           const rows = stmt.all(...bind);
           return { rows, insertId: undefined, rowsAffected: 0 };
         }

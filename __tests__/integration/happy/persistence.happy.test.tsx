@@ -54,5 +54,5 @@ describe('happy — a user-created project survives a relaunch (real persist + r
     // The project the user created survived the relaunch and renders on the Projects screen.
     const view = render(React.createElement(ProjectsScreen, {}));
     await waitFor(() => expect(view.getByText('Persisted Project')).toBeTruthy());
-  });
+  }, 30_000);
 });

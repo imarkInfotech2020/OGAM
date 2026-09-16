@@ -1234,6 +1234,7 @@ describe('appStore', () => {
         id: 'recovered_abc',
         author: 'unknown',
         quantization: 'Q4_K_M',
+        fileSize: 14 * 1024 * 1024,
       });
       const clean = createDownloadedModel({ id: 'clean-model' });
 
@@ -1250,6 +1251,7 @@ describe('appStore', () => {
         id: 'recovered_xyz',
         author: '  ',
         quantization: 'Q4',
+        fileSize: 14 * 1024 * 1024,
       });
 
       setDownloadedModels([suspicious]);
@@ -1263,6 +1265,7 @@ describe('appStore', () => {
         id: 'recovered_xyz',
         author: 'Meta',
         quantization: 'unknown',
+        fileSize: 14 * 1024 * 1024,
       });
 
       setDownloadedModels([suspicious]);
@@ -1289,6 +1292,7 @@ describe('appStore', () => {
         id: 'recovered_bad',
         author: 'unknown',
         quantization: 'unknown',
+        fileSize: 14 * 1024 * 1024,
       });
 
       addDownloadedModel(suspicious);
