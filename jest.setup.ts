@@ -27,6 +27,19 @@ try {
 
 const shouldPrintJestConsole = process.env.DEBUG_JEST_CONSOLE === '1';
 
+// Rendered screens can start provider refreshes during teardown. Keep Jest from
+// opening real network sockets when a test has not installed its own boundary fake.
+// Tests that exercise a remote service replace fetch at this same external boundary.
+globalThis.fetch = (async (input: RequestInfo | URL) => {
+  const url =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+      ? input.href
+      : input.url;
+  throw new TypeError(`Network access is disabled in Jest: ${url}`);
+}) as typeof globalThis.fetch;
+
 // react-native-keyboard-controller ships a jest mock; without it, any test that
 // renders App or ChatScreen pulls in its native module and crashes.
 jest.mock('react-native-keyboard-controller', () =>
