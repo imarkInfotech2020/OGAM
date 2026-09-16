@@ -20,6 +20,7 @@ describe('remote server scan progress', () => {
     await remoteServerManager.clearAllServers();
   });
 
+  // This rendered /24 journey reports all 254 probes and is slower under full-suite coverage.
   it('shows a found Desktop and completed probes while one probe is still pending', async () => {
     await remoteServerManager.clearAllServers();
     let finishLastProbe: (() => void) | undefined;
@@ -51,5 +52,5 @@ describe('remote server scan progress', () => {
     await waitFor(() => { expect(view.queryByText('Scanning')).toBeNull(); });
     expect(view.queryByText(/Added 1 server/)).not.toBeNull();
     view.unmount();
-  });
+  }, 60_000);
 });

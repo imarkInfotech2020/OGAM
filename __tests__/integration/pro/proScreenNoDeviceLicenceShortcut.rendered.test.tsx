@@ -6,7 +6,7 @@
  * supplied by the Jest environment, but every Off Grid screen, store action, and route is real.
  */
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { AppNavigator } from '../../../src/navigation/AppNavigator';
 import { useAppStore } from '../../../src/stores/appStore';
@@ -32,16 +32,16 @@ describe('Pro entry from Home', () => {
     app.setOnboardingComplete(false);
   });
 
-  it('opens the Pro screen with its two valid actions and no device-licence shortcut', async () => {
+  it('opens the Pro screen with its two valid actions and no device-licence shortcut', () => {
     const ui = render(
       <NavigationContainer>
         <AppNavigator />
       </NavigationContainer>,
     );
 
-    fireEvent.press(await ui.findByLabelText('Open Off Grid AI Pro'));
+    fireEvent.press(ui.getByLabelText('Open Off Grid AI Pro'));
 
-    await waitFor(() => expect(ui.getByText('Off Grid AI Pro')).toBeTruthy());
+    expect(ui.getByText('Off Grid AI Pro')).toBeTruthy();
     expect(ui.getAllByText('Get Pro').length).toBeGreaterThan(0);
     expect(ui.getByText('I have a license key')).toBeTruthy();
     expect(ui.queryByText('Use Pro from another device')).toBeNull();
