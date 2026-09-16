@@ -1,13 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fireEvent, render } from '@testing-library/react-native';
 import { ReceivingSection } from '../../../pro/ui/SyncScreen/ReceivingSection';
 import { ReceivePreferencesStore } from '../../../pro/sync/receivePreferences';
 
-it('turns off optional screenshots in Receiving and keeps required files available', async () => {
-  await AsyncStorage.clear();
+it('turns off optional screenshots in Receiving and keeps required files available', () => {
   const receiving = new ReceivePreferencesStore();
-  await receiving.load();
 
   function Screen(): React.JSX.Element {
     const [policy, setPolicy] = useState(receiving.get());
