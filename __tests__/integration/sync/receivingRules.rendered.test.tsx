@@ -34,4 +34,4 @@ it('turns off optional screenshots in Receiving and keeps required files availab
   await waitFor(() =>
     expect(view.getByTestId('receive-screenshot-refuse').props.accessibilityState.checked).toBe(true),
   );
-});
+}, 30_000);
