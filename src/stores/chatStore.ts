@@ -511,3 +511,7 @@ export const useChatStore = create<ChatState>()(
     },
   ),
 );
+
+/** Wait until the latest persisted chat projection is durable. */
+export const waitForChatPersistence = (): Promise<void> =>
+  chatStorage.waitForWrites();

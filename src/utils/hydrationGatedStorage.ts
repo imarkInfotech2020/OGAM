@@ -9,6 +9,7 @@ export interface HydrationGatedStorage<S> {
   storage: PersistStorage<S>;
   markHydrated(): void;
   isHydrated(): boolean;
+  waitForWrites(): Promise<void>;
 }
 
 /** Prevent boot-time defaults from replacing saved state before Zustand finishes hydration. */
@@ -18,6 +19,7 @@ export function createHydrationGatedStorage<S>(
 ): HydrationGatedStorage<S> {
   let hydrated = false;
   let lastWritten: S | undefined;
+  const pendingWrites = new Set<Promise<void>>();
   const json = createJSONStorage<S>(() => base);
   if (!json) throw new Error('JSON storage is unavailable');
 
@@ -30,11 +32,18 @@ export function createHydrationGatedStorage<S>(
       },
       setItem: (name, value) => {
         if (!hydrated) return undefined;
-        if (lastWritten !== undefined && unchanged?.(lastWritten, value.state)) {
+        if (
+          lastWritten !== undefined &&
+          unchanged?.(lastWritten, value.state)
+        ) {
           return undefined;
         }
         lastWritten = value.state;
-        return json.setItem(name, value);
+        const result = json.setItem(name, value);
+        if (!result) return undefined;
+        const write = Promise.resolve(result).then(() => undefined);
+        pendingWrites.add(write);
+        return write.finally(() => pendingWrites.delete(write));
       },
       removeItem: name => {
         if (!hydrated) return undefined;
@@ -46,5 +55,10 @@ export function createHydrationGatedStorage<S>(
       hydrated = true;
     },
     isHydrated: () => hydrated,
+    waitForWrites: async () => {
+      while (pendingWrites.size > 0) {
+        await Promise.all([...pendingWrites]);
+      }
+    },
   };
 }
