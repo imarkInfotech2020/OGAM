@@ -624,7 +624,7 @@ describe('Pro mobile state sync journey', () => {
     const slowStartup = new Promise<void>(resolve => {
       releaseSlowStartup = resolve;
     });
-    await stateSyncService.start(slowStartup);
+    await stateSyncService.start(() => slowStartup);
     await syncService.start();
     expect(syncService.isRunning()).toBe(true);
 
