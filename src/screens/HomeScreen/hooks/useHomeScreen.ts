@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { InteractionManager } from 'react-native';
+import { useShallow } from 'zustand/react/shallow';
 import {
   AlertState,
   initialAlertState,
@@ -88,7 +89,10 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     generatedImages,
   } = useAppStore();
 
-  const conversations = useChatStore(state => state.conversations);
+  const recentConversations = useChatStore(
+    useShallow(state => mostRecentConversations(state.conversations, 4)),
+  );
+  const conversationCount = useChatStore(state => state.conversations.length);
   const setActiveConversation = useChatStore(state => state.setActiveConversation);
   const deleteConversation = useChatStore(state => state.deleteConversation);
 
@@ -353,13 +357,6 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     activeRemoteImageModel ||
     downloadedImageModels.find(m => m.id === activeImageModelId) ||
     null;
-  // Ordered, not just the store's first four - otherwise "Recent" can list older chats than
-  // the ones just used, and disagrees with the Chats list and desktop.
-  const recentConversations = useMemo(
-    () => mostRecentConversations(conversations, 4),
-    [conversations],
-  );
-
   // Get all remote text models — includes vision-language models since they do text generation too
   const remoteTextModels: RemoteModel[] = remoteServers.flatMap(
     server => remoteDiscoveredModels[server.id] || [],
@@ -378,7 +375,7 @@ export const useHomeScreen = (navigation: HomeScreenNavigationProp) => {
     downloadedImageModels,
     activeImageModelId,
     generatedImages,
-    conversations,
+    conversationCount,
     activeTextModel,
     activeTextModelId,
     activeTextModelName,
