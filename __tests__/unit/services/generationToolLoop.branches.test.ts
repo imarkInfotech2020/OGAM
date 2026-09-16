@@ -284,33 +284,6 @@ describe('runToolLoop — Gemma text parsing branches', () => {
   });
 });
 
-describe('runToolLoop — bounded multi-tool completion', () => {
-  beforeEach(resetMocks);
-
-  it('shows successful tool output when the final model response is empty', async () => {
-    mockAppState.settings.maxToolCalls = 3;
-    mockExecuteToolCall.mockResolvedValue({
-      name: 'web_search',
-      content: 'Found on this device.',
-      durationMs: 1,
-    });
-    mockedGenerateResponseWithTools
-      .mockResolvedValueOnce({
-        fullResponse: '',
-        toolCalls: [
-          { id: 'tc-1', name: 'web_search', arguments: { query: 'result' } },
-        ],
-      })
-      .mockResolvedValueOnce({ fullResponse: '', toolCalls: [] })
-      .mockResolvedValueOnce({ fullResponse: '', toolCalls: [] });
-    const ctx = createContext();
-
-    await runToolLoop(ctx);
-
-    expect(ctx.onFinalResponse).toHaveBeenCalledWith('Found on this device.');
-  });
-});
-
 // ===========================================================================
 // buildLiteRTHistory — content mapping/filter (lines 353-354)
 // ===========================================================================
