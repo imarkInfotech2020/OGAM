@@ -1455,9 +1455,10 @@ export async function runToolLoop(
         {
           id: `signature-recovery-${Date.now()}`,
           role: 'user',
-          content:
-            'Answer the original request using only these completed tool results. Do not call more tools.\n\n' +
-            finalResponseFromToolResults('', state.successfulToolResults),
+          content: `Answer the original request using only these completed tool results. Do not call more tools.\n\n${finalResponseFromToolResults(
+            '',
+            state.successfulToolResults,
+          )}`,
           timestamp: Date.now(),
         },
       ];
