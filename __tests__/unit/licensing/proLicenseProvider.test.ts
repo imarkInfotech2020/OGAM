@@ -834,12 +834,12 @@ describe('the licence this phone holds', () => {
       const provider = load();
       provider.setDirectEntitlementActivationOwner(activationOwner().owner);
       await provider.proLicenseProvider.activate!(LICENCE_KEY);
+      const providerCalls = keygen.calls.length;
 
-      keygen.forget(FINGERPRINT);
       await provider.clearProAfterRemoteMembershipRevocation();
 
-      // Removed, not merely deactivated: a revoked device keeping its credential could reactivate itself into a
-      // mesh it was deliberately removed from.
+      // The authenticated peer is authoritative. The local provider still answers VALID, but the removed device
+      // must close Pro and remove its credential without waiting for another provider request.
       await expect(provider.proLicenseProvider.readActive()).resolves.toBe(
         false,
       );
@@ -848,6 +848,7 @@ describe('the licence this phone holds', () => {
       ).resolves.toMatchObject({
         credentialSaved: false,
       });
+      expect(keygen.calls).toHaveLength(providerCalls);
     });
 
     it('can be reset for testing without leaving anything behind', async () => {
