@@ -396,12 +396,17 @@ export const useChatStore = create<ChatState>()(
           addMessage,
         } = get();
 
-        const { persisted, content, reasoningContent } = finalizeStreamedReply({
+        const finalized = finalizeStreamedReply({
           streamingMessage,
           streamingReasoningContent,
           streamingForConversationId,
           conversationId,
         });
+        const { content, reasoningContent } = finalized;
+        const persisted =
+          finalized.persisted ||
+          ((turnStatus === 'failed' || turnStatus === 'cancelled') &&
+            streamingForConversationId === conversationId);
         // End the ephemeral reply before the durable mutation leaves this device. Both use the same
         // peer link. This order guarantees a receiver sees the final stream frame first and then the
         // record that replaces it, never the reverse order that could recreate a retired preview.

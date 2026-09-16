@@ -36,6 +36,7 @@ export function keepShownPartialOnError(svc: any, conversationId: string): void 
       conversationId,
       generationTime,
       buildGenerationMetaImpl(svc),
+      'failed',
     );
   svc.resetState();
 }

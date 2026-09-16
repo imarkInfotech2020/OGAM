@@ -12,6 +12,7 @@ import {
 } from '../CustomAlert';
 import { AnimatedEntry } from '../AnimatedEntry';
 import { Accordion } from '../Accordion';
+import { ThinkingIndicator } from '../ThinkingIndicator';
 import { triggerHaptic } from '../../utils/haptics';
 import { createStyles } from './styles';
 import { MessageAttachments } from './components/MessageAttachments';
@@ -225,6 +226,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const answerParsedContent = hasAssistantWork
     ? { ...parsedContent, thinking: '' }
     : parsedContent;
+  const hasVisibleAnswer = Boolean(
+    hasAttachments || answerParsedContent.response.trim(),
+  );
+  const showAnswerBubble =
+    hasVisibleAnswer ||
+    (message.isThinking && !hasAssistantWork) ||
+    (isStreaming && !hasAssistantWork);
   return (
     <TouchableOpacity
       testID={isUser ? 'user-message' : 'assistant-message'}
@@ -243,6 +251,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
             title={
               isStreaming
                 ? 'Working'
+                : message.turnStatus === 'failed'
+                  ? 'Work failed'
                 : message.turnStatus === 'cancelled'
                   ? 'Work stopped'
                   : 'Work done'
@@ -283,10 +293,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               />
             )}
           </Accordion>
+          {isStreaming && !hasVisibleAnswer && (
+            <View testID="streaming-thinking-hint" style={styles.streamingThinkingHint}>
+              <View testID="thinking-indicator">
+                <ThinkingIndicator />
+              </View>
+            </View>
+          )}
         </View>
       )}
 
-      {(!hideProse || hasAttachments) && (
+      {(!hideProse || hasAttachments) && showAnswerBubble && (
         <View
           testID={message.isThinking ? undefined : 'message-bubble'}
           style={message.isThinking ? undefined : bubbleStyle}
@@ -319,7 +336,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         </View>
       )}
 
-      {!message.isThinking && !isStreaming && !hideProse && (
+      {!message.isThinking && !isStreaming && !hideProse && hasVisibleAnswer && (
         <MessageMetaRow
           message={message}
           styles={styles}
@@ -505,7 +522,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             title={
               message.turnStatus === 'cancelled'
                 ? 'Work stopped'
-                : 'Work done'
+                : message.turnStatus === 'failed'
+                  ? 'Work failed'
+                  : 'Work done'
             }
             variant="plain"
             testID="assistant-work-toggle"

@@ -119,6 +119,9 @@ describe('happy — resend/regenerate (heavy entry point)', () => {
       );
       await h.openActionMenu('user', 'dots');
       h.rtl.fireEvent.press(h.view!.getByTestId('action-retry'));
+      // Resend owns the turn as soon as the gesture lands. The dots must cover route and remote
+      // preparation, before the first Gemini event can create the normal Working row.
+      expect(h.view!.queryByTestId('thinking-indicator')).not.toBeNull();
       await h.rtl.waitFor(() => {
         expect(h.view!.queryByText(/Remote resend answer\./)).not.toBeNull();
       });

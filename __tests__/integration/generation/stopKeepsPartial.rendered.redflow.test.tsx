@@ -115,4 +115,54 @@ describe('Stop mid-generation keeps the shown partial (never discards output) â€
     expect(h.view!.queryByText(/Second segment: explain the result/)).not.toBeNull();
     expect(h.view!.queryByTestId('tool-result-label-calculator')).not.toBeNull();
   });
+
+  it('keeps the work accordion when Stop lands before the next segment emits text', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    h.enableToolViaUI('calculator');
+    h.render();
+    h.boundary.llama!.scriptCompletions([
+      {
+        text: '',
+        toolCalls: [
+          {
+            id: 'calculator-empty-stop-call',
+            function: {
+              name: 'calculator',
+              arguments: JSON.stringify({ expression: '64*64' }),
+            },
+          },
+        ] as never,
+      },
+      {
+        text: 'The result is 4096.',
+        holdBeforeStream: true,
+      },
+    ]);
+
+    await h.tapSend('calculate 64*64 and explain it');
+    await h.rtl.waitFor(
+      () => {
+        expect(h.boundary.llama!.calls.completion).toHaveLength(2);
+        expect(h.view!.queryByTestId('stop-button')).not.toBeNull();
+        expect(h.view!.queryByTestId('thinking-indicator')).not.toBeNull();
+      },
+      { timeout: 4000 },
+    );
+
+    await h.rtl.act(async () => {
+      h.rtl.fireEvent.press(h.view!.getByTestId('stop-button'));
+    });
+    await h.rtl.waitFor(
+      () => {
+        expect(h.view!.queryByTestId('stop-button')).toBeNull();
+        expect(
+          h.view!.getByTestId('assistant-work-toggle').props.accessibilityLabel,
+        ).toBe('Work stopped');
+      },
+      { timeout: 4000 },
+    );
+
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
+    expect(h.view!.queryByTestId('tool-result-label-calculator')).not.toBeNull();
+  });
 });

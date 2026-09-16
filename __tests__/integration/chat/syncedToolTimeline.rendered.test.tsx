@@ -9,6 +9,173 @@ import { MessageAudioMode } from '../../../pro/audio/ui/MessageAudioMode';
 import { createGenerationMeta, createMessage } from '../../utils/factories';
 
 describe('synced assistant tool timeline', () => {
+  it('groups durable peer work with its live preview under one Working accordion', () => {
+    const display = getDisplayMessages(
+      [
+        createMessage({
+          id: 'peer-tool-call',
+          role: 'assistant',
+          content: '',
+          reasoningContent: 'I am checking the live sources.',
+          toolCalls: [
+            {
+              id: 'peer-search',
+              name: 'web_search',
+              arguments: '{"query":"latest news"}',
+            },
+          ],
+        }),
+        createMessage({
+          id: 'peer-tool-result',
+          role: 'tool',
+          content: 'The first search is complete.',
+          toolCallId: 'peer-search',
+          toolName: 'web_search',
+        }),
+      ],
+      {
+        isThinking: false,
+        streamingMessage: '',
+        streamingReasoningContent: '',
+        isStreamingForThisConversation: false,
+        remotePreviews: [
+          {
+            id: 'remote-stream:peer-reply',
+            messageId: 'peer-reply',
+            content: '',
+            reasoning: '',
+            phase: 'thinking',
+            deviceId: 'peer-phone',
+            tools: [
+              { name: 'web_search', status: 'running' },
+            ],
+          },
+        ],
+      },
+    );
+    const view = render(
+      <View>
+        {display.map(item => (
+          <ChatMessage key={item.id} message={item} />
+        ))}
+      </View>,
+    );
+
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    expect(view.getByText('Working')).toBeTruthy();
+    expect(view.getByTestId('thinking-indicator')).toBeTruthy();
+    expect(view.queryByText('Thinking...')).toBeNull();
+    expect(view.getByText('I am checking the live sources.')).toBeTruthy();
+    expect(view.getAllByText('Web search result')).toHaveLength(1);
+  });
+
+  it('closes failed peer work under one Work failed accordion', () => {
+    const display = getDisplayMessages(
+      [
+        createMessage({
+          id: 'failed-tool-call',
+          role: 'assistant',
+          content: '',
+          reasoningContent: 'I checked the request.',
+          toolCalls: [
+            {
+              id: 'failed-search',
+              name: 'web_search',
+              arguments: '{"query":"latest news"}',
+            },
+          ],
+        }),
+        createMessage({
+          id: 'failed-tool-result',
+          role: 'tool',
+          content: 'The search completed.',
+          toolCallId: 'failed-search',
+          toolName: 'web_search',
+        }),
+        {
+          ...createMessage({
+            id: 'failed-terminal',
+            role: 'assistant',
+            content: '',
+          }),
+          turnStatus: 'failed' as const,
+        },
+      ],
+      {
+        isThinking: false,
+        streamingMessage: '',
+        streamingReasoningContent: '',
+        isStreamingForThisConversation: false,
+      },
+    );
+    const view = render(
+      <View>
+        {display.map(item => (
+          <ChatMessage key={item.id} message={item} />
+        ))}
+      </View>,
+    );
+
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    expect(view.getByText('Work failed')).toBeTruthy();
+    expect(view.queryByText('I checked the request.')).toBeNull();
+    fireEvent.press(view.getByTestId('assistant-work-toggle'));
+    expect(view.getByText('I checked the request.')).toBeTruthy();
+    expect(view.getByText('Web search result')).toBeTruthy();
+  });
+
+  it('shows stopped peer work without an empty answer card', () => {
+    const display = getDisplayMessages(
+      [
+        createMessage({
+          id: 'stopped-tool-call',
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            {
+              id: 'stopped-search',
+              name: 'web_search',
+              arguments: '{"query":"latest news"}',
+            },
+          ],
+        }),
+        createMessage({
+          id: 'stopped-tool-result',
+          role: 'tool',
+          content: 'The search completed.',
+          toolCallId: 'stopped-search',
+          toolName: 'web_search',
+        }),
+        {
+          ...createMessage({
+            id: 'stopped-terminal',
+            role: 'assistant',
+            content: '',
+          }),
+          turnStatus: 'cancelled' as const,
+        },
+      ],
+      {
+        isThinking: false,
+        streamingMessage: '',
+        streamingReasoningContent: '',
+        isStreamingForThisConversation: false,
+      },
+    );
+    const view = render(
+      <View>
+        {display.map(item => (
+          <ChatMessage key={item.id} message={item} />
+        ))}
+      </View>,
+    );
+
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    expect(view.getByText('Work stopped')).toBeTruthy();
+    expect(view.queryByTestId('message-bubble')).toBeNull();
+    expect(view.queryByTestId('message-meta-row')).toBeNull();
+  });
+
   it('keeps an inline enhanced prompt and completed image in one result bubble', () => {
     const message = createMessage({
       role: 'assistant',

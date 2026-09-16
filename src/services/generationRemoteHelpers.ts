@@ -46,7 +46,9 @@ export async function generateRemoteResponseImpl(
     maxTokens,
     topP,
     stopSequences: [],
-    enableThinking: thinkingEnabled && provider.capabilities.supportsThinking,
+    enableThinking:
+      provider.capabilities.supportsThinking &&
+      (provider.capabilities.thinkingLevelsOnly || thinkingEnabled),
     reasoningBudget,
   };
 

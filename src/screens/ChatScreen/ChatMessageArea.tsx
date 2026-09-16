@@ -16,6 +16,7 @@ import {
   ModelFailureCard,
   ImageGenAdviceCard,
   MtpAdviceCard,
+  RequiredThinkingAdviceCard,
   VisionRepairAdviceCard,
 } from '../../components';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
@@ -193,6 +194,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   const showSettingsDot = totalToolCount > 3 && !toolCountHintDismissed;
   const [inputHeight, setInputHeight] = useState(84);
   const flatListHeightRef = useRef(0);
+  const generationWasActiveRef = useRef(false);
+  const userScrolledDuringGenerationRef = useRef(false);
 
   // Bottom safe-area for the input footer. We own it here (rather than on the
   // screen's SafeAreaView) so the inset replaces — not stacks on top of — the
@@ -211,6 +214,12 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   useEffect(() => {
     prevIsStreamingRef.current = isStreaming;
   }, [isStreaming]);
+  useEffect(() => {
+    if (chat.isGeneratingForThisConversation && !generationWasActiveRef.current) {
+      userScrolledDuringGenerationRef.current = false;
+    }
+    generationWasActiveRef.current = chat.isGeneratingForThisConversation;
+  }, [chat.isGeneratingForThisConversation]);
   const activeModelRepoId = chat.activeModelId
     ?.split('/')
     .slice(0, 2)
@@ -257,8 +266,17 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
               // Initial layout: force scroll to bottom regardless of isNearBottom
               flatListRef.current?.scrollToEnd({ animated: false });
               hasScrolledRef.current = true;
-            } else if (isNearBottomRef.current) {
+            } else if (
+              isNearBottomRef.current ||
+              (chat.isGeneratingForThisConversation &&
+                !userScrolledDuringGenerationRef.current)
+            ) {
               flatListRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+          onScrollBeginDrag={() => {
+            if (chat.isGeneratingForThisConversation) {
+              userScrolledDuringGenerationRef.current = true;
             }
           }}
           onLayout={e => {
@@ -335,6 +353,12 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
       <ImageGenAdviceCard />
       {/* Reload through the SAME seam the reload banner uses — one owner of "reload the text model". */}
       <MtpAdviceCard onEnable={chat.handleReloadTextModel} />
+      <RequiredThinkingAdviceCard
+        modelName={chat.activeModelName}
+        required={Boolean(
+          chat.activeRemoteModel?.capabilities.thinkingLevelsOnly
+        )}
+      />
       {/* A vision model missing its projector: repairable from here, because this is where the
           user finds out they cannot attach a photo. */}
       <VisionRepairAdviceCard onRepaired={chat.handleReloadTextModel} />

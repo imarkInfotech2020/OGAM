@@ -561,9 +561,9 @@ async function callRemoteLLMWithTools(
   if (!provider) throw new Error('Remote provider not found');
   const settings = useAppStore.getState().settings;
   const thinkingEnabled =
-    !opts?.disableThinking &&
-    settings.thinkingEnabled &&
-    provider.capabilities.supportsThinking;
+    provider.capabilities.supportsThinking &&
+    (provider.capabilities.thinkingLevelsOnly ||
+      (!opts?.disableThinking && settings.thinkingEnabled));
   try {
     return await remoteGenerateOnce(provider, {
       messages,
@@ -859,14 +859,9 @@ async function callLiteRTForLoop(
         completedToolResults: outcome.results,
       };
     }
-    // Native SDK handles all tool→model cycles internally; toolCalls always empty here.
-    // If the model ran a tool but then produced NO final answer, surface the fetched
-    // data instead of discarding it (the user would otherwise see a blank / "(No
-    // response)" turn — Q5). The tool result is the honest answer the model failed to
-    // phrase; better a visible result than a dead end.
-    if (!fullResponse.trim() && outcome.results.length > 0) {
-      return { fullResponse: outcome.results.join('\n\n'), toolCalls: [] };
-    }
+    // Native SDK handles all tool→model cycles internally; toolCalls always empty here. Keep an
+    // empty final response empty: completed tool output already has a visible owner in the Work
+    // timeline and must not also be presented as if it were the model's answer.
     return { fullResponse, toolCalls: [] };
   } catch (e: any) {
     if (outcome.limitReached) {
@@ -1259,7 +1254,7 @@ async function emitToolLimitFinalAnswer(
   emitFinalResponse(
     ctx,
     state,
-    finalResponseFromToolResults(displayResponse, state.successfulToolResults),
+    displayResponse,
   );
   return { interrupted: false };
 }
@@ -1433,6 +1428,55 @@ export async function runToolLoop(
     state.reasoningContent = '';
 
     const onStream = buildStreamHandler(ctx, state);
+    let completion;
+    try {
+      completion = await callLLMWithRetry(loopMessages, effectiveSchemas, {
+        onStream,
+        forceRemote: ctx.forceRemote,
+        conversationId: ctx.conversationId,
+        ctx,
+      });
+    } catch (error) {
+      const corruptedSignature =
+        error instanceof Error &&
+        error.message.toLowerCase().includes('corrupted thought signature');
+      if (!corruptedSignature || state.successfulToolResults.length === 0) {
+        throw error;
+      }
+      logger.warn(
+        '[ToolLoop] Signed reasoning chain was rejected; synthesizing from completed tool results',
+      );
+      ctx.onStreamReset?.();
+      state.streamedContent = '';
+      state.reasoningContent = '';
+      state.firstTokenFired = false;
+      const recoveryMessages: Message[] = [
+        ...ctx.messages,
+        {
+          id: `signature-recovery-${Date.now()}`,
+          role: 'user',
+          content:
+            'Answer the original request using only these completed tool results. Do not call more tools.\n\n' +
+            finalResponseFromToolResults('', state.successfulToolResults),
+          timestamp: Date.now(),
+        },
+      ];
+      const recovered = await callLLMWithRetry(recoveryMessages, [], {
+        onStream: buildStreamHandler(ctx, state),
+        forceRemote: ctx.forceRemote,
+        conversationId: ctx.conversationId,
+        finalAnswerOnly: true,
+      });
+      if (recovered.interrupted || ctx.isAborted()) {
+        return { interrupted: true };
+      }
+      emitFinalResponse(
+        ctx,
+        state,
+        resolveToolCalls(recovered.fullResponse, []).displayResponse,
+      );
+      return { interrupted: false };
+    }
     const {
       fullResponse,
       toolCalls,
@@ -1441,12 +1485,7 @@ export async function runToolLoop(
       toolStepLimitReached,
       completedToolMessages,
       completedToolResults,
-    } = await callLLMWithRetry(loopMessages, effectiveSchemas, {
-      onStream,
-      forceRemote: ctx.forceRemote,
-      conversationId: ctx.conversationId,
-      ctx,
-    });
+    } = completion;
 
     // A user STOP landing mid-completion returns `interrupted` — the turn is OVER. Before this
     // guard, the interrupted (usually empty) result fell into the no-tools fallback below and
@@ -1508,10 +1547,7 @@ export async function runToolLoop(
         emitFinalResponse(
           ctx,
           state,
-          finalResponseFromToolResults(
-            fallbackResp,
-            state.successfulToolResults,
-          ),
+          fallbackResp,
         );
         return { interrupted: false };
       }

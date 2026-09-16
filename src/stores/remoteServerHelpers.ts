@@ -392,7 +392,8 @@ export async function fetchModelsFromServer(
                   contextLength: model.context_length ?? 4096,
                   supportsVision: model.architecture?.input_modalities?.includes('image') === true,
                   supportsToolCalling: model.supported_parameters?.includes('tools') === true,
-                  supportsThinking: !!model.reasoning && model.reasoning.mandatory !== true,
+                  supportsThinking: !!model.reasoning,
+                  thinkingLevelsOnly: model.reasoning?.mandatory === true,
                 }
               : fetchModelCapabilities(url, model.id, nameDetect),
           ),

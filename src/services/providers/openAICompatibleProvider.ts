@@ -140,7 +140,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
     try {
       const openaiMessages = await this.buildOpenAIMessages(messages, options);
-      const thinkingEnabled = options.enableThinking !== false;
+      const thinkingEnabled =
+        this.modelCapabilities.thinkingLevelsOnly ||
+        options.enableThinking !== false;
 
       logger.log(`[Provider] generate — model=${this.config.modelId}, isOllama=${isOllamaEndpoint(this.config.endpoint)}, thinking=${thinkingEnabled}, tools=${options.tools?.length || 0}, messages=${openaiMessages.length}`);
 

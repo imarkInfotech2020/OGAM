@@ -11,7 +11,7 @@ jest.unmock('@react-navigation/native');
 
 const Stack = createNativeStackNavigator();
 
-function installOpenRouterBoundary(): () => void {
+function installOpenRouterBoundary(includeMandatory = false): () => void {
   const oldFetch = global.fetch;
   const oldXHR = global.XMLHttpRequest;
   const response = (body: unknown): Response => ({
@@ -23,13 +23,22 @@ function installOpenRouterBoundary(): () => void {
   global.fetch = (async (input: RequestInfo | URL) => {
     if (String(input).endsWith('/v1/models')) {
       return response({
-        data: [{
-          id: 'qwen/qwen3-8b', name: 'Qwen3 8B',
-          context_length: 131072,
-          reasoning: { mandatory: false },
-          supported_parameters: ['reasoning', 'tools'],
-          architecture: { input_modalities: ['text'] },
-        }],
+        data: includeMandatory
+          ? [{
+              id: 'google/gemini-3-flash', name: 'Gemini 3 Flash',
+              context_length: 131072,
+              reasoning: { mandatory: true },
+              supported_parameters: ['reasoning', 'tools'],
+              architecture: { input_modalities: ['text'] },
+            }]
+          : [{
+            id: 'qwen/qwen3-8b', name: 'Qwen3 8B',
+            context_length: 131072,
+            reasoning: { mandatory: false },
+            supported_parameters: ['reasoning', 'tools'],
+            architecture: { input_modalities: ['text'] },
+          },
+        ],
       });
     }
     return { ...response({}), ok: false, status: 404 } as Response;
@@ -48,8 +57,15 @@ function installOpenRouterBoundary(): () => void {
     setRequestHeader(): void {}
     abort(): void {}
     send(body: string): void {
-      const request = JSON.parse(body) as { reasoning?: { max_tokens?: number; effort?: string } };
-      const label = request.reasoning?.max_tokens === 1024
+      const request = JSON.parse(body) as {
+        model?: string;
+        reasoning?: { max_tokens?: number; effort?: string };
+      };
+      const label = request.model === 'google/gemini-3-flash'
+        ? request.reasoning?.effort === 'none'
+          ? 'mandatory reasoning disabled'
+          : 'mandatory reasoning enabled'
+        : request.reasoning?.max_tokens === 1024
         ? 'budget 1024'
         : request.reasoning?.effort === 'none' ? 'Thinking off' : 'unexpected reasoning setting';
       const frames = [
@@ -87,6 +103,12 @@ function renderRoute(name: 'RemoteServers' | 'Chat') {
   );
 }
 
+function openModelSelector(chat: ReturnType<typeof renderRoute>): void {
+  fireEvent.press(
+    chat.queryByText('Select Model') ?? chat.getByTestId('model-selector'),
+  );
+}
+
 it('uses the existing Thinking toggle and budget for an OpenRouter chat', async () => {
   const restoreServer = installOpenRouterBoundary();
   try {
@@ -106,7 +128,12 @@ it('uses the existing Thinking toggle and budget for an OpenRouter chat', async 
     budget.unmount();
 
     const chat = renderRoute('Chat');
-    fireEvent.press(await waitFor(() => chat.getByText('Select Model')));
+    await waitFor(() =>
+      expect(
+        chat.queryByText('Select Model') ?? chat.queryByTestId('model-selector'),
+      ).not.toBeNull(),
+    );
+    openModelSelector(chat);
     fireEvent.press(await waitFor(() => chat.getByText('Qwen3 8B')));
     fireEvent.press(await waitFor(() => chat.getByTestId('quick-settings-button')));
     fireEvent.press(await waitFor(() => chat.getByTestId('quick-thinking-toggle')));
@@ -119,6 +146,45 @@ it('uses the existing Thinking toggle and budget for an OpenRouter chat', async 
     fireEvent.changeText(chat.getByTestId('chat-input'), 'Second turn');
     fireEvent.press(chat.getByTestId('send-button'));
     await waitFor(() => expect(chat.queryByText('Server received Thinking off.')).not.toBeNull());
+    chat.unmount();
+  } finally {
+    restoreServer();
+  }
+}, 20_000);
+
+it('explains and preserves reasoning for a model that reports it as mandatory', async () => {
+  const restoreServer = installOpenRouterBoundary(true);
+  try {
+    const editor = renderRoute('RemoteServers');
+    fireEvent.press(editor.getByTestId('add-server'));
+    fireEvent.changeText(await waitFor(() => editor.getByTestId('server-name')), 'OpenRouter Mandatory');
+    fireEvent.changeText(editor.getByTestId('server-endpoint'), 'https://openrouter.ai/api/mandatory');
+    fireEvent.press(editor.getByTestId('test-connection'));
+    await waitFor(() => expect(editor.queryByText(/Connected \(/)).not.toBeNull());
+    fireEvent.press(editor.getByTestId('save-server'));
+    fireEvent.press(await waitFor(() => editor.getByText('Continue')));
+    await waitFor(() => expect(editor.queryByTestId('server-name')).toBeNull());
+    editor.unmount();
+
+    const chat = renderRoute('Chat');
+    await waitFor(() =>
+      expect(
+        chat.queryByText('Select Model') ?? chat.queryByTestId('model-selector'),
+      ).not.toBeNull(),
+    );
+    openModelSelector(chat);
+    if (chat.queryByTestId('models-row-text')) {
+      fireEvent.press(chat.getByTestId('models-row-text'));
+    }
+    fireEvent.press(await waitFor(() => chat.getByText('Gemini 3 Flash')));
+
+    expect(await waitFor(() => chat.getByTestId('required-thinking-advice'))).toBeTruthy();
+    expect(chat.getByText('Thinking is required')).toBeTruthy();
+    fireEvent.changeText(chat.getByTestId('chat-input'), 'Use the required setting');
+    fireEvent.press(chat.getByTestId('send-button'));
+    await waitFor(() =>
+      expect(chat.queryByText('Server received mandatory reasoning enabled.')).not.toBeNull(),
+    );
     chat.unmount();
   } finally {
     restoreServer();
