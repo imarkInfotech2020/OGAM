@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { ReceivingSection } from '../../../pro/ui/SyncScreen/ReceivingSection';
 import { ReceivePreferencesStore } from '../../../pro/sync/receivePreferences';
 
@@ -31,7 +31,5 @@ it('turns off optional screenshots in Receiving and keeps required files availab
   expect(view.queryByText('Models')).toBeNull();
 
   fireEvent.press(view.getByTestId('receive-screenshot-refuse'));
-  await waitFor(() =>
-    expect(view.getByTestId('receive-screenshot-refuse').props.accessibilityState.checked).toBe(true),
-  );
-}, 30_000);
+  expect(view.getByTestId('receive-screenshot-refuse').props.accessibilityState.checked).toBe(true);
+});
