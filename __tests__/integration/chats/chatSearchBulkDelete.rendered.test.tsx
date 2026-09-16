@@ -62,6 +62,8 @@ describe('Chats list search and bulk delete', () => {
     const chats = rtl.render(React.createElement(ChatsListScreen));
 
     rtl.fireEvent.press(chats.getByLabelText('Select chats'));
+    expect(chats.getByLabelText('Cancel selection')).toBeTruthy();
+    expect(chats.queryByText('Cancel')).toBeNull();
     rtl.fireEvent.press(chats.getByTestId('conversation-item-2'));
     expect(chats.getByText('1 selected')).toBeTruthy();
 
