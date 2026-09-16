@@ -1,5 +1,7 @@
 import { DownloadedModel, ONNXImageModel } from '../types';
 
+const MIN_RECOVERED_TEXT_MODEL_BYTES = 100 * 1024 * 1024;
+
 function isUnknownLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
   return normalized.length === 0 || normalized === 'unknown';
@@ -7,7 +9,10 @@ function isUnknownLike(value: string): boolean {
 
 export function isSuspiciousRecoveredTextModel(model: DownloadedModel): boolean {
   if (!model.id.startsWith('recovered_')) return false;
-  return isUnknownLike(model.author) || isUnknownLike(model.quantization);
+  return (
+    model.fileSize < MIN_RECOVERED_TEXT_MODEL_BYTES &&
+    (isUnknownLike(model.author) || isUnknownLike(model.quantization))
+  );
 }
 
 export function isSuspiciousRecoveredImageModel(model: ONNXImageModel): boolean {
