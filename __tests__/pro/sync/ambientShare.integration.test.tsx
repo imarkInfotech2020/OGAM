@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import {
+  act,
   fireEvent,
   render,
   waitFor,
@@ -372,7 +373,6 @@ describe('mobile ambient sharing journey', () => {
         stateSyncService.sendSharedFileRecord(deviceId, syncId),
     });
     await stateSyncService.start();
-    await syncService.start();
 
     ui = render(
       <>
@@ -381,6 +381,15 @@ describe('mobile ambient sharing journey', () => {
           <AppNavigator />
         </NavigationContainer>
       </>,
+    );
+    let syncStart = Promise.resolve();
+    act(() => {
+      syncStart = syncService.start();
+    });
+    expect(ui.getByTestId('home-notifications-syncing')).toBeTruthy();
+    await act(async () => syncStart);
+    await waitFor(() =>
+      expect(ui!.queryByTestId('home-notifications-syncing')).toBeNull(),
     );
     fireEvent.press(ui.getByTestId('settings-tab'));
     fireEvent.press(await waitFor(() => ui!.getByTestId('open-sync-settings')));
