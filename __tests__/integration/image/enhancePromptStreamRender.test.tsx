@@ -90,7 +90,11 @@ describe('the Enhanced prompt card renders as a card from the first token', () =
       expect(toggle.props.accessibilityLabel).toBe('Work done');
       expect(toggle.props.accessibilityState.expanded).toBe(false);
     });
-    h.rtl.fireEvent.press(view.getByLabelText('Work done'));
+    await h.rtl.act(async () => {
+      let action: any = view.getByTestId('assistant-work-toggle');
+      while (action && typeof action.props.onPress !== 'function') action = action.parent;
+      action.props.onPress();
+    });
     await h.rtl.waitFor(() => {
       expect(view.getByTestId('thinking-block-title').props.children).toBe('Enhanced prompt');
     });

@@ -163,7 +163,11 @@ function groupAssistantTurnWork(
       if (message.role === 'assistant') {
         const inline = splitInlineReasoning(message.content);
         const reasoning = message.reasoningContent || inline.reasoning || '';
-        if (message !== supportingContext && reasoning.trim()) {
+        if (
+          message !== supportingContext &&
+          reasoning.trim() &&
+          !message.timeline?.some(entry => entry.kind === 'thinking')
+        ) {
           timeline.push({ kind: 'thinking', text: reasoning });
         }
         for (const call of message.toolCalls ?? []) {

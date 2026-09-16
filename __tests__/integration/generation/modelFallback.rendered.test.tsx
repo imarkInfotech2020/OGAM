@@ -48,11 +48,18 @@ describe('remote model fallback in chat', () => {
     h.render();
     h.enableGenerationDetailsViaUI();
     await h.tapSend('Answer me');
-
     await h.rtl.waitFor(() => {
       expect(h.view!.queryByText(/Backup answer/)).not.toBeNull();
-      expect(h.view!.queryByTestId('tool-result-label-model_fallback')).not.toBeNull();
+      expect(h.view!.queryByTestId('stop-button')).toBeNull();
     }, { timeout: 8000 });
+    await h.rtl.act(async () => {
+      let action: any = h.view!.getByTestId('assistant-work-toggle');
+      while (action && typeof action.props.onPress !== 'function') action = action.parent;
+      action.props.onPress();
+    });
+    await h.rtl.waitFor(() =>
+      expect(h.view!.queryByTestId('tool-result-label-model_fallback')).not.toBeNull(),
+    );
     await h.rtl.act(async () => {
       let action: any = h.view!.getByText('Generation details');
       while (action && typeof action.props.onPress !== 'function') action = action.parent;
@@ -94,8 +101,16 @@ describe('remote model fallback in chat', () => {
 
     await h.rtl.waitFor(() => {
       expect(h.view!.queryByText(/Local answer/)).not.toBeNull();
-      expect(h.view!.queryByTestId('tool-result-label-model_fallback')).not.toBeNull();
+      expect(h.view!.queryByTestId('stop-button')).toBeNull();
     }, { timeout: 8000 });
+    await h.rtl.act(async () => {
+      let action: any = h.view!.getByTestId('assistant-work-toggle');
+      while (action && typeof action.props.onPress !== 'function') action = action.parent;
+      action.props.onPress();
+    });
+    await h.rtl.waitFor(() =>
+      expect(h.view!.queryByTestId('tool-result-label-model_fallback')).not.toBeNull(),
+    );
     await h.rtl.act(async () => {
       let action: any = h.view!.getByText('Generation details');
       while (action && typeof action.props.onPress !== 'function') action = action.parent;

@@ -25,9 +25,12 @@ describe('Q3 (behavioral) — stringified tool args surface an error bubble', ()
     // `arguments` is a STRING ("{\"expression\":\"2+2\"}") rather than an object.
     await h.send('what is 2 + 2', { text: 'Calculating. <tool_call>{"name": "calculator", "arguments": "{\\"expression\\": \\"2+2\\"}"}</tool_call>' });
 
-    // Wait on the user-visible reply, then let the tool loop settle.
-    await h.rtl.waitFor(() => { expect(h.view!.queryByText(/Calculating\./)).not.toBeNull(); });
+    // Wait on the completed work control, then inspect the tool result it contains.
+    await h.rtl.waitFor(() => {
+      expect(h.view!.getByTestId('assistant-work-toggle').props.accessibilityLabel).toBe('Work done');
+    });
     await h.settle();
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
 
     // The tool ran and produced a result bubble...
     expect(h.view!.queryByTestId('tool-result-label-calculator')).not.toBeNull();

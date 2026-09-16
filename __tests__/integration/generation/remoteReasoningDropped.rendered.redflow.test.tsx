@@ -43,6 +43,7 @@ describe('T049 (rendered) — remote LM Studio reasoning is dropped, not shown (
     // The remote answer arrives (proves the remote send + transport ran).
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/The answer is 42/)).not.toBeNull(); }, { timeout: 6000 });
 
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
     // SPEC: the reasoning the model actually sent is shown to the user (in the thinking block).
     // RED (B16): it was gated out by thinkingEnabled=false and never renders anywhere.
     expect(h.view!.queryByText(/Thinking Process/)).not.toBeNull();

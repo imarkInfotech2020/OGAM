@@ -66,6 +66,7 @@ describe('tool-call limit final answer', () => {
     await h.rtl.waitFor(() => {
       expect(h.view!.queryByText(FINAL_ANSWER)).not.toBeNull();
     });
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
     await h.rtl.waitFor(() => {
       expect(
         h.view!.queryByTestId('tool-result-label-calculator'),

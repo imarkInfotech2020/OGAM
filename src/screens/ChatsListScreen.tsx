@@ -173,6 +173,8 @@ export const ChatsListScreen: React.FC = () => {
     <TouchableOpacity
       style={styles.deleteAction}
       onPress={() => handleDeleteChat(conversation)}
+      accessibilityRole="button"
+      accessibilityLabel={`Delete ${conversation.title}`}
     >
       <Icon name="trash-2" size={16} color={colors.error} />
     </TouchableOpacity>

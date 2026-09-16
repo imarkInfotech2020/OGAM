@@ -385,7 +385,8 @@ describe('Pro mobile state sync journey', () => {
     await waitFor(() =>
       expect(ui!.getByText('The field notes are ready.')).toBeTruthy(),
     );
-    expect(ui.getByText('Using contacts_search: ali hafizji')).toBeTruthy();
+    fireEvent.press(ui.getByTestId('assistant-work-toggle'));
+    expect(ui.getByText('contacts_search')).toBeTruthy();
     expect(
       ui
         .getAllByText(/^(Thought process|Web search result)$/)

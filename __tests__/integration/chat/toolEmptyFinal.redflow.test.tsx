@@ -31,6 +31,7 @@ describe('Q5 (behavioral) — successful tool + empty final turn', () => {
     // The model emits a calculator tool call, the tool returns data, but the final turn is EMPTY.
     await h.send('what is 2 + 2', { toolCalls: [{ name: 'calculator', arguments: { expression: '2+2' } }], content: '' });
 
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
     // The tool ran (its result bubble is shown)...
     await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('tool-result-label-calculator')).not.toBeNull(); });
 

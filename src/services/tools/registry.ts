@@ -88,7 +88,7 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
   },
 ];
 
-export function getToolsAsOpenAISchema(enabledToolIds: string[]) {
+export function getToolsAsOpenAISchema(enabledToolIds: readonly string[]) {
   return AVAILABLE_TOOLS
     .filter(tool => enabledToolIds.includes(tool.id))
     .map(tool => ({

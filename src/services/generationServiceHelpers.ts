@@ -138,7 +138,11 @@ function buildBaseGenerationMeta(svc: any): GenerationMeta {
     return {
       gpu: false,
       gpuBackend: 'Remote',
-      modelName: activeModel?.name || activeServer?.name || 'Remote Model',
+      modelName:
+        activeModel?.name ||
+        remoteStore.activeRemoteTextModelId ||
+        activeServer?.name ||
+        'Remote Model',
       tokenCount: estimatedTokens,
       tokensPerSecond,
       timeToFirstToken: svc.remoteTimeToFirstToken,

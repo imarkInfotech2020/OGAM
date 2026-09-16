@@ -459,6 +459,7 @@ describe('Release 107 task session playback', () => {
     );
 
     expect(screen.queryByTestId('task-chat-card')).toBeNull();
+    fireEvent.press(screen.getByTestId('assistant-work-toggle'));
     expect(screen.getByText('Using Web Use...')).toBeTruthy();
     fireEvent.press(screen.getByTestId('tool-result-accordion-web_use'));
     expect(screen.getByTestId('task-session-frame')).toBeTruthy();

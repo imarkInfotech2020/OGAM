@@ -42,6 +42,7 @@ describe('happy — a tool runs and its result renders (heavy entry point)', () 
       await h.rtl.waitFor(() => {
         expect(h.view!.queryByText(/I found the result\./)).not.toBeNull();
       });
+      h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
       const webResults = h.view!.getAllByTestId(
         'tool-result-accordion-web_search',
       );
@@ -140,6 +141,7 @@ describe('happy — a tool runs and its result renders (heavy entry point)', () 
     // The model emits a calculator tool call; after the tool runs it answers with the result.
     await h.send('what is 2 + 2', { toolCalls: [{ name: 'calculator', arguments: { expression: '2+2' } }], content: 'The answer is 4.' });
 
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
     // The user sees the tool-result bubble (the calculator actually ran)...
     await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('tool-result-label-calculator')).not.toBeNull(); });
     // ...and the model's final answer.
@@ -184,6 +186,7 @@ describe('happy — a tool runs and its result renders (heavy entry point)', () 
       ],
       content: 'Results: 160500 and 25.',
     });
+    h.rtl.fireEvent.press(h.view!.getByTestId('assistant-work-toggle'));
     // Two tool-result bubbles render (both calculator runs are visible).
     await h.rtl.waitFor(() => { expect(h.view!.queryAllByTestId('tool-result-label-calculator').length).toBe(2); });
     // ...and the answer with both results renders.

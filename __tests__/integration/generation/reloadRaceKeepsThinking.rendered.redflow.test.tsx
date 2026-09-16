@@ -77,7 +77,12 @@ describe('reload race — a send during the load window keeps thinking (device 2
       thinkingText: `<think>${REASON_BEFORE}</think>The answer is 42.`,
     });
     await h.rtl.waitFor(() => { expect(h.view!.queryByText(/The answer is 42/)).not.toBeNull(); }, { timeout: 4000 });
-    expect(h.view!.queryByText(new RegExp('six sevens are forty-two'))).not.toBeNull();
+    await h.rtl.act(async () => {
+      pressByWalkingUp(h.view!.getByTestId('assistant-work-toggle'));
+    });
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(new RegExp('six sevens are forty-two'))).not.toBeNull();
+    });
 
     // GESTURE: pick GPU/OpenCL → the settings-changed reload banner appears.
     selectBackendViaUI(h, 'opencl');
@@ -105,7 +110,13 @@ describe('reload race — a send during the load window keeps thinking (device 2
     // ...WITH its reasoning — the racing turn must not silently lose thinking.
     // RED on HEAD: the turn ran with stale thinkingSupported=false → enable_thinking=false → the model
     // never reasoned → this text is nowhere on screen and the second turn has NO thinking block.
-    expect(h.view!.queryByText(/seventeen has no divisors below its root/)).not.toBeNull();
+    const workToggles = h.view!.getAllByTestId('assistant-work-toggle');
+    await h.rtl.act(async () => {
+      pressByWalkingUp(workToggles[workToggles.length - 1]);
+    });
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(/seventeen has no divisors below its root/)).not.toBeNull();
+    });
     // BOTH turns carry the thinking affordance (the block collapses to its preview after completion).
     const blocks = h.view!.queryAllByTestId('thinking-block');
     expect(blocks.length).toBe(2);
