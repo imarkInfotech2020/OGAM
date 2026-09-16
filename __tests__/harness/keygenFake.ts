@@ -352,7 +352,21 @@ export function createKeygenFake(): KeygenFake {
       }) as typeof globalThis.fetch;
     },
     restore() {
-      globalThis.fetch = realFetch;
+      globalThis.fetch = (async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof URL
+            ? input.href
+            : input.url;
+        if (url.startsWith(KEYGEN_API_BASE)) {
+          throw new Error(`unexpected Keygen request after fake restore: ${url}`);
+        }
+        return realFetch(input, init);
+      }) as typeof globalThis.fetch;
     },
   };
 }
