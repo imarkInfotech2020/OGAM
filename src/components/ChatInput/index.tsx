@@ -22,7 +22,7 @@ import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { AppSheet } from '../AppSheet';
 import { Button } from '../Button';
 
-export type AssistantAvailability = 'no-pro' | 'needs-sync' | 'ready';
+type AssistantAvailability = 'no-pro' | 'needs-sync' | 'ready';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState, assistantEnabled?: boolean) => void;
