@@ -445,7 +445,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <>
               <Button
                 title=""
-                variant="outline"
+                variant="ghost"
                 size="small"
                 testID="assistant-toggle"
                 accessibilityLabel="Assistant"
@@ -455,8 +455,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 style={styles.assistantButton}
                 icon={<Icon
                   name="cpu"
-                  size={18}
-                  color={assistantEnabled ? colors.primary : colors.textMuted}
+                  size={16}
+                  color={assistantEnabled ? colors.primary : colors.textDisabled}
                 />}
               />
               <TextInput

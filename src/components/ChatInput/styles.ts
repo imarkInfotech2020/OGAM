@@ -131,9 +131,10 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingRight: 4,
   },
   assistantButton: {
-    width: 44,
+    width: 36,
     height: 44,
     marginLeft: -SPACING.sm,
+    marginRight: SPACING.xs,
     paddingHorizontal: 0,
     paddingVertical: 0,
   },
