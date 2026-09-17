@@ -98,22 +98,41 @@ describe('TaskSessionPlayback full screen', () => {
     );
 
     fireEvent(screen.getByTestId('task-session-scrubber'), 'valueChange', 1);
-    expect(screen.getByText('Step 2 of 2 · 0:01 / 0:01')).toBeTruthy();
+    expect(screen.getByText('Step 2 of 2')).toBeTruthy();
+    expect(screen.getByText('0:01 / 0:01')).toBeTruthy();
     expect(screen.getByText('Selected Continue')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('task-session-open-fullscreen'));
-    expect(screen.getByText('Step 2 of 2 · 0:01 / 0:01')).toBeTruthy();
+    expect(screen.getByText('Step 2 of 2')).toBeTruthy();
+    expect(screen.getByText('0:01 / 0:01')).toBeTruthy();
     expect(screen.getByText('Selected Continue')).toBeTruthy();
     expect(screen.getByText('Play')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('task-session-fullscreen-toggle'));
-    expect(screen.getByText('Step 1 of 2 · 0:00 / 0:01')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 2')).toBeTruthy();
+    expect(screen.getByText('0:00 / 0:01')).toBeTruthy();
     expect(screen.getByText('Pause')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('task-session-close-fullscreen'));
-    expect(screen.getByText('Step 1 of 2 · 0:00 / 0:01')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 2')).toBeTruthy();
+    expect(screen.getByText('0:00 / 0:01')).toBeTruthy();
     expect(screen.getByText('Pause')).toBeTruthy();
 
     act(() => screen.unmount());
+  });
+
+  it('reviews saved steps during a live task and returns to the live frame', () => {
+    const screen = render(
+      <TaskSessionPlayback run={run('running')} steps={steps} />,
+    );
+
+    expect(screen.getByText('Step 2')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Show previous task step'));
+    expect(screen.getByText('Step 2 of 2')).toBeTruthy();
+    expect(screen.getByText('Selected Continue')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Return to live task view'));
+    expect(screen.getByText('Step 2')).toBeTruthy();
+    expect(screen.queryByText('Selected Continue')).toBeNull();
   });
 });

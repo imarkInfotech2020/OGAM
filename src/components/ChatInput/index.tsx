@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, Animated, Platform, ActionSheetIOS } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Animated, Platform, ActionSheetIOS } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import IconMC from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme, useThemedStyles } from '../../theme';
 import { ImageModeState, MediaAttachment } from '../../types';
 import { VoiceRecordButton, type VoiceRecordInteractionMode } from '../VoiceRecordButton';
@@ -19,9 +20,13 @@ import { useKeyboardAwarePopover } from './useKeyboardAwarePopover';
 import { useAppStore } from '../../stores';
 import { useUiModeStore } from '../../stores';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
+import { AppSheet } from '../AppSheet';
+import { Button } from '../Button';
+
+type AssistantAvailability = 'no-pro' | 'needs-sync' | 'ready';
 
 interface ChatInputProps {
-  onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState) => void;
+  onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState, assistantEnabled?: boolean) => void;
   onStop?: () => void;
   disabled?: boolean;
   isGenerating?: boolean;
@@ -51,6 +56,9 @@ interface ChatInputProps {
   /** Opens the shared fullscreen image viewer when a pending (pre-send)
    * attachment thumbnail is tapped — the same handler in-message images use. */
   onImagePress?: (uri: string) => void;
+  assistantAvailability?: AssistantAvailability;
+  onAssistantUpgrade?: () => void;
+  onAssistantSetupSync?: () => void;
 }
 
 const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
@@ -148,10 +156,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isRemote = false,
   showSettingsDot = false,
   onImagePress,
+  assistantAvailability = 'no-pro',
+  onAssistantUpgrade,
+  onAssistantSetupSync,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [message, setMessage] = useState('');
+  const [assistantEnabled, setAssistantEnabled] = useState(false);
+  const [assistantTransitioning, setAssistantTransitioning] = useState(false);
+  const [assistantGateOpen, setAssistantGateOpen] = useState(false);
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
   const [voiceInteractionMode, setVoiceInteractionMode] = useState<VoiceRecordInteractionMode>('idle');
   const [alertState, setAlertState] = useState<AlertState>(initialAlertState);
@@ -159,6 +173,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const attachPicker = useKeyboardAwarePopover();
   const voicePicker = useKeyboardAwarePopover();
   const inputRef = useRef<TextInput>(null);
+  const assistantTransitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachmentsRef = useRef<MediaAttachment[]>([]);
   const hasText = message.length > 0;
   const iconsAnim = useRef(new Animated.Value(0)).current;
@@ -170,6 +185,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       useNativeDriver: false,
     }).start();
   }, [hasText, iconsAnim]);
+
+  useEffect(() => () => {
+    if (assistantTransitionTimer.current) {
+      clearTimeout(assistantTransitionTimer.current);
+    }
+  }, []);
 
   const { attachments, removeAttachment, clearAttachments, handlePickImage, handlePickDocument, addAudioAttachment } = useAttachments(setAlertState);
   attachmentsRef.current = attachments;
@@ -230,7 +251,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     logger.log(`[COMPOSER-SM] handleSend canSend=${canSend} disabled=${disabled} hasText=${message.trim().length > 0} attachments=${attachments.length} imageMode=${imageMode}`);
     if (!canSend) return;
     triggerHaptic('impactMedium');
-    onSend(message.trim(), attachments.length > 0 ? attachments : undefined, imageMode);
+    const outgoingAttachments = attachments.length > 0 ? attachments : undefined;
+    if (assistantEnabled) {
+      onSend(message.trim(), outgoingAttachments, imageMode, true);
+    } else {
+      onSend(message.trim(), outgoingAttachments, imageMode);
+    }
+    if (assistantTransitionTimer.current) {
+      clearTimeout(assistantTransitionTimer.current);
+      assistantTransitionTimer.current = null;
+    }
+    setAssistantTransitioning(false);
+    setAssistantEnabled(false);
     setMessage('');
     clearAttachments();
     inputRef.current?.focus();
@@ -274,6 +306,37 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleQuickSettingsPress = () => quickSettings.show();
+
+  const handleAssistantPress = () => {
+    triggerHaptic('impactLight');
+    if (assistantAvailability !== 'ready') {
+      setAssistantGateOpen(true);
+      return;
+    }
+    setAssistantEnabled(current => !current);
+    setAssistantTransitioning(true);
+    if (assistantTransitionTimer.current) {
+      clearTimeout(assistantTransitionTimer.current);
+    }
+    assistantTransitionTimer.current = setTimeout(() => {
+      setAssistantTransitioning(false);
+      assistantTransitionTimer.current = null;
+    }, ANIM_DURATION_IN);
+  };
+
+  const assistantGate = assistantAvailability === 'no-pro'
+    ? {
+        title: 'Assistant requires Pro',
+        body: 'Assistant uses Web Use and Computer Use on a connected Desktop.',
+        action: 'View Pro',
+        onPress: onAssistantUpgrade,
+      }
+    : {
+        title: 'Connect a Desktop',
+        body: 'Set up Sync and connect Off Grid AI Desktop to use Web Use and Computer Use.',
+        action: 'Set up Sync',
+        onPress: onAssistantSetupSync,
+      };
 
   const handleAttachPress = () => {
     logger.log(`[COMPOSER-SM] attach pressed platform=${Platform.OS} supportsVision=${supportsVision}`);
@@ -402,6 +465,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             />
           ) : (
             <>
+              <Button
+                title=""
+                variant="ghost"
+                size="small"
+                testID="assistant-toggle"
+                accessibilityLabel="Assistant"
+                accessibilityState={{ selected: assistantEnabled, busy: assistantTransitioning }}
+                onPress={handleAssistantPress}
+                active={assistantEnabled}
+                loading={assistantTransitioning}
+                style={styles.assistantButton}
+                icon={<IconMC
+                  name={assistantEnabled ? 'robot' : 'robot-outline'}
+                  size={16}
+                  color={assistantEnabled ? colors.primary : colors.textDisabled}
+                />}
+              />
               <TextInput
                 ref={inputRef}
                 testID="chat-input"
@@ -468,6 +548,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         buttons={alertState.buttons}
         onClose={() => setAlertState(hideAlert())}
       />
+      <AppSheet
+        visible={assistantGateOpen}
+        onClose={() => setAssistantGateOpen(false)}
+        title={assistantGate.title}
+        enableDynamicSizing
+      >
+        <View style={styles.assistantGateContent}>
+          <Text style={styles.assistantGateText}>{assistantGate.body}</Text>
+          <Button
+            title={assistantGate.action}
+            onPress={() => {
+              setAssistantGateOpen(false);
+              assistantGate.onPress?.();
+            }}
+          />
+        </View>
+      </AppSheet>
     </View>
   );
 };

@@ -84,7 +84,9 @@ export const textProvider: DownloadProvider = {
 
   async start(request): Promise<void> {
     if (request.modelType !== 'text') throw new Error('Invalid text download request');
-    await startModelDownload(request.modelId, request.file);
+    await startModelDownload(request.modelId, request.file, {
+      autoSelectIfEmpty: true,
+    });
   },
 
   async list(): Promise<ModelDownload[]> {
@@ -211,7 +213,9 @@ export const textProvider: DownloadProvider = {
       sha256: params.sha256,
       ...(mmProjFile ? { mmProjFile } : {}),
     };
-    await startModelDownload(params.modelId, file);
+    await startModelDownload(params.modelId, file, {
+      autoSelectIfEmpty: true,
+    });
   },
 
   async reconcile(): Promise<void> {

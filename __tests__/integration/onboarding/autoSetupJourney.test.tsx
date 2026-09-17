@@ -186,7 +186,8 @@ describe('Auto Setup release journey', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useAppStore.getState().updateSettings({ modelLoadingMode: 'balanced' });
-    useAppStore.setState({ activeModelId: null });
+    useAppStore.getState().setActiveModelId(null);
+    useAppStore.getState().setActiveImageModelId(null);
     textDownloads.completeOnStart = true;
     imageDownloads.completeOnStart = true;
     speechDownloads.completeOnStart = true;
@@ -239,6 +240,7 @@ describe('Auto Setup release journey', () => {
     expect(useAppStore.getState().activeModelId).toContain(
       'unsloth/Qwen3.5-9B-GGUF',
     );
+    expect(useAppStore.getState().activeImageModelId).toBe('image-extreme');
     expect(navigation.replace).toHaveBeenCalledWith('Main');
   });
 

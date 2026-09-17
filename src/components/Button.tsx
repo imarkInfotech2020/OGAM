@@ -1,5 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, ViewStyle, TextStyle } from 'react-native';
+import type { AccessibilityState } from 'react-native';
 import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
@@ -22,6 +23,7 @@ interface ButtonProps {
   textStyle?: TextStyle;
   testID?: string;
   accessibilityLabel?: string;
+  accessibilityState?: AccessibilityState;
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -37,6 +39,7 @@ export const Button: React.FC<ButtonProps> = ({
   textStyle,
   testID,
   accessibilityLabel,
+  accessibilityState,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -68,6 +71,7 @@ export const Button: React.FC<ButtonProps> = ({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={accessibilityState}
     >
       {loading ? (
         // The dots, not a ring spinner: a rotating ring on a button reads as a retry glyph, so

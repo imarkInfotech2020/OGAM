@@ -129,6 +129,30 @@ describe('Release 107 rendered task-control acknowledgement', () => {
     jest.useRealTimers();
   });
 
+  it('enables Assistant for one submitted turn and resets the composer control', () => {
+    const assistantTurns: boolean[] = [];
+    const screen = render(
+      <ChatInput
+        assistantAvailability="ready"
+        onSend={(_text, _attachments, _imageMode, assistantEnabled) => {
+          assistantTurns.push(assistantEnabled === true);
+        }}
+      />,
+    );
+
+    fireEvent.press(screen.getByTestId('assistant-toggle'));
+    expect(screen.getByTestId('assistant-toggle').props.accessibilityState).toMatchObject({
+      selected: true,
+    });
+    fireEvent.changeText(screen.getByTestId('chat-input'), 'Check the release');
+    fireEvent.press(screen.getByTestId('send-button'));
+
+    expect(assistantTurns).toEqual([true]);
+    expect(screen.getByTestId('assistant-toggle').props.accessibilityState).toMatchObject({
+      selected: false,
+    });
+  });
+
   it('stops the active Desktop task from the chat Stop button', async () => {
     const run = {
       ...runningTask('computer_use'),

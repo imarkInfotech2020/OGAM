@@ -117,6 +117,7 @@ export function useChatRuntimeSubscriptions(
           attachments: item.attachments,
           conversationId: item.conversationId,
           imageMode: item.imageMode,
+          assistantEnabled: item.assistantEnabled,
         },
         startGenerationRef.current,
       );

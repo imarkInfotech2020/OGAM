@@ -1,6 +1,7 @@
 import { modelDownloadService } from './modelDownloadService';
 import type { ModelDownload, ModelDownloadStartRequest } from './modelDownloadService/types';
 import { useAppStore } from '../stores';
+import { activeModelService } from './activeModelService';
 import { uniformDownloadId } from './modelDownloadService/uniformId';
 import {
   loadAutoSetupCompatibleCatalog,
@@ -362,7 +363,13 @@ export function createAutoSetupSession(
     complete() {
       const plan = selectedPlan();
       if (plan && state.phase === 'completed') {
-        useAppStore.getState().setActiveModelId(plan.items[0].id);
+        const app = useAppStore.getState();
+        if (app.activeModelId === null) {
+          activeModelService.selectTextModel(plan.items[0].id);
+        }
+        if (app.activeImageModelId === null) {
+          app.setActiveImageModelId(plan.items[1].id);
+        }
       }
     },
     dispose() {

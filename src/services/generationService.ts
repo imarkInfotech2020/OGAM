@@ -39,6 +39,7 @@ export interface QueuedMessage {
    *  message the user explicitly forced to image mode is dispatched as image on drain — never re-decided
    *  at 'auto' by resolveTurnKind (#510: a queued force-image send generated as text). */
   imageMode?: 'auto' | 'force' | 'disabled';
+  assistantEnabled?: boolean;
 }
 
 export interface GenerationState {
@@ -285,6 +286,7 @@ class GenerationService {
       onToolCallComplete?: (name: string, result: ToolResult) => void;
       onFirstToken?: () => void;
       contextUsage?: GenerationRequest['contextUsage'];
+      assistantEnabled?: boolean;
     },
   ): Promise<import('./generationToolLoop').ToolLoopOutcome | void> {
     let toolStarted = false;
@@ -306,7 +308,7 @@ class GenerationService {
           options: { ...trackedOptions, prepared, preservePartialOnError: false },
         });
       }
-      const { enabledToolIds, projectId, contextUsage, ...callbacks } = trackedOptions;
+      const { enabledToolIds, projectId, contextUsage, assistantEnabled, ...callbacks } = trackedOptions;
       if (!prepared && !(await this.prepareGeneration(conversationId))) return;
       this.contextUsage = contextUsage;
       try {
@@ -315,6 +317,7 @@ class GenerationService {
         messages,
         enabledToolIds,
         projectId,
+        assistantEnabled,
         callbacks,
         ...this.buildToolLoopHandlers(),
       });
@@ -485,6 +488,7 @@ class GenerationService {
       // If ANY coalesced send forced image mode, the combined dispatch must force image too — the
       // user's explicit force must never be dropped by the merge (mirror of the single-message carry).
       imageMode: all.some(m => m.imageMode === 'force') ? 'force' : all[0].imageMode,
+      assistantEnabled: all.some(m => m.assistantEnabled),
     };
     this.queueProcessor(combined).catch(e => { logger.error('[GenerationService] Queue processor error:', e); });
   }

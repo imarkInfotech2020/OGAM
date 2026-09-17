@@ -448,6 +448,7 @@ export type StartGenerationCall = {
   setDebugInfo: SetState<any>;
   targetConversationId: string;
   messageText: string;
+  assistantEnabled?: boolean;
 };
 async function prepareContext(
   setDebugInfo: SetState<any>,
@@ -494,7 +495,7 @@ async function prepareContext(
 }
 /** Compact before the prompt budget is full; keep the context-full retry as a fallback. */
 async function generateWithCompactionRetry(
-  opts: { id: string; prompt: string; messages: Message[]; setDebugInfo?: SetState<any> },
+  opts: { id: string; prompt: string; messages: Message[]; setDebugInfo?: SetState<any>; assistantEnabled?: boolean },
   enabledTools: string[],
   projectId?: string,
 ): Promise<boolean> {
@@ -519,6 +520,7 @@ async function generateWithCompactionRetry(
           enabledToolIds: enabledTools,
           projectId,
           contextUsage,
+          assistantEnabled: opts.assistantEnabled,
         })
       : generationService.generateResponse(opts.id, msgs, undefined, contextUsage);
   };
@@ -679,7 +681,7 @@ export async function startGenerationFn(
   // PER-TURN stop truth (from the tool loop's outcome) — never the service's shared abort flag,
   // which the NEXT turn's prepare resets (the race that mislabeled a stopped turn 'No response').
   let turnStopped = false;
-  const { setDebugInfo, targetConversationId, messageText } = call;
+  const { setDebugInfo, targetConversationId, messageText, assistantEnabled } = call;
   if (!deps.hasActiveModel) return;
   // Pure text executor — image-vs-text routing happens upstream in dispatchGenerationFn.
   generationSession.begin(targetConversationId);
@@ -743,6 +745,7 @@ export async function startGenerationFn(
         prompt: systemPrompt,
         messages: messagesForContext,
         setDebugInfo,
+        assistantEnabled,
       },
       activeTools,
       conversation?.projectId,
@@ -923,6 +926,7 @@ export type DispatchCall = {
   attachments?: MediaAttachment[];
   conversationId: string;
   imageMode?: 'auto' | 'force' | 'disabled';
+  assistantEnabled?: boolean;
 };
 /**
  * THE routing layer: the single place a message is classified and dispatched to
@@ -933,9 +937,9 @@ export type DispatchCall = {
 export async function dispatchGenerationFn(
   deps: GenerationDeps,
   call: DispatchCall,
-  startTextGeneration: (convId: string, messageText: string) => Promise<void>,
+  startTextGeneration: (convId: string, messageText: string, assistantEnabled?: boolean) => Promise<void>,
 ): Promise<void> {
-  const { text, attachments, conversationId, imageMode = 'auto' } = call;
+  const { text, attachments, conversationId, imageMode = 'auto', assistantEnabled } = call;
   const messageTextForRoute = appendAttachmentText(text, attachments);
   // [ROUTE-SM]: confirms the turn reached the router (esp. the voice path) + the
   // final routed destination — so a "pipeline never triggered" is visible in logs.
@@ -968,20 +972,21 @@ export async function dispatchGenerationFn(
     attachments,
     turnKind: kind,
   });
-  await startTextGeneration(conversationId, result.messageText);
+  await startTextGeneration(conversationId, result.messageText, assistantEnabled);
 }
 export type SendCall = {
   text: string;
   attachments?: MediaAttachment[];
   imageMode?: 'auto' | 'force' | 'disabled';
-  startGeneration: (convId: string, text: string) => Promise<void>;
+  assistantEnabled?: boolean;
+  startGeneration: (convId: string, text: string, assistantEnabled?: boolean) => Promise<void>;
   setDebugInfo: SetState<any>;
 };
 export async function handleSendFn(
   deps: GenerationDeps,
   call: SendCall,
 ): Promise<void> {
-  const { text, attachments, imageMode = 'auto', startGeneration } = call;
+  const { text, attachments, imageMode = 'auto', assistantEnabled, startGeneration } = call;
   abortPreload(); // user acted — stop background warming so it can't block them
   if (!deps.hasActiveModel) {
     deps.setAlertState(
@@ -1019,12 +1024,13 @@ export async function handleSendFn(
       attachments,
       messageText,
       imageMode,
+      assistantEnabled,
     });
     return;
   }
   await dispatchGenerationFn(
     deps,
-    { text, attachments, conversationId: targetConversationId, imageMode },
+    { text, attachments, conversationId: targetConversationId, imageMode, assistantEnabled },
     startGeneration,
   );
 }

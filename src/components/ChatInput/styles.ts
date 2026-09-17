@@ -130,6 +130,23 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingBottom: Platform.OS === 'ios' ? 10 : 6,
     paddingRight: 4,
   },
+  assistantButton: {
+    width: 36,
+    height: 44,
+    marginLeft: -SPACING.sm,
+    marginRight: SPACING.xs,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  assistantGateContent: {
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl,
+    gap: SPACING.lg,
+  },
+  assistantGateText: {
+    ...TYPOGRAPHY.body,
+    color: colors.textSecondary,
+  },
   // Push-to-talk hint that replaces the text field while holding to record: a recording dot on the
   // left, "‹ Slide to cancel" centred (the mic sits to the right, outside the pill).
   recordingRow: {

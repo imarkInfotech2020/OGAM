@@ -27,7 +27,7 @@ import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores';
 import { getToolExtensions } from '../../services/tools/extensions';
-import { useExtensionToolCount } from '../../services/tools/useExtensionToolCount';
+import { useAssistantToolAvailability, useExtensionToolCount } from '../../services/tools/useExtensionToolCount';
 import { AVAILABLE_TOOLS } from '../../services/tools';
 import { useOpenProTools } from '../../hooks/useOpenProTools';
 import { useIsProActive } from '../../hooks/useIsProActive';
@@ -168,7 +168,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   // below are non-reactive and the Pro Tools badge stayed stale until an app
   // restart. Return is intentionally unused — the count is naturally 0 when Pro
   // is inactive (no extensions registered); we only need the re-render.
-  useIsProActive();
+  const isProActive = useIsProActive();
+  const assistantToolsAvailable = useAssistantToolAvailability();
   // extToolCount is the live MCP tool count (the email/calendar extension reports 0
   // here because those live in settings.enabledTools — see EmailCalendarExtension).
   // Subscribed, not read at render: deactivating an MCP server cleared the store but the mounted
@@ -424,6 +425,15 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           onRepairVision={handleRepairVision}
           isRemote={chat.activeModelInfo.isRemote}
           onImagePress={chat.handleImagePress}
+          assistantAvailability={
+            !isProActive
+              ? 'no-pro'
+              : assistantToolsAvailable
+                ? 'ready'
+                : 'needs-sync'
+          }
+          onAssistantUpgrade={() => tabNav.navigate('ProDetail')}
+          onAssistantSetupSync={() => tabNav.navigate('Sync')}
         />
       </View>
     </>
