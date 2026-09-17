@@ -6,6 +6,10 @@ require Pod::Executable.execute_command('node', ['-p',
 
 platform :ios, '17.0'  # Raised to 17.0 for ml-stable-diffusion (Core ML image gen)
 
+# The QR scanner does not attach location metadata. Do not compile Vision Camera's
+# optional Core Location support into the app.
+$VCEnableLocation = false
+
 prepare_react_native_project!
 
 linkage = ENV['USE_FRAMEWORKS']
