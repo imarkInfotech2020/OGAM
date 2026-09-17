@@ -392,7 +392,7 @@ export const ToolCallMessage: React.FC<{
             content=""
             hasDetails={Boolean(taskDetail)}
             active
-            openByDefault
+            openByDefault={isTaskToolName(row.name)}
             paired
             rowTestID="tool-call-row"
             labelTestID={`tool-call-label-${row.name || 'unknown'}`}
