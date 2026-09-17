@@ -224,6 +224,7 @@ export function useTextModels(setAlertState: (s: AlertState) => void) {
     // Shared with the onboarding ModelDownloadScreen via startModelDownload — one
     // mechanism + one duplicate guard. This screen owns only its completion/error UI.
     await startModelDownload(model.id, file, {
+      autoSelectIfEmpty: true,
       onRegistered: (dm) => {
         if (file.mmProjFile && !(dm.engine === 'llama' && dm.isVisionModel)) {
           setAlertState(showAlert(

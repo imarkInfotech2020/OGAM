@@ -2,6 +2,7 @@ import { modelManager } from './modelManager';
 import { mmProjLocalName } from './modelManager/download';
 import { useDownloadStore, isActiveStatus } from '../stores/downloadStore';
 import { useAppStore } from '../stores';
+import { activeModelService } from './activeModelService';
 import { makeModelKey } from '../utils/modelKey';
 import type { ModelFile, DownloadedModel } from '../types';
 
@@ -11,6 +12,9 @@ import type { ModelFile, DownloadedModel } from '../types';
 const queuedPlaceholderId = (modelKey: string) => `queued:${modelKey}`;
 
 export interface StartModelDownloadOpts {
+  /** Select a downloaded user model when the download began without a selection.
+   * Hidden support-model downloads leave this off. */
+  autoSelectIfEmpty?: boolean;
   /** Screen-specific UI to run AFTER the model is registered (e.g. a success or
    *  vision-repair alert). The standard register + clear has already happened. */
   onRegistered?: (model: DownloadedModel) => void;
@@ -34,6 +38,12 @@ export async function startModelDownload(
   file: ModelFile,
   opts: StartModelDownloadOpts = {},
 ): Promise<void> {
+  // Capture this before the asynchronous download starts. If the user had a
+  // selection and explicitly unloads it while this download runs, completion
+  // must not replace that decision.
+  const mayAutoSelect =
+    opts.autoSelectIfEmpty === true &&
+    useAppStore.getState().activeModelId === null;
   const modelKey = makeModelKey(modelId, file.name);
   // Duplicate-start guard: a download already active for this logical file (rapid
   // double-tap, race after retry) is a no-op. add() also enforces this; checking
@@ -86,6 +96,13 @@ export async function startModelDownload(
       // Standard completion: register + clear the in-flight entry so the UI reads
       // "downloaded" from downloadedModels, not a lingering 100% store entry.
       useAppStore.getState().addDownloadedModel(model);
+      const app = useAppStore.getState();
+      if (mayAutoSelect && app.activeModelId === null) {
+        const selected =
+          app.downloadedModels.find(item => item.id === app.lastTextModelId) ??
+          app.downloadedModels[0];
+        if (selected) activeModelService.selectTextModel(selected.id);
+      }
       useDownloadStore.getState().remove(modelKey);
       opts.onRegistered?.(model);
     }, fail);
