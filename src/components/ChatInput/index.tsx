@@ -242,7 +242,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     logger.log(`[COMPOSER-SM] handleSend canSend=${canSend} disabled=${disabled} hasText=${message.trim().length > 0} attachments=${attachments.length} imageMode=${imageMode}`);
     if (!canSend) return;
     triggerHaptic('impactMedium');
-    onSend(message.trim(), attachments.length > 0 ? attachments : undefined, imageMode, assistantEnabled);
+    const outgoingAttachments = attachments.length > 0 ? attachments : undefined;
+    if (assistantEnabled) {
+      onSend(message.trim(), outgoingAttachments, imageMode, true);
+    } else {
+      onSend(message.trim(), outgoingAttachments, imageMode);
+    }
     setAssistantEnabled(false);
     setMessage('');
     clearAttachments();
