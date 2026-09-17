@@ -36,6 +36,7 @@ type ChatStoreState = ReturnType<typeof useChatStore.getState>;
 type StartGeneration = (
   conversationId: string,
   text: string,
+  assistantEnabled?: boolean,
 ) => Promise<void>;
 
 const VIEWER_FADE_OUT_MS = 350;
@@ -97,11 +98,13 @@ export function useChatScreenActions({
   const startGeneration: StartGeneration = async (
     targetConversationId,
     messageText,
+    assistantEnabled,
   ) => {
     await startGenerationFn(generationDeps, {
       setDebugInfo,
       targetConversationId,
       messageText,
+      assistantEnabled,
     });
   };
   startGenerationRef.current = startGeneration;
@@ -110,11 +113,13 @@ export function useChatScreenActions({
     text: string,
     attachments?: MediaAttachment[],
     imageMode?: 'auto' | 'force' | 'disabled',
+    assistantEnabled?: boolean,
   ) =>
     handleSendFn(generationDeps, {
       text,
       attachments,
       imageMode,
+      assistantEnabled,
       startGeneration,
       setDebugInfo,
     });

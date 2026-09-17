@@ -37,6 +37,19 @@ function subscribe(onChange: () => void): () => void {
 const getSnapshot = (): number =>
   getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
 
+const ASSISTANT_TOOLS = new Set(['web_use', 'computer_use']);
+const getAssistantSnapshot = (): boolean =>
+  getToolExtensions().some(extension =>
+    (extension.getOpenAISchemas?.() ?? []).some(schema =>
+      ASSISTANT_TOOLS.has(schema?.function?.name),
+    ),
+  );
+
 export function useExtensionToolCount(): number {
   return useSyncExternalStore(subscribe, getSnapshot);
+}
+
+/** True only while a connected companion exposes Web Use or Computer Use. */
+export function useAssistantToolAvailability(): boolean {
+  return useSyncExternalStore(subscribe, getAssistantSnapshot);
 }

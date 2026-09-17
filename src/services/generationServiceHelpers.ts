@@ -69,6 +69,7 @@ export interface GenerationWithToolsRequest {
     contextUsage?: GenerationRequest['contextUsage'];
     prepared?: boolean;
     preservePartialOnError?: boolean;
+    assistantEnabled?: boolean;
   };
 }
 

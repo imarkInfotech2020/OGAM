@@ -124,7 +124,7 @@ export async function generateRemoteWithToolsImpl(
   req: GenerationWithToolsRequest,
 ): Promise<void> {
   const { conversationId, messages, options } = req;
-  const { enabledToolIds, projectId, contextUsage, prepared, preservePartialOnError, ...callbacks } = options;
+  const { enabledToolIds, projectId, contextUsage, prepared, preservePartialOnError, assistantEnabled, ...callbacks } = options;
   logger.log(
     `[GenService][DEBUG] generateRemoteWithToolsImpl — conv=${conversationId}, messages=${
       messages.length
@@ -156,6 +156,7 @@ export async function generateRemoteWithToolsImpl(
       messages,
       enabledToolIds,
       projectId,
+      assistantEnabled,
       callbacks,
       ...buildToolLoopHandlersImpl(svc),
       forceRemote: true,

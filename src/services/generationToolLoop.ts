@@ -351,7 +351,10 @@ export interface ToolLoopContext {
   /** Reports the tool names sent to the model this turn (built-in + routed MCP/ext). */
   onToolsRouted?: (names: string[]) => void;
   forceRemote?: boolean;
+  assistantEnabled?: boolean;
 }
+
+const ASSISTANT_TOOL_NAMES = new Set(['web_use', 'computer_use']);
 function normalizeStreamChunk(data: StreamChunk): StreamToken {
   return typeof data === 'string' ? { content: data } : data;
 }
@@ -372,7 +375,11 @@ function getLastUserQuery(messages: Message[]): string {
 async function executeToolCallSafely(
   tc: ToolCall,
   enabledBuiltInToolIds: readonly string[] = [],
+  assistantEnabled = false,
 ): Promise<ToolResult> {
+  if (ASSISTANT_TOOL_NAMES.has(tc.name) && !assistantEnabled) {
+    return toolErrorResult(tc, new Error('Assistant is off for this turn.'), Date.now());
+  }
   const builtInOwnsCall = getToolsAsOpenAISchema(enabledBuiltInToolIds).some(
     schema => schema.function.name === tc.name,
   );
@@ -424,7 +431,7 @@ async function executeToolCalls(
       ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
     };
     ctx.callbacks?.onToolCallStart?.(tc.name, tc.arguments);
-    const result = await executeToolCallSafely(tc, ctx.enabledToolIds);
+    const result = await executeToolCallSafely(tc, ctx.enabledToolIds, ctx.assistantEnabled);
     ctx.callbacks?.onToolCallComplete?.(tc.name, result);
     const settings = useAppStore.getState().settings;
     const resultBudget = toolResultCharBudget({
@@ -741,7 +748,7 @@ function buildLiteRTToolCallHandler(
     // the model (toolResultModelContent) is never empty — a failure/empty is stated
     // explicitly rather than sent as "" or a bare "Error: ...", so the model can't
     // mistake it for a successful answer.
-    const result = await executeToolCallSafely(toolCall, ctx.enabledToolIds);
+    const result = await executeToolCallSafely(toolCall, ctx.enabledToolIds, ctx.assistantEnabled);
     ctx.callbacks?.onToolCallComplete?.(name, result);
     const settings = useAppStore.getState().settings;
     const resultBudget = toolResultCharBudget({
@@ -1391,9 +1398,13 @@ export async function runToolLoop(
 ): Promise<ToolLoopOutcome> {
   const chatStore = useChatStore.getState();
   const builtInSchemas = getToolsAsOpenAISchema(ctx.enabledToolIds);
-  const extSchemas = getToolExtensions().flatMap(
-    e => e.getOpenAISchemas?.() ?? [],
-  );
+  const extSchemas = getToolExtensions()
+    .flatMap(e => e.getOpenAISchemas?.() ?? [])
+    .filter(
+      schema =>
+        ctx.assistantEnabled ||
+        !ASSISTANT_TOOL_NAMES.has(schema?.function?.name),
+    );
 
   const effectiveSchemas = await selectEffectiveSchemas(
     ctx,
