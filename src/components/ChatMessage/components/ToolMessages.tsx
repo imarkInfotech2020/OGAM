@@ -288,6 +288,7 @@ export const SyncedToolArtifacts: React.FC<{
                 : !running && artifact.result.length > 0
             }
             active={running}
+            openByDefault={running && isTaskTool}
             styles={styles}
             colors={colors}
             detail={taskDetail}
