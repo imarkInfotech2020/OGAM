@@ -10,7 +10,7 @@ import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../../../theme';
-import { useAccordionExpanded } from '../../../stores';
+import { useAccordionExpanded, useAccordionStore } from '../../../stores';
 import { SLOTS, useSlot } from '../../../bootstrap/slotRegistry';
 import { CustomAlert, type AlertState } from '../../CustomAlert';
 import { MarkdownText } from '../../MarkdownText';
@@ -87,6 +87,8 @@ type ToolResultBubbleProps = {
   hasDetails: boolean;
   /** A call still in flight reads in the accent colour; a finished one is muted. */
   active?: boolean;
+  /** Open a live task once. A user collapse writes an explicit false and is final. */
+  openByDefault?: boolean;
   /**
    * What this row IS, named by whoever renders it. The layout is shared; the identity is not - a
    * call the model asked for and the result that came back are different facts, and a surface that
@@ -110,6 +112,7 @@ const ToolResultBubbleInner: React.FC<ToolResultBubbleProps> = ({
   content,
   hasDetails,
   active = false,
+  openByDefault = false,
   rowTestID = 'tool-message',
   labelTestID,
   paired = false,
@@ -117,7 +120,16 @@ const ToolResultBubbleInner: React.FC<ToolResultBubbleProps> = ({
   colors,
   detail,
 }) => {
-  const [expanded, toggle] = useAccordionExpanded(`tool-result:${stableKey}`);
+  const accordionKey = `tool-result:${stableKey}`;
+  const [expanded, toggle] = useAccordionExpanded(accordionKey);
+  const hasUserChoice = useAccordionStore(state =>
+    Object.prototype.hasOwnProperty.call(state.expanded, accordionKey),
+  );
+  React.useEffect(() => {
+    if (openByDefault && !hasUserChoice) {
+      useAccordionStore.getState().setExpanded(accordionKey, true);
+    }
+  }, [accordionKey, hasUserChoice, openByDefault]);
   const tone = active ? colors.primary : colors.textMuted;
   return (
     <View
@@ -380,6 +392,7 @@ export const ToolCallMessage: React.FC<{
             content=""
             hasDetails={Boolean(taskDetail)}
             active
+            openByDefault
             paired
             rowTestID="tool-call-row"
             labelTestID={`tool-call-label-${row.name || 'unknown'}`}
