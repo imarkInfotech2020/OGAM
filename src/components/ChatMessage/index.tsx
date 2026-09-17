@@ -233,6 +233,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     hasVisibleAnswer ||
     (message.isThinking && !hasAssistantWork) ||
     (isStreaming && !hasAssistantWork);
+  // Tools offered, cutoff state, and generation details describe the response above them. Failed
+  // attempts can persist request metadata without producing an answer; those are not turns with a
+  // footer, and retries must not leave one metadata block per empty attempt.
+  const showTurnFooter =
+    !hideProse && !isUser && !isStreaming && hasVisibleAnswer;
   return (
     <TouchableOpacity
       testID={isUser ? 'user-message' : 'assistant-message'}
@@ -347,7 +352,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         />
       )}
 
-      {!hideProse && (
+      {showTurnFooter && (
         <RoutedToolsRow
           message={message}
           isUser={isUser}
@@ -357,29 +362,23 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         />
       )}
 
-      {!hideProse &&
-        !isUser &&
-        !isStreaming &&
-        message.generationMeta?.truncated && (
-          <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
-            <Icon name="alert-triangle" size={12} color={colors.textMuted} />
-            <Text style={styles.toolStatusText}>
-              Reply cut off at the token limit. Retry to continue.
-            </Text>
-          </View>
-        )}
+      {showTurnFooter && message.generationMeta?.truncated && (
+        <View testID="message-cutoff-indicator" style={styles.toolStatusRow}>
+          <Icon name="alert-triangle" size={12} color={colors.textMuted} />
+          <Text style={styles.toolStatusText}>
+            Reply cut off at the token limit. Retry to continue.
+          </Text>
+        </View>
+      )}
 
-      {!hideProse &&
-        showGenerationDetails &&
-        !isUser &&
-        message.generationMeta && (
-          <GenerationMeta
-            messageId={message.id}
-            generationMeta={message.generationMeta}
-            styles={styles}
-            colors={colors}
-          />
-        )}
+      {showTurnFooter && showGenerationDetails && message.generationMeta && (
+        <GenerationMeta
+          messageId={message.id}
+          generationMeta={message.generationMeta}
+          styles={styles}
+          colors={colors}
+        />
+      )}
     </TouchableOpacity>
   );
 };
