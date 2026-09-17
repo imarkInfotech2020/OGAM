@@ -126,12 +126,13 @@ describe('TaskSessionPlayback full screen', () => {
       <TaskSessionPlayback run={run('running')} steps={steps} />,
     );
 
-    expect(screen.getByText('Live')).toBeTruthy();
+    expect(screen.getByText('Step 2')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('Show previous task step'));
     expect(screen.getByText('Step 2 of 2')).toBeTruthy();
     expect(screen.getByText('Selected Continue')).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('Return to live task view'));
-    expect(screen.getByText('Live')).toBeTruthy();
+    expect(screen.getByText('Step 2')).toBeTruthy();
+    expect(screen.queryByText('Selected Continue')).toBeNull();
   });
 });
