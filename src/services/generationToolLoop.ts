@@ -1418,6 +1418,7 @@ export async function runToolLoop(
   const loopMessages = [...ctx.messages];
   const maxToolSteps = currentMaxToolSteps();
   let totalToolCalls = 0;
+  let compactionRetries = 0;
   const state: ToolLoopState = {
     firstTokenFired: false,
     thinkingDoneFired: false,
@@ -1448,6 +1449,40 @@ export async function runToolLoop(
         ctx,
       });
     } catch (error) {
+      if (
+        compactionRetries < maxToolSteps &&
+        contextCompactionService.isContextFullError(error)
+      ) {
+        const systemPrompt = loopMessages.find(message => message.role === 'system')?.content;
+        const beforeChars = toolPromptChars(loopMessages, effectiveSchemas);
+        const conversation = chatStore.conversations.find(
+          item => item.id === ctx.conversationId,
+        );
+        const compacted = systemPrompt
+          ? await contextCompactionService.compact({
+              conversationId: ctx.conversationId,
+              systemPrompt,
+              allMessages: loopMessages,
+              previousSummary: conversation?.compactionSummary,
+            }).catch(() => undefined)
+          : undefined;
+        if (
+          compacted &&
+          toolPromptChars(compacted, effectiveSchemas) < beforeChars
+        ) {
+          logger.log(
+            `[ToolLoop] Context full - compacted ${loopMessages.length} messages to ${compacted.length} before retry`,
+          );
+          ctx.onStreamReset?.();
+          state.streamedContent = '';
+          state.reasoningContent = '';
+          loopMessages.splice(0, loopMessages.length, ...compacted);
+          chatStore.setIsThinking(true);
+          compactionRetries += 1;
+          iteration -= 1;
+          continue;
+        }
+      }
       const corruptedSignature =
         error instanceof Error &&
         error.message.toLowerCase().includes('corrupted thought signature');
