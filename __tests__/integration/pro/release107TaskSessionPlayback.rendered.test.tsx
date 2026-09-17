@@ -215,7 +215,7 @@ describe('Release 107 task session playback', () => {
         screen.getByTestId(`tool-result-accordion-${taskToolName(kind)}`),
       );
       expect(screen.getByTestId('task-session-playback')).toBeTruthy();
-      expect(screen.getByText('Step 1 of 2 · 0:00 / 0:03')).toBeTruthy();
+      expect(screen.getByText('Step 1 of 2')).toBeTruthy();
       expect(screen.getByText('Opened the target')).toBeTruthy();
       expect(screen.queryByTestId('task-control-stop')).toBeNull();
       expect(screen.queryByText('The task screen is syncing.')).toBeNull();
@@ -233,16 +233,16 @@ describe('Release 107 task session playback', () => {
         'valueChange',
         1,
       );
-      expect(screen.getByText('Step 2 of 2 · 0:03 / 0:03')).toBeTruthy();
+      expect(screen.getByText('Step 2 of 2')).toBeTruthy();
       expect(screen.getByText('Selected Continue')).toBeTruthy();
       expect(screen.getByTestId('task-session-cursor')).toBeTruthy();
 
       fireEvent.press(screen.getByTestId('task-session-toggle'));
       expect(screen.getByText('Pause')).toBeTruthy();
       act(() => jest.advanceTimersByTime(1_199));
-      expect(screen.getByText('Step 1 of 2 · 0:00 / 0:03')).toBeTruthy();
+      expect(screen.getByText('Step 1 of 2')).toBeTruthy();
       act(() => jest.advanceTimersByTime(1));
-      expect(screen.getByText('Step 2 of 2 · 0:03 / 0:03')).toBeTruthy();
+      expect(screen.getByText('Step 2 of 2')).toBeTruthy();
       expect(screen.getByText('Play')).toBeTruthy();
 
       fireEvent.press(
@@ -334,8 +334,6 @@ describe('Release 107 task session playback', () => {
     );
 
     expect(screen.getByText('Using computer_use: Review the desktop app')).toBeTruthy();
-    expect(screen.queryByTestId('task-chat-card')).toBeNull();
-    fireEvent.press(screen.getByTestId('tool-result-accordion-computer_use'));
     expect(screen.getByTestId('task-chat-card')).toBeTruthy();
     expect(screen.getByText('LIVE VIEW')).toBeTruthy();
     measureTaskSessionFrame(screen);
@@ -461,11 +459,16 @@ describe('Release 107 task session playback', () => {
     expect(screen.queryByTestId('task-chat-card')).toBeNull();
     fireEvent.press(screen.getByTestId('assistant-work-toggle'));
     expect(screen.getByText('Using Web Use...')).toBeTruthy();
-    fireEvent.press(screen.getByTestId('tool-result-accordion-web_use'));
     expect(screen.getByTestId('task-session-frame')).toBeTruthy();
     measureTaskSessionFrame(screen);
     expect(screen.getByLabelText('Live view from Studio Mac')).toBeTruthy();
     expect(screen.queryByTestId('task-live-frame')).toBeNull();
     expect(screen.getByTestId('task-control-stop')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('tool-result-accordion-web_use'));
+    expect(screen.queryByTestId('task-session-frame')).toBeNull();
+    fireEvent.press(screen.getByTestId('assistant-work-toggle'));
+    fireEvent.press(screen.getByTestId('assistant-work-toggle'));
+    expect(screen.queryByTestId('task-session-frame')).toBeNull();
   });
 });
