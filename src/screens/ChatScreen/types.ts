@@ -121,7 +121,7 @@ function groupAssistantTurnWork(
 ): (Message | ChatMessageItem)[] {
   const grouped: (Message | ChatMessageItem)[] = [];
   let work: Message[] = [];
-  const flush = (final?: Message | ChatMessageItem) => {
+  const flush = (final?: Message | ChatMessageItem, groupLive = false) => {
     if (!work.length) {
       if (final) grouped.push(final);
       return;
@@ -134,6 +134,7 @@ function groupAssistantTurnWork(
           message =>
             message.role === 'assistant' &&
             !isSupportingContextMessage(message) &&
+            !message.toolCalls?.length &&
             Boolean(message.content.trim() || message.attachments?.length),
         );
     const terminal = [...work]
@@ -144,7 +145,7 @@ function groupAssistantTurnWork(
           (message.turnStatus === 'failed' ||
             message.turnStatus === 'cancelled'),
       );
-    if (!response && !terminal && !live) {
+    if (!response && !terminal && !groupLive) {
       grouped.push(...work);
       work = [];
       return;
@@ -160,7 +161,7 @@ function groupAssistantTurnWork(
     const cached = groupedWorkCache.get(owner);
     if (
       cached &&
-      cached.live === live &&
+      cached.live === groupLive &&
       cached.work.length === work.length &&
       cached.work.every((message, index) => message === work[index])
     ) {
@@ -189,7 +190,7 @@ function groupAssistantTurnWork(
             name: call.name,
             arguments: call.arguments,
             result: '',
-            status: live ? 'running' : 'completed',
+            status: groupLive ? 'running' : 'completed',
           });
           if (call.id) artifactByCallId.set(call.id, toolIndex);
           timeline.push({ kind: 'tool', toolIndex });
@@ -242,8 +243,9 @@ function groupAssistantTurnWork(
     const item: ChatMessageItem = {
       ...owner,
       ...(supportingContext ? { supportingContext } : {}),
-      content: response && (!live || owner.isStreaming) ? owner.content : '',
-      isStreaming: live || owner.isStreaming,
+      content: response && (!groupLive || owner.isStreaming) ? owner.content : '',
+      isStreaming: groupLive || owner.isStreaming,
+      turnStatus: terminal?.turnStatus ?? owner.turnStatus,
       toolCalls: undefined,
       toolArtifacts: [
         ...artifacts,
@@ -254,7 +256,7 @@ function groupAssistantTurnWork(
         ...ownerTimeline,
       ],
     };
-    groupedWorkCache.set(owner, { work: [...work], live, item });
+    groupedWorkCache.set(owner, { work: [...work], live: groupLive, item });
     grouped.push(item);
     work = [];
   };
@@ -282,7 +284,7 @@ function groupAssistantTurnWork(
     flush();
     grouped.push(message);
   }
-  flush();
+  flush(undefined, live);
   return grouped;
 }
 
@@ -451,7 +453,15 @@ function localDisplayMessages(
       },
     ];
   }
-  if (isThinking && isStreamingForThisConversation) {
+  // The tool loop stays in the thinking phase until prose begins. Once reasoning
+  // arrives, render that live stream instead of keeping the empty loader on top.
+  if (
+    isThinking &&
+    isStreamingForThisConversation &&
+    !streamingMessage &&
+    !streamingReasoningContent &&
+    !streaming.hasStreamingText
+  ) {
     if (_lastDisplayBranch !== 'thinking') {
       _lastDisplayBranch = 'thinking';
     }

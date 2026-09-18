@@ -417,6 +417,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const isSupportingContext =
     !isStreaming &&
     !hasAttachments &&
+    !message.timeline?.length &&
+    !message.toolArtifacts?.length &&
     isSupportingChatContext({
       answer: parsedContent.response,
       reasoning: parsedContent.thinking,

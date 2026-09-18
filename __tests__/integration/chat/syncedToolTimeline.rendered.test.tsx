@@ -9,6 +9,84 @@ import { MessageAudioMode } from '../../../pro/audio/ui/MessageAudioMode';
 import { createGenerationMeta, createMessage } from '../../utils/factories';
 
 describe('synced assistant tool timeline', () => {
+  it('shows reasoning as it streams while the tool loop is still thinking', () => {
+    const messages = [createMessage({ id: 'user', role: 'user', content: 'Research this' })];
+    const stream = (reasoning: string) => getDisplayMessages(messages, {
+      isThinking: true,
+      streamingMessage: '',
+      streamingReasoningContent: reasoning,
+      isStreamingForThisConversation: true,
+      isGeneratingForThisConversation: true,
+    });
+    const view = render(<View>{stream('I should check').map(item =>
+      <ChatMessage key={item.id} message={item} isStreaming={item.isStreaming} />
+    )}</View>);
+    expect(view.getByText('I should check')).toBeTruthy();
+    view.rerender(<View>{stream('I should check the source now').map(item =>
+      <ChatMessage key={item.id} message={item} isStreaming={item.isStreaming} />
+    )}</View>);
+    expect(view.getByText('I should check the source now')).toBeTruthy();
+  });
+
+  it('keeps an earlier tool-backed answer visible while the next reply loads', () => {
+    const display = getDisplayMessages([
+      createMessage({ id: 'first-user', role: 'user', content: 'First question' }),
+      createMessage({ id: 'first-call', role: 'assistant', content: '', reasoningContent: 'Check the source', toolCalls: [{ id: 'call-1', name: 'web_search', arguments: '{}' }] }),
+      createMessage({ id: 'first-result', role: 'tool', content: 'Found it', toolCallId: 'call-1', toolName: 'web_search' }),
+      createMessage({ id: 'first-answer', role: 'assistant', content: 'The first answer.' }),
+      createMessage({ id: 'second-user', role: 'user', content: 'Second question' }),
+    ], {
+      isThinking: true, streamingMessage: '', streamingReasoningContent: '',
+      isStreamingForThisConversation: true, isGeneratingForThisConversation: true,
+    });
+    const view = render(<View>{display.map(item => <ChatMessage key={item.id} message={item} isStreaming={item.isStreaming} />)}</View>);
+    expect(view.getByText('The first answer.')).toBeTruthy();
+    expect(view.getByText('Work done')).toBeTruthy();
+    expect(view.getByTestId('thinking-indicator')).toBeTruthy();
+    const audioView = render(<View>{display.map(item => <MessageAudioMode
+      key={item.id} msg={item} isStreamingThis={item.isStreaming === true}
+      shouldAnimate={false} showGenerationDetails={false}
+      onCopy={() => {}} onRetry={() => {}} onEdit={() => {}}
+      onGenerateImage={() => {}} onImagePress={() => {}}
+    />)}</View>);
+    expect(audioView.getByTestId('audio-bubble-first-answer')).toBeTruthy();
+  });
+
+  it('shows stopped work and preserves each thinking and tool step', () => {
+    const display = getDisplayMessages([
+      createMessage({ id: 'user', role: 'user', content: 'Research this' }),
+      createMessage({ id: 'call-1', role: 'assistant', content: 'Searching now', reasoningContent: 'Plan the search', toolCalls: [{ id: 'search', name: 'web_search', arguments: '{}' }] }),
+      createMessage({ id: 'result-1', role: 'tool', content: 'Search result', toolCallId: 'search', toolName: 'web_search' }),
+      createMessage({ id: 'call-2', role: 'assistant', content: '', reasoningContent: 'Check another source', toolCalls: [{ id: 'read', name: 'read_page', arguments: '{}' }] }),
+      createMessage({ id: 'result-2', role: 'tool', content: 'Page result', toolCallId: 'read', toolName: 'read_page' }),
+      { ...createMessage({ id: 'stopped', role: 'assistant', content: '', reasoningContent: 'Summarize findings' }), turnStatus: 'cancelled' as const },
+    ], {
+      isThinking: false, streamingMessage: '', streamingReasoningContent: '',
+      isStreamingForThisConversation: false,
+    });
+    expect(display[1].timeline).toHaveLength(5);
+    const view = render(<View>{display.map(item => <ChatMessage key={item.id} message={item} />)}</View>);
+    expect(view.getAllByTestId('assistant-work-toggle')).toHaveLength(1);
+    expect(view.getByText('Work stopped')).toBeTruthy();
+    fireEvent.press(view.getByTestId('assistant-work-toggle'));
+    expect(view.getByText('Plan the search')).toBeTruthy();
+    expect(view.getByText('Check another source')).toBeTruthy();
+    expect(view.getByText('Summarize findings')).toBeTruthy();
+    expect(view.getAllByText('Thought process')).toHaveLength(3);
+    expect(view.getByText('Web search result')).toBeTruthy();
+    expect(view.getByTestId('tool-result-label-read_page')).toBeTruthy();
+    const audioView = render(<MessageAudioMode
+      msg={display[1]} isStreamingThis={false} shouldAnimate={false}
+      showGenerationDetails={false} onCopy={() => {}} onRetry={() => {}}
+      onEdit={() => {}} onGenerateImage={() => {}} onImagePress={() => {}}
+    />);
+    expect(audioView.getByText('Work stopped')).toBeTruthy();
+    fireEvent.press(audioView.getByTestId('assistant-work-toggle'));
+    expect(audioView.getAllByText('Thought process')).toHaveLength(3);
+    expect(audioView.getByText('Web search result')).toBeTruthy();
+    expect(audioView.getByTestId('tool-result-label-read_page')).toBeTruthy();
+  });
+
   it('groups durable peer work with its live preview under one Working accordion', () => {
     const display = getDisplayMessages(
       [
