@@ -63,13 +63,18 @@ describe('paired Mac tools in Pro settings', () => {
     );
 
     expect(ui.getAllByText('Mac tools')).toHaveLength(1);
-    expect(ui.getByText('3/3 tools enabled')).toBeTruthy();
+    expect(ui.getByText('0/3 tools enabled')).toBeTruthy();
     expect(ui.getByText('Edit Tools')).toBeTruthy();
     expect(ui.queryByText('3/3 tools')).toBeNull();
     expect(ui.queryByText('2/2 tools')).toBeNull();
     fireEvent.press(ui.getByText('Edit Tools'));
     expect(await ui.findByText('web_use')).toBeTruthy();
     expect(ui.getByText('calendar_list')).toBeTruthy();
+    const { Switch } = require('react-native');
+    const switches = ui.UNSAFE_getAllByType(Switch);
+    expect(switches.map(item => item.props.value)).toEqual([true, false, false, false]);
+    fireEvent(switches[1], 'valueChange', true);
+    expect(ui.UNSAFE_getAllByType(Switch).map(item => item.props.value)).toEqual([true, true, false, false]);
   });
 
   it('keeps a connecting MCP route behind the active Desktop card', () => {
@@ -91,7 +96,7 @@ describe('paired Mac tools in Pro settings', () => {
     );
 
     expect(ui.getAllByText('Mac tools')).toHaveLength(1);
-    expect(ui.getByText('2/2 tools enabled')).toBeTruthy();
+    expect(ui.getByText('0/2 tools enabled')).toBeTruthy();
     expect(ui.queryByText(`sync://${macId}`)).toBeNull();
     expect(ui.queryByText('2/2 tools')).toBeNull();
     expect(ui.queryByText('http://mac.local/mcp')).toBeNull();
