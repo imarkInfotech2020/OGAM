@@ -92,14 +92,23 @@ function selectAutoSetupPlan(
 ): AutoSetupPlan | null {
   const text = chooseText(tier, catalog.text);
   const selectedImage = choose(tier, catalog.image);
+  const androidImagePreference = tier === 'lean' ? /anything[\s_-]*v5/i
+    : tier === 'balanced' ? /absolute[\s_-]*reality/i
+    : /dream[\s_-]*shaper[\s_-]*v8/i;
+  const preferredImage = androidImagePreference && selectedImage?.payload.backend !== 'coreml'
+    ? catalog.image.find(candidate =>
+        candidate.payload.backend === selectedImage?.payload.backend &&
+        androidImagePreference.test(candidate.name),
+      )
+    : null;
   const image =
-    selectedImage && /nai[\s_-]*anime/i.test(selectedImage.name)
+    preferredImage ?? (selectedImage && /nai[\s_-]*anime/i.test(selectedImage.name)
       ? catalog.image.find(
           candidate =>
             candidate.payload.backend === selectedImage.payload.backend &&
             /absolute[\s_-]*reality/i.test(candidate.name),
         ) ?? selectedImage
-      : selectedImage;
+      : selectedImage);
   const stt = choose(tier, catalog.stt);
   if (!text || !image || !stt) return null;
   const items: AutoSetupPlan['items'] = [text, image, stt];
