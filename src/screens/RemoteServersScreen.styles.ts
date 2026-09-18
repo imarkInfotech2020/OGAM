@@ -7,16 +7,17 @@ import { SPACING, TYPOGRAPHY } from '../constants';
  * Every text style here used to carry a hardcoded fontSize and no fontFamily, so all of it
  * rendered in the platform sans while the app around it is Menlo - which is why the screen read
  * as belonging to a different product. TYPOGRAPHY tokens carry the family, so using them fixes
- * the typeface and the size at once. Cards are the bordered kind the advice cards use (1px
- * border, radius 8, surface fill), not filled rounded slabs.
+ * the typeface and the size at once. Cards use the shared surface, border, and subtle
+ * elevation so this screen has the same depth as the other settings screens.
  */
-export function createStyles(colors: ThemeColors, _shadows: ThemeShadows) {
+export function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   const card = {
     padding: SPACING.md,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
+    ...shadows.small,
   };
 
   return {
