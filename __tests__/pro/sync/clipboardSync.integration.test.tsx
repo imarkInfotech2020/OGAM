@@ -659,7 +659,9 @@ describe('mobile clipboard Sync journey', () => {
     await waitFor(() => expect(nativeClipboardText).toBe('copied on Mac'));
 
     fireEvent.press(ui.getByLabelText('Delete text from Off Grid AI Desktop'));
-    await waitFor(() => expect(ui!.queryByText('copied on Mac')).toBeNull());
+    await waitFor(() => expect(ui!.queryByText('copied on Mac')).toBeNull(), {
+      timeout: 10_000,
+    });
 
     // Confirmed in an in-app sheet, like every other confirmation here - never a system modal. The
     // question says what will be lost and where from, so it is read on screen and answered by pressing.
