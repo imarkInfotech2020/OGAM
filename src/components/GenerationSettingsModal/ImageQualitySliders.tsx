@@ -38,6 +38,7 @@ export const ImageQualityBasicSliders: React.FC = () => {
     <>
       <SliderSetting
         testID="image-steps"
+        compact
         label="Image Steps"
         description="4-8 steps for speed, 20-50 for quality"
         value={settings.imageSteps || defaultImageSteps(Platform.OS)}
@@ -47,6 +48,7 @@ export const ImageQualityBasicSliders: React.FC = () => {
 
       <SliderSetting
         testID="image-size"
+        compact
         label="Image Size"
         description="Output resolution. 256 is fastest with coherent results; 512 is most detailed but slow on GPU-only devices."
         value={Math.max(SWEET_SPOT_SIZE, settings.imageWidth ?? DEFAULT_SETTINGS.imageWidth)}
@@ -68,6 +70,7 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
     <>
       <SliderSetting
         testID="guidance-scale"
+        compact
         label="Guidance Scale"
         description="Higher = follows prompt more strictly (5-15 range)"
         value={settings.imageGuidanceScale || 7.5}
@@ -77,6 +80,7 @@ export const ImageQualityAdvancedSliders: React.FC = () => {
 
       <SliderSetting
         testID="image-threads"
+        compact
         label="Image Threads"
         description="CPU threads used for image generation. Takes effect next time the image model loads."
         value={settings.imageThreads ?? 4}

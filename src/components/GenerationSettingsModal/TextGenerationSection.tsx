@@ -23,7 +23,7 @@ import {
 
 const ChatSettingSlider: React.FC<{ setting: NumericSettingModel }> = ({
   setting,
-}) => <SliderSetting testID={`setting-${setting.key}`} {...setting} />;
+}) => <SliderSetting testID={`setting-${setting.key}`} compact {...setting} />;
 
 export const TextGenerationSection: React.FC = () => {
   const styles = useThemedStyles(createStyles);
@@ -41,7 +41,7 @@ export const TextGenerationSection: React.FC = () => {
       {basicSettings.map(setting => (
         <ChatSettingSlider key={setting.key} setting={setting} />
       ))}
-      {!isLiteRT && <ThinkingBudgetSelector />}
+      {!isLiteRT && <ThinkingBudgetSelector compact />}
       <ShowGenerationDetailsToggle />
       <AdvancedToggle
         isExpanded={showAdvanced}

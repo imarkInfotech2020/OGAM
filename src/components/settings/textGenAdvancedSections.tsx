@@ -207,14 +207,15 @@ const THINKING_BUDGET_STEPS = [REASONING_BUDGET_AUTO, ...REASONING_BUDGET_OPTION
 
 /** llama.rn path only: the cap rides the completion request as thinking_budget_tokens
  *  (shared rule: @offgrid/models thinkingBudgetPayload). LiteRT has no thinking channel. */
-export const ThinkingBudgetSelector: React.FC = () => {
+export const ThinkingBudgetSelector: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
   const { settings, updateSettings } = useAppStore();
   const selectedStep = THINKING_BUDGET_STEPS.indexOf(settings.reasoningBudget ?? REASONING_BUDGET_AUTO);
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, compact && styles.compactContainer]}>
       <SliderSetting
         testID="thinking-budget"
+        compact={compact}
         label="Thinking Budget"
         description="Auto lets the model think for as long as it needs. A cap ends the thinking at that many tokens so the answer arrives sooner. Applies when Thinking is on."
         value={Math.max(0, selectedStep)}
