@@ -58,7 +58,7 @@ export const Accordion: React.FC<AccordionProps> = ({
       style={[styles.card, variant === 'plain' && styles.plainCard]}
     >
       <TouchableOpacity
-        style={styles.header}
+        style={[styles.header, variant === 'plain' && styles.plainHeader]}
         activeOpacity={0.72}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
@@ -115,6 +115,10 @@ const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     alignItems: 'center' as const,
     gap: SPACING.sm,
     paddingVertical: SPACING.sm,
+  },
+  plainHeader: {
+    minHeight: 34,
+    paddingVertical: SPACING.xs,
   },
   title: {
     ...TYPOGRAPHY.label,

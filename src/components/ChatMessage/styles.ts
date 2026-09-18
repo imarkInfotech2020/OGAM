@@ -63,7 +63,7 @@ const createBubbleStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     paddingVertical: 4,
   },
   messageFooterRow: {
-    paddingVertical: 0,
+    paddingVertical: 4,
     width: MESSAGE_MAX_WIDTH,
     alignSelf: 'flex-start' as const,
   },
@@ -340,7 +340,7 @@ const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   metaRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    marginTop: 0,
+    marginTop: 6,
     marginHorizontal: 8,
     gap: 8,
   },
@@ -369,7 +369,7 @@ const createThinkingStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   generationMetaContainer: {
     alignSelf: 'stretch' as const,
-    marginTop: 2,
+    marginTop: 0,
   },
   generationMetaText: {
     ...TYPOGRAPHY.meta,
