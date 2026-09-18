@@ -5,7 +5,7 @@
 
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { ActivityIndicator, View, Text, Pressable, StyleSheet, LogBox } from 'react-native';
+import { View, Text, Pressable, StyleSheet, LogBox } from 'react-native';
 import { SystemBars } from 'react-native-edge-to-edge';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,6 +37,7 @@ import { useAppState } from './src/hooks/useAppState';
 import { useDownloadStore } from './src/stores/downloadStore';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { DebugLogsScreen } from './src/components/DebugLogsScreen';
+import { LoadingDots } from './src/components/LoadingDots';
 
 LogBox.ignoreAllLogs(); // Suppress all logs
 
@@ -403,7 +404,7 @@ function App() {
         <SafeAreaProvider>
           <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="app-loading">
             <SystemBars style={isDark ? 'light' : 'dark'} />
-            <ActivityIndicator size="large" color={colors.primary} />
+            <LoadingDots size={8} testID="startup-loading-dots" />
           </View>
           {__DEV__ ? <DevSyncStrip /> : null}
         </SafeAreaProvider>
