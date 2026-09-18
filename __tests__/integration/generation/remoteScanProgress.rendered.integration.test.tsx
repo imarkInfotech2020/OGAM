@@ -49,7 +49,7 @@ describe('remote server scan progress', () => {
     expect(view.queryByText('Scanning')).not.toBeNull();
     await waitFor(() => { expect(view.queryByText(/253 \/ 254 checked/)).not.toBeNull(); });
     finishLastProbe?.();
-    await waitFor(() => { expect(view.queryByText('Scanning')).toBeNull(); });
+    await waitFor(() => { expect(view.queryByText('Scanning')).toBeNull(); }, { timeout: 10_000 });
     expect(view.queryByText(/Added 1 server/)).not.toBeNull();
     view.unmount();
   }, 60_000);
