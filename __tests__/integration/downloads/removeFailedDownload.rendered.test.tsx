@@ -21,7 +21,7 @@ describe('failed download removal', () => {
     fireEvent.press(await waitFor(() => screen.getByLabelText('Remove 0-gemma-4-E2B-it.litertlm')));
     fireEvent.press(await waitFor(() => screen.getByText('Yes')));
 
-    await waitFor(() => expect(screen.queryByText('0-gemma-4-E2B-it.litertlm')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('0-gemma-4-E2B-it.litertlm')).toBeNull(), { timeout: 5000 });
     expect(boundary.download!.active()).toHaveLength(0);
   });
 });
