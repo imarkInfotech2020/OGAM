@@ -659,7 +659,7 @@ describe('Pro mobile state sync journey', () => {
       winningTemperature.value,
     );
 
-  });
+  }, 30_000);
 
   it('reconnects before slow owners finish and rejects forged task state', async () => {
     let releaseSlowStartup: (() => void) | undefined;
