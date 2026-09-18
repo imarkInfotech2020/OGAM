@@ -24,7 +24,9 @@ interface GatewayCatalogModel {
 }
 
 interface GatewayLiveModel {
-  capabilities: string[];
+  // An absent array means Desktop has not loaded this model yet; it is not a
+  // declaration that the model lacks tools.
+  capabilities: string[] | null;
   reasoningMandatory: boolean;
 }
 
@@ -107,7 +109,7 @@ function parseLiveModels(value: unknown): Map<string, GatewayLiveModel> {
       ? candidate.capabilities.filter(
           (capability): capability is string => typeof capability === 'string',
         )
-      : [];
+      : null;
     const reasoning = record(candidate.reasoning);
     result.set(candidate.id, {
       capabilities,
@@ -220,9 +222,9 @@ function textModels(
     }
     const live = liveModels.get(model.id);
     const predicted = predictGgufCapabilities(model);
-    const hasLiveCapabilities = !!live?.capabilities.length;
+    const hasLiveCapabilities = live?.capabilities !== undefined && live.capabilities !== null;
     const supportsThinking = hasLiveCapabilities
-      ? live?.capabilities.includes('reasoning') === true || live?.reasoningMandatory === true
+      ? live?.capabilities?.includes('reasoning') === true || live?.reasoningMandatory === true
       : predicted.thinking;
     return [
       {
@@ -230,10 +232,12 @@ function textModels(
         name: model.name,
         serverId,
         capabilities: {
-          supportsVision: model.kind === 'vision' || live?.capabilities.includes('vision') === true,
+          supportsVision: model.kind === 'vision' || live?.capabilities?.includes('vision') === true,
           supportsToolCalling: hasLiveCapabilities
-            ? live?.capabilities.includes('tools') === true
-            : predicted.tools,
+            ? live?.capabilities?.includes('tools') === true
+            // Desktop offloads idle models, so /v1/models can omit capabilities.
+            // Keep tools usable until the runtime makes an authoritative claim.
+            : true,
           supportsThinking,
           acceptsThinkingKwarg: model.id.startsWith('remote-vision:') && supportsThinking,
           ...(live?.reasoningMandatory
@@ -294,7 +298,7 @@ export async function activateOffGridDesktopModel(
   server: RemoteServer,
   category: RemoteModelCategory,
   modelId: string,
-): Promise<RemoteMediaModelIds> {
+): Promise<OffGridDesktopModelState> {
   const response = await gatewayFetch(server, '/v1/models/activate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -312,5 +316,5 @@ export async function activateOffGridDesktopModel(
   if (!refreshed || refreshed.active[category] !== modelId) {
     throw new Error('Desktop did not confirm the selected model.');
   }
-  return refreshed.active;
+  return refreshed;
 }
