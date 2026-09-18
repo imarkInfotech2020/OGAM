@@ -67,6 +67,30 @@ describe('synced assistant tool timeline', () => {
     expect(view.queryByText('Thinking...')).toBeNull();
     expect(view.getByText('I am checking the live sources.')).toBeTruthy();
     expect(view.getAllByText('Web search result')).toHaveLength(1);
+
+    view.unmount();
+    const audioView = render(
+      <View>
+        {display.map(item => (
+          <MessageAudioMode
+            key={item.id}
+            msg={item}
+            isStreamingThis={item.isStreaming === true}
+            shouldAnimate={false}
+            showGenerationDetails={false}
+            onCopy={() => {}}
+            onRetry={() => {}}
+            onEdit={() => {}}
+            onGenerateImage={() => {}}
+            onImagePress={() => {}}
+          />
+        ))}
+      </View>,
+    );
+    expect(audioView.getByText('Working')).toBeTruthy();
+    expect(audioView.getAllByText('Web search result')).toHaveLength(1);
+    expect(audioView.queryAllByTestId(/^audio-bubble-/)).toHaveLength(0);
+    expect(audioView.queryByTestId('streaming-thinking-hint')).toBeNull();
   });
 
   it('closes failed peer work under one Work failed accordion', () => {

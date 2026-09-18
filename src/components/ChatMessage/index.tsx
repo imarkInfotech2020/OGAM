@@ -298,7 +298,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               />
             )}
           </Accordion>
-          {isStreaming && !hasVisibleAnswer && (
+          {isStreaming && !hideProse && !hasVisibleAnswer && (
             <View testID="streaming-thinking-hint" style={styles.streamingThinkingHint}>
               <View testID="thinking-indicator">
                 <ThinkingIndicator />
