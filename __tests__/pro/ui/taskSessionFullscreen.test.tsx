@@ -64,7 +64,7 @@ const steps: SyncedTaskVisualStep[] = [
   },
 ];
 
-describe('TaskSessionPlayback full screen', () => {
+describe('TaskSessionPlayback bottom sheet', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
@@ -79,7 +79,7 @@ describe('TaskSessionPlayback full screen', () => {
     expect(screen.getByTestId('task-session-cursor')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('task-session-open-fullscreen'));
-    expect(screen.getByTestId('task-session-fullscreen')).toBeTruthy();
+    expect(screen.getByTestId('task-session-sheet')).toBeTruthy();
     expect(screen.queryByTestId('task-session-frame')).toBeNull();
     fireEvent(screen.getByTestId('task-session-fullscreen-frame'), 'layout', {
       nativeEvent: { layout: { width: 390, height: 700 } },
@@ -88,7 +88,7 @@ describe('TaskSessionPlayback full screen', () => {
     expect(screen.getByTestId('task-session-fullscreen-cursor')).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('Close full screen'));
-    expect(screen.queryByTestId('task-session-fullscreen')).toBeNull();
+    expect(screen.queryByTestId('task-session-sheet')).toBeNull();
     expect(screen.getByTestId('task-session-frame')).toBeTruthy();
   });
 
@@ -119,6 +119,17 @@ describe('TaskSessionPlayback full screen', () => {
     expect(screen.getByText('Pause')).toBeTruthy();
 
     act(() => screen.unmount());
+  });
+
+  it('dismisses the session sheet from its backdrop without changing the replay position', () => {
+    const screen = render(<TaskSessionPlayback run={run('done')} steps={steps} />);
+    fireEvent(screen.getByTestId('task-session-scrubber'), 'valueChange', 1);
+    fireEvent.press(screen.getByTestId('task-session-open-fullscreen'));
+
+    expect(screen.getByTestId('task-session-sheet')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Close session view'));
+    expect(screen.queryByTestId('task-session-sheet')).toBeNull();
+    expect(screen.getByText('Step 2 of 2')).toBeTruthy();
   });
 
   it('reviews saved steps during a live task and returns to the live frame', () => {
