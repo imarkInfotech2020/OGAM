@@ -74,6 +74,7 @@ export function useTextGenerationSettings() {
 
   const temperature = settings.temperature ?? DEFAULT_SETTINGS.temperature;
   const maxTokens = settings.maxTokens ?? DEFAULT_SETTINGS.maxTokens;
+  const reasoningBudget = settings.reasoningBudget ?? 0;
   const maxToolCalls = settings.maxToolCalls ?? DEFAULT_SETTINGS.maxToolCalls;
   const contextLength =
     settings.contextLength ?? DEFAULT_SETTINGS.contextLength;
@@ -88,10 +89,18 @@ export function useTextGenerationSettings() {
   const llamaModelLimit = selectedModelLimit ?? Math.max(maxTokens, contextLength, 512);
 
   useEffect(() => {
-    if (!isLiteRT && selectedModelLimit && contextLength > selectedModelLimit) {
-      updateSettings({ contextLength: selectedModelLimit, maxTokens: Math.min(maxTokens, selectedModelLimit) });
+    if (isLiteRT) return;
+    const nextContext = selectedModelLimit ? Math.min(contextLength, selectedModelLimit) : contextLength;
+    const nextMaxTokens = Math.min(maxTokens, nextContext);
+    const nextBudget = reasoningBudget > 0 ? Math.min(reasoningBudget, nextMaxTokens) : reasoningBudget;
+    if (nextContext !== contextLength || nextMaxTokens !== maxTokens || nextBudget !== reasoningBudget) {
+      updateSettings({
+        ...(nextContext !== contextLength ? { contextLength: nextContext } : {}),
+        ...(nextMaxTokens !== maxTokens ? { maxTokens: nextMaxTokens } : {}),
+        ...(nextBudget !== reasoningBudget ? { reasoningBudget: nextBudget } : {}),
+      });
     }
-  }, [isLiteRT, selectedModelLimit, contextLength, maxTokens, updateSettings]);
+  }, [isLiteRT, selectedModelLimit, contextLength, maxTokens, reasoningBudget, updateSettings]);
 
   const liteRTTemperature =
     settings.liteRTTemperature ?? DEFAULT_SETTINGS.liteRTTemperature;
