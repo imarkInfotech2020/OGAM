@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { ChatMessage } from '../../components';
 import { ThinkingIndicator } from '../../components/ThinkingIndicator';
 import { SPACING } from '../../constants';
-import { prepareMessageForSpeech } from '../../utils/messageContent';
+import { parseModelOutput, prepareMessageForSpeech } from '../../utils/messageContent';
 import { Message } from '../../types';
 import { useChatStore, useUiModeStore } from '../../stores';
 import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
@@ -180,11 +180,23 @@ const StableMessageRenderer = React.memo(
 const LiveStreamMessageRenderer: React.FC<MessageRendererProps> = props => {
   const content = useChatStore(state => state.streamingMessage);
   const reasoningContent = useChatStore(state => state.streamingReasoningContent);
-  const item = React.useMemo(() => ({
-    ...props.item,
-    content,
-    reasoningContent: reasoningContent || undefined,
-  }), [props.item, content, reasoningContent]);
+  const item = React.useMemo(() => {
+    if (props.item.timeline?.length) {
+      const current = parseModelOutput(content, reasoningContent);
+      return {
+        ...props.item,
+        content: current.answer,
+        timeline: current.reasoning
+          ? [...(props.item.timeline ?? []), { kind: 'thinking' as const, text: current.reasoning }]
+          : props.item.timeline,
+      };
+    }
+    return {
+      ...props.item,
+      content,
+      reasoningContent: reasoningContent || undefined,
+    };
+  }, [props.item, content, reasoningContent]);
   return <StableMessageRenderer {...props} item={item} />;
 };
 

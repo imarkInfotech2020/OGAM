@@ -168,4 +168,33 @@ describe('T038 (rendered) — thinking + tool-result + answer all render in a re
       'First segment: I should use the calculator.',
     );
   });
+
+  it('updates the grouped work row while a later thinking segment is still streaming', async () => {
+    const h = await setupChatScreen({ engine: 'llama', platform: 'android' });
+    h.enableToolViaUI('calculator');
+    h.render();
+    h.rtl.fireEvent.press(await h.rtl.waitFor(() => h.view!.getByTestId('quick-settings-button')));
+    h.rtl.fireEvent.press(await h.rtl.waitFor(() => h.view!.getByTestId('quick-thinking-toggle')));
+
+    h.boundary.llama!.scriptCompletions([
+      {
+        reasoning: 'First segment: use the calculator.',
+        text: 'I will calculate that.',
+        toolCalls: [{ name: 'calculator', arguments: { expression: '128*256' } }],
+      },
+      {
+        text: '<think>Second segment: explain the value carefully.</think>The result is 32768.',
+        pauseAfter: 'Second segment: explain the value',
+      },
+    ]);
+
+    await h.tapSend('calculate 128*256 and explain it');
+    await h.rtl.waitFor(() => expect(h.boundary.llama!.calls.completion).toHaveLength(2), { timeout: 4000 });
+    await h.rtl.waitFor(() => {
+      expect(h.view!.queryByText(/Second segment: explain the value/)).not.toBeNull();
+      expect(h.view!.queryByTestId('stop-button')).not.toBeNull();
+    }, { timeout: 4000 });
+    await h.rtl.act(async () => h.boundary.llama!.releaseStream());
+    await h.rtl.waitFor(() => expect(h.view!.queryByText(/The result is 32768/)).not.toBeNull(), { timeout: 4000 });
+  });
 });
