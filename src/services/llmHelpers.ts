@@ -295,7 +295,11 @@ export function getStreamingDelta(nextValue: string | undefined, previousValue: 
 
 /** Reads the model's trained context length from metadata, or null if unavailable. */
 export function getModelMaxContext(context: LlamaContext): number | null {
-  return modelMaxContextFromMetadata((context as any).model?.metadata);
+  try {
+    return modelMaxContextFromMetadata((context as any).model?.metadata);
+  } catch {
+    return null;
+  }
 }
 
 /** Read the trained context from a GGUF header, including architecture-prefixed keys. */
