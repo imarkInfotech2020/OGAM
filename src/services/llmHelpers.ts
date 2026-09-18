@@ -295,8 +295,12 @@ export function getStreamingDelta(nextValue: string | undefined, previousValue: 
 
 /** Reads the model's trained context length from metadata, or null if unavailable. */
 export function getModelMaxContext(context: LlamaContext): number | null {
+  return modelMaxContextFromMetadata((context as any).model?.metadata);
+}
+
+/** Read the trained context from a GGUF header, including architecture-prefixed keys. */
+export function modelMaxContextFromMetadata(metadata: Record<string, unknown> | undefined): number | null {
   try {
-    const metadata = (context as any).model?.metadata;
     if (!metadata) return null;
     // GGUF stores the trained context under an ARCHITECTURE-prefixed key (gemma4.context_length,
     // qwen3.context_length, …). Reading only the llama key returned null for gemma/qwen → 32K slider cap.
@@ -305,7 +309,7 @@ export function getModelMaxContext(context: LlamaContext): number | null {
       (arch && metadata[`${arch}.context_length`]) ||
       metadata['llama.context_length'] || metadata['general.context_length'] || metadata.context_length;
     if (!trainCtx) return null;
-    const maxModelCtx = Number.parseInt(trainCtx, 10);
+    const maxModelCtx = Number.parseInt(String(trainCtx), 10);
     return Number.isNaN(maxModelCtx) || maxModelCtx <= 0 ? null : maxModelCtx;
   } catch {
     return null;
