@@ -114,8 +114,9 @@ const ToolCallWithThinking: React.FC<{
 const TimelineThinkingBlock: React.FC<{
   text: string;
   styles: ReturnType<typeof createStyles>;
-}> = ({ text, styles }) => {
-  const [expanded, setExpanded] = useState(false);
+  isStreaming: boolean;
+}> = ({ text, styles, isStreaming }) => {
+  const [expanded, setExpanded] = useState(isStreaming);
   return (
     <ThinkingBlock
       parsedContent={{
@@ -134,7 +135,8 @@ const SyncedAssistantTimeline: React.FC<{
   message: Message;
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
-}> = ({ message, styles, colors }) => (
+  isStreaming: boolean;
+}> = ({ message, styles, colors, isStreaming }) => (
   <>
     {message.timeline?.map((entry, index) => {
       if (entry.kind === 'thinking') {
@@ -143,6 +145,7 @@ const SyncedAssistantTimeline: React.FC<{
             key={`thinking:${index}`}
             text={entry.text}
             styles={styles}
+            isStreaming={isStreaming}
           />
         );
       }
@@ -269,6 +272,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 message={message}
                 styles={styles}
                 colors={colors}
+                isStreaming={Boolean(isStreaming)}
               />
             )}
             {!!message.toolArtifacts?.length && !timelineHasTools && (
@@ -384,7 +388,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onCopy,
   onRetry,
   onEdit,
-  onTranscribeAgain,
   onGenerateImage,
   showActions = true,
   canGenerateImage = false,
