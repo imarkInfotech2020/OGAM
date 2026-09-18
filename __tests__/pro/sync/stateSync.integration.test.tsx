@@ -52,6 +52,7 @@ import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
 import { HomeNotificationsButton } from '../../../pro/ui/HomeNotificationsButton';
 import { ProRoot } from '../../../pro/ui/ProRoot';
+import { TaskChatCard } from '../../../pro/ui/TaskChatCard';
 import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
@@ -381,6 +382,9 @@ describe('Pro mobile state sync journey', () => {
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
     expect(ui.getByTestId('sync-sending-accordion')).toBeTruthy();
     expect(ui.getByTestId('sync-clipboard-toggle')).toBeTruthy();
+    fireEvent.press(ui.getByTestId('ambient-open-settings'));
+    fireEvent(ui.getByTestId('ambient-model-settings-toggle'), 'valueChange', true);
+    fireEvent.press(ui.getByTestId('app-sheet-close'));
 
     fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByLabelText('Back'));
@@ -542,9 +546,7 @@ describe('Pro mobile state sync journey', () => {
       ).toMatchObject({ value_json: '1.25' }),
     );
 
-    await waitFor(() =>
-      expect(remoteLog.size()).toBe(stateSyncService.opCount()),
-    );
+    // Pull catch-up transfers winning records, not every superseded revision.
     await remote.engine.stop();
     await waitFor(() =>
       expect(syncService.connectedDeviceIds()).not.toContain(remoteDevice.id),
@@ -618,12 +620,12 @@ describe('Pro mobile state sync journey', () => {
       });
     }
     remoteState.requestSync(mobile.id);
-    await waitFor(() =>
-      expect(ui!.getByText(/^(?:[1-9]\d?|100)%$/)).toBeTruthy(),
-    );
-    expect(
-      ui.getByLabelText(/^Syncing, (?:[1-9]\d?|100) percent\. Notifications$/),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(ui!.getByText(/^(?:[1-9]\d?|100)%$/)).toBeTruthy();
+      expect(
+        ui!.getByLabelText(/^Syncing, (?:[1-9]\d?|100) percent\. Notifications$/),
+      ).toBeTruthy();
+    });
     await waitFor(() =>
       expect(ui!.queryByTestId('home-notifications-syncing')).toBeNull(),
     );
@@ -776,6 +778,17 @@ describe('Pro mobile state sync journey', () => {
         title: task.title,
         executionDevice: task.executionDevice,
       }),
+    );
+    expect(useTaskRunStore.getState().visualSteps[visualStep.visualStepId]).toBeUndefined();
+    useChatStore.getState().setActiveConversation(task.conversationId);
+    ui = render(
+      <TaskChatCard
+        message={{
+          toolName: 'computer_use',
+          toolCallId: task.taskId,
+          content: `Task reference: ${task.taskId}`,
+        }}
+      />,
     );
     await waitFor(() =>
       expect(

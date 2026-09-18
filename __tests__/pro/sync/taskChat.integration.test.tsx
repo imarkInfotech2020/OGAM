@@ -265,7 +265,8 @@ describe('synced Web Use and Computer Use task in chat', () => {
     expect(screen.queryByText('Stop')).toBeNull();
     expect(screen.queryByText('Take Over')).toBeNull();
     expect(screen.getByText('SESSION REPLAY')).toBeTruthy();
-    expect(screen.getByText('Step 1 of 2 · 0:00 / 0:01')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 2')).toBeTruthy();
+    expect(screen.getByText('0:00 / 0:01')).toBeTruthy();
     expect(screen.getByText('Play')).toBeTruthy();
     expect(screen.getByTestId('task-session-scrubber')).toBeTruthy();
     expect(screen.getAllByTestId('task-session-frame')).toHaveLength(1);
