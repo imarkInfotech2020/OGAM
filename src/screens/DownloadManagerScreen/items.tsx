@@ -12,6 +12,7 @@ import { createStyles } from './styles';
 import { presentProgress } from '../../utils/progressPresentation';
 import { SPACING } from '../../constants';
 import { isMMProjFile } from '../../services/mmproj';
+import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,16 @@ export function getStatusText(status: string): string {
   if (status === 'failed') return 'Needs attention';
   if (status === 'unknown') return 'Stuck - Remove & retry';
   return status;
+}
+
+function textCapabilities(item: DownloadItem) {
+  if (item.modelType !== 'text' || !item.fileName.toLowerCase().endsWith('.gguf')) return undefined;
+  const predicted = predictGgufCapabilities({
+    id: item.modelId,
+    name: item.name,
+    fileName: item.fileName,
+  });
+  return { ...predicted, vision: !!item.isVisionModel, predicted: true };
 }
 
 function getStatusLabel(item: DownloadItem): string {
@@ -112,6 +123,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
       model={{ id: item.modelId, name: item.fileName, author: item.author,
         modelType: item.isVisionModel ? 'vision' : item.modelType === 'text' ? 'text' : undefined }}
       file={{ name: item.fileName, size: item.fileSize, quantization: item.quantization, downloadUrl: '' }}
+      capabilities={textCapabilities(item)}
       facts={[item.modelType === 'tts' ? 'Voice' : item.modelType === 'stt' ? 'Transcription' : item.modelType === 'image' ? 'Image' : 'Text']}
       footer={<>
       <View style={styles.progressContainer}>
@@ -122,7 +134,7 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           <View style={styles.transferActions}>
             {item.status === 'failed' ? (
               <>
-                {isRetryable(item.reasonCode) && (
+                {isRetryable(item.reasonCode) && !item.modelKey?.startsWith('model-download:') && (
                   <TouchableOpacity style={styles.transferIconButton} hitSlop={SPACING.md} testID="failed-retry-button" accessibilityRole="button" accessibilityLabel={`Retry ${item.fileName}`} onPress={() => onRetry(item)}>
                     <Icon name="refresh-cw" size={14} color={colors.primary} />
                   </TouchableOpacity>
@@ -215,6 +227,7 @@ export const CompletedDownloadCard: React.FC<CompletedDownloadCardProps> = ({ it
           description: item.downloadedAt ? new Date(item.downloadedAt).toLocaleDateString() : undefined,
         }}
         file={{ name: item.fileName, size: item.fileSize, quantization: item.quantization, downloadUrl: '' }}
+        capabilities={textCapabilities(item)}
         isDownloaded
         isDownloading={showRepairProgress && repairEntry.status !== 'paused'}
         isPaused={showRepairProgress && repairEntry.status === 'paused'}

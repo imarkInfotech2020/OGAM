@@ -18,6 +18,27 @@ beforeAll(() => {
 afterAll(() => { globalThis.fetch = originalFetch; });
 
 describe('Model choice on the phone', () => {
+  it('shows the recommended models’ capabilities on Models > Text', async () => {
+    installNativeBoundary({ fs: true, ram: { platform: 'android', totalBytes: 11 * GB, availBytes: 8 * GB } });
+    const React = require('react');
+    const { render, waitFor, within } = requireRTL();
+    const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
+    const screen = render(React.createElement(ModelsScreen));
+
+    await waitFor(() => {
+      const minicpm = within(screen.getByLabelText('MiniCPM5 2B'));
+      expect(minicpm.getByText('MiniCPM5 2B')).toBeTruthy();
+      expect(minicpm.getByLabelText('Thinking likely')).toBeTruthy();
+      expect(minicpm.getByLabelText('Tool calling likely')).toBeTruthy();
+
+      const gemma = within(screen.getByLabelText('Gemma 4 E2B'));
+      expect(gemma.getByText('Gemma 4 E2B')).toBeTruthy();
+      expect(gemma.getByLabelText('Vision')).toBeTruthy();
+      expect(gemma.getByLabelText('Thinking likely')).toBeTruthy();
+      expect(gemma.getByLabelText('Tool calling likely')).toBeTruthy();
+    });
+  });
+
   it('offers local file import as an upload action only on Models > Text', async () => {
     installNativeBoundary({ fs: true, ram: { platform: 'android', totalBytes: 8 * GB, availBytes: 6 * GB } });
     const React = require('react');
