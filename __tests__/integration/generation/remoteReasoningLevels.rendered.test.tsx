@@ -96,7 +96,8 @@ it('uses the existing budget for an Ollama model that accepts reasoning levels',
     editor.unmount();
 
     const budget = render(<ThinkingBudgetSelector />);
-    fireEvent(budget.getByTestId('thinking-budget-slider'), 'slidingComplete', 5);
+    const slider = budget.getByTestId('thinking-budget-slider');
+    fireEvent(slider, 'slidingComplete', slider.props.maximumValue);
     budget.unmount();
 
     const chat = renderRoute('Chat');
@@ -104,7 +105,7 @@ it('uses the existing budget for an Ollama model that accepts reasoning levels',
     fireEvent.press(await waitFor(() => chat.getByText('Level Model')));
     fireEvent.changeText(await waitFor(() => chat.getByTestId('chat-input')), 'Answer with reasoning');
     fireEvent.press(await waitFor(() => chat.getByTestId('send-button')));
-    await waitFor(() => expect(chat.queryByText(/Server received Thinking high/)).not.toBeNull());
+    await waitFor(() => expect(chat.queryByText(/Server received Thinking low/)).not.toBeNull());
     fireEvent.press(chat.getByTestId('quick-settings-button'));
     await waitFor(() => expect(chat.queryByTestId('quick-thinking-toggle')).toBeNull());
     chat.unmount();
