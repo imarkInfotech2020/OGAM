@@ -10,7 +10,7 @@ import { Resident, ResidentType } from './policy';
 
 export type UnloadFn = () => Promise<void>;
 
-/** Hard floor so a small model can always load, even under memory pressure. */
+/** Physical-budget floor for clean, pageable models; never force dirty loads past live RAM. */
 export const MIN_BUDGET_MB = 1024;
 /** For DIRTY-memory models (CoreML/ONNX image): keep this much real RAM free for the
  *  OS + other apps so a dirty load never spills into swap. (Not applied to mmap'd

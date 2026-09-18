@@ -81,11 +81,9 @@ class LLMService {
     // to f16 (see buildModelParams), so keying off settings.cacheType alone would let the
     // guard use the cheaper quantized estimate and approve a context that then OOMs.
     const quantizedCache = !params.usesF16Cache;
-    // Feed the pre-load gate the SAME reclaim-aware available RAM the residency gate uses (the single owner,
-    // effectiveAvailableMB) so the two can never disagree. On Android the raw os_proc snapshot under-counts a
-    // foreground load (the LMK hands background apps' physical pages to us), so a raw gate REFUSED a model
-    // residency ADMITTED — 12GB Android Aggressive, device qwythos. iOS returns raw unchanged (no reclaim —
-    // jetsam kills us), so iOS is untouched. Policy comes from the residency manager (the authoritative owner).
+    // This pre-load check can credit reclaimable pages for clean mmap-backed GGUF weights.
+    // The residency manager independently gates dirty/accelerator loads on live RAM.
+    // Policy comes from the residency manager (the authoritative owner).
     const getMem = async (): Promise<{ available: number; total: number; used: number }> => {
       const raw = await hardwareService.getAppMemoryUsage();
       const availableMB = effectiveAvailableMB(raw.available / (1024 * 1024), raw.total / (1024 * 1024), {

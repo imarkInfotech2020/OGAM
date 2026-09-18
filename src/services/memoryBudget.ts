@@ -1,9 +1,8 @@
 /**
- * Memory budget — the SINGLE source of truth for "how much RAM this process may
- * safely commit to on-device models" on THIS device + platform.
+ * Memory budget — shared physical caps and model-load policies by device/platform.
  *
- * Both consumers read it so they can never disagree (one saying a model fits while
- * the other rejects it):
+ * Both consumers use these physical caps; dirty models additionally require a
+ * live-available-RAM check in the residency manager:
  *  - the residency manager (capacity planning + eviction), and
  *  - the pre-load memory check (checkMemoryForModel).
  *
@@ -16,8 +15,8 @@
  *  - 6-8GB: 0.60,
  *  - 12GB+: 0.78 iOS / 0.70 Android (so a 12GB iPhone runs a 7GB model a flat 60%
  *    wrongly rejected).
- * This fraction is the absolute PHYSICAL ceiling; the residency manager's dynamic
- * budget (real free RAM right now) is the actual protection against loading into swap.
+ * This fraction is the absolute PHYSICAL ceiling; dirty model loads also respect
+ * live available RAM so the residency manager does not load into swap.
  *
  * Previously two places computed this independently (a 0.6 in the residency policy
  * AND a separate device-tiered fraction in the model-load check); unifying it here
@@ -66,22 +65,16 @@ export const AGGRESSIVE_RESERVE_MB = 800;
 type Plat = 'ios' | 'android' | string;
 
 /**
- * Effective physical RAM a FOREGROUND process may commit right now, in MB — the SINGLE
- * owner of "reclaimable-aware availability".
+ * Reclaimable-aware ceiling for clean, mmap-backed model weights, in MB.
  *
  * `realAvailMB` is the raw os_proc available snapshot. On Android it UNDER-counts what a
- * foreground app can actually get: the low-memory killer evicts background/cached apps and
- * hands their (real, physical) pages to the foreground app, so the true ceiling is the
- * physical model budget (modelMemoryBudgetMB), not the instantaneous snapshot. That
- * reclaimed RAM is REAL physical memory a dirty/GPU model can occupy — unlike zram swap,
- * which dirty pages cannot use (the reverted Fix-A mistake that OOM'd). On iOS there is no
- * such reclaim (jetsam kills US, not background apps), so the raw snapshot stands.
+ * foreground app can sometimes get: background/cached apps may be reclaimed. Clean,
+ * file-backed weights can be paged as needed, so their ceiling is the physical model
+ * budget rather than the instantaneous snapshot. On iOS this remains the raw snapshot.
  *
- * Both the residency FIT check (budgetForSpec's dirty branch) and the override survival
- * floor read this, so they can never disagree. The legacy split — a reclaimable-aware
- * override path but a raw-availMem fit check — is exactly what refused a 5.2GB dirty model
- * on a 12GB Android phone that the override then loaded fine (image-prompt enhancement, and
- * chat, both hit it).
+ * This reclaim credit is suitable only for clean, mmap-backed model weights.
+ * Dirty/accelerator loads must use the live OS available reading instead: Android
+ * may kill the foreground app before enough hypothetical background RAM is reclaimed.
  */
 export function effectiveAvailableMB(
   realAvailMB: number,

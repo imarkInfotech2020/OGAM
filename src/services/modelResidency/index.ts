@@ -9,7 +9,7 @@
  *
  * See docs/design/MODEL_ROUTING.md §5.1–5.2.
  */
-import { AppState, Platform } from 'react-native';
+import { AppState } from 'react-native';
 import { hardwareService } from '../hardware';
 import logger from '../../utils/logger';
 import {
@@ -17,7 +17,7 @@ import {
   computeBudgetMB,
   Resident,
 } from './policy';
-import { LoadPolicy, effectiveAvailableMB } from '../memoryBudget';
+import { LoadPolicy } from '../memoryBudget';
 import {
   formatMakeRoomForLine,
   formatOverrideForcingLine,
@@ -208,18 +208,12 @@ class ModelResidencyManager {
       // weights page in even when instantaneous available is low).
       return Math.round(Math.max(MIN_BUDGET_MB, physicalCapMB));
     }
-    // Under dirty pressure: also gate on real free RAM (+ evictable residents − OS
-    // headroom). Use the reclaimable-aware availability (the SAME owner the override
-    // survival floor reads) — on Android a foreground load may commit up to the physical
-    // budget because the OS reclaims background apps, so a raw availMem snapshot here
-    // under-counted and refused a dirty model the override path then loaded fine (B1).
-    // iOS gets NO reclaim credit (jetsam kills US, not background apps) so this stays the
-    // raw snapshot there — which is what refuses a clean sidecar piled onto a dirty spike.
-    const availableMB = effectiveAvailableMB(
-      hardwareService.getAvailableMemoryGB() * 1024,
-      hardwareService.getTotalMemoryGB() * 1024,
-      { platform: Platform.OS, policy: this.loadPolicy },
-    );
+    // Dirty/accelerator pages cannot rely on hypothetical OS reclamation. In particular,
+    // Android's physical-budget credit can turn 1GB of live available RAM into an 8GB
+    // admission budget while a diffusion model allocates several GB of anonymous memory.
+    // Use the fresh OS reading for dirty loads on both platforms; clean mmap weights above
+    // retain the physical-budget policy.
+    const availableMB = hardwareService.getAvailableMemoryGB() * 1024;
     const residentMB = [...this.residents.values()].reduce(
       (sum, r) => sum + r.sizeMB,
       0,
@@ -232,9 +226,9 @@ class ModelResidencyManager {
         ? AGGRESSIVE_DIRTY_HEADROOM_MB
         : DIRTY_AVAILABILITY_HEADROOM_MB;
     const dynamicMB = availableMB + residentMB - dirtyHeadroomMB;
-    return Math.round(
-      Math.max(MIN_BUDGET_MB, Math.min(physicalCapMB, dynamicMB)),
-    );
+    // The small-model floor is valid for clean, pageable weights, not dirty
+    // allocations: at critically low free RAM even a sub-1GB dirty load must wait.
+    return Math.round(Math.max(0, Math.min(physicalCapMB, dynamicMB)));
   }
 
   getResidents(): Resident[] {
