@@ -198,6 +198,32 @@ describe('synced Web Use and Computer Use task in chat', () => {
     expect(projectNotificationCenter([], 'all').badgeCount).toBe(0);
   });
 
+  it('keeps a long synced task title to two lines until the reader expands it', () => {
+    const title = 'Search Google Maps for nearby restaurants serving lamb chops and verify opening hours, ratings, and travel time';
+    materializer.put(
+      TASK_RUN_ENTITY,
+      runningComputerTask.taskId,
+      { ...runningComputerTask, title },
+      origin,
+    );
+    const screen = render(
+      <TaskChatCard
+        message={{
+          toolName: 'computer_use',
+          toolCallId: 'computer-call-1',
+          content: `Task started. Task reference: ${runningComputerTask.taskId}.`,
+        }}
+      />,
+    );
+
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(screen.getByText('More')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Show more of task title'));
+    expect(screen.getByText('Less')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Show less of task title'));
+    expect(screen.getByText('More')).toBeTruthy();
+  });
+
   it('shows a failed Web Use task with a clear recovery and no live controls', () => {
     materializer.put(
       TASK_RUN_ENTITY,
