@@ -22,7 +22,10 @@ set -euo pipefail
 #   * Release notes are generated FROM THE COMMITS by `claude -p` (falls back to a grouped
 #     commit list), and pushed to TestFlight (What to Test) + Play internal + the GH release.
 #
-# Usage: scripts/uat.sh [--ios|--android]   (no arg = both)
+# Usage: scripts/uat.sh [--ios|--android|--resume-ios]   (no arg = both)
+# --resume-ios reuses the already-built AAB/APK/IPA after a failed Play
+# upload that was completed manually. It uploads only the IPA, then commits,
+# tags, pushes, and creates the GitHub prerelease.
 #
 # Build → upload → THEN commit/tag/push, so a failed build never leaves a dangling tag.
 # Credentials come from fastlane/.env (see fastlane/.env.example). On a Mac whose keychain
@@ -36,10 +39,10 @@ info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
-DO_IOS=1; DO_ANDROID=1
+DO_IOS=1; DO_ANDROID=1; RESUME_IOS=0
 case "${1:-}" in
-  --ios) DO_ANDROID=0 ;; --android) DO_IOS=0 ;; "" ) ;;
-  * ) error "Unknown arg '$1'. Use --ios, --android, or no arg for both." ;;
+  --ios) DO_ANDROID=0 ;; --android) DO_IOS=0 ;; --resume-ios) RESUME_IOS=1 ;; "" ) ;;
+  * ) error "Unknown arg '$1'. Use --ios, --android, --resume-ios, or no arg for both." ;;
 esac
 
 # ── pre-flight ─────────────────────────────────────────────────────
@@ -58,8 +61,8 @@ command -v bundle >/dev/null || error "bundler not installed (bundle install)"
 # EVERY uat build takes its OWN version, so the number on the GitHub release is the number the app
 # shows on both stores. package.json is bumped to it below and committed with the build, which is what
 # makes the next cut compute the next version rather than rebuilding 0.0.103 four times.
-CURRENT_VERSION=$(node -p "require('./package.json').version")   # e.g. 0.0.103 (last cut)
-TARGET_VERSION=$(node -e "const [a,b,c]=require('./package.json').version.split('.').map(Number); console.log(a+'.'+b+'.'+(c+1))")   # 0.0.103
+CURRENT_VERSION=$(node -p "require('./package.json').version")
+TARGET_VERSION=$(node -e "const [a,b,c]=require('./package.json').version.split('.').map(Number); console.log(a+'.'+b+'.'+(c+1))")
 # --no-recurse-submodules: this fetch only needs CORE tags to pick the next beta number. Recursing
 # into the pro submodule made it try to fetch pro commits referenced by old tag history that are no
 # longer on pro's remote (e.g. after a pro branch was deleted/rebased) → "not our ref" → the whole
@@ -69,7 +72,23 @@ LAST_N=$(git tag -l "v${TARGET_VERSION}-beta.*" | sed -E "s/.*-beta\.([0-9]+)$/\
 N=$(( ${LAST_N:-0} + 1 ))
 BETA_VERSION="${TARGET_VERSION}-beta.${N}"
 TAG="v${BETA_VERSION}"
-BUILD_NUMBER=$(date +%s)
+if [ "$RESUME_IOS" = 1 ]; then
+  command -v python3 >/dev/null || error "python3 is needed to verify the saved IPA"
+  IPA=build/OffgridMobile.ipa
+  AAB=android/app/build/outputs/bundle/release/app-release.aab
+  APK=android/app/build/outputs/apk/release/app-release.apk
+  APK_METADATA=android/app/build/outputs/apk/release/output-metadata.json
+  for artifact in "$IPA" "$AAB" "$APK" "$APK_METADATA"; do
+    [ -f "$artifact" ] || error "Missing saved release artifact: $artifact"
+  done
+  IPA_VERSION=$(python3 -c 'import plistlib,zipfile; z=zipfile.ZipFile("build/OffgridMobile.ipa"); print(plistlib.loads(z.read("Payload/OffgridMobile.app/Info.plist"))["CFBundleShortVersionString"])')
+  BUILD_NUMBER=$(python3 -c 'import plistlib,zipfile; z=zipfile.ZipFile("build/OffgridMobile.ipa"); print(plistlib.loads(z.read("Payload/OffgridMobile.app/Info.plist"))["CFBundleVersion"])')
+  [ "$IPA_VERSION" = "$TARGET_VERSION" ] || error "Saved IPA is $IPA_VERSION, expected $TARGET_VERSION"
+  node -e 'const m=require("./android/app/build/outputs/apk/release/output-metadata.json").elements[0]; if (m.versionName !== process.argv[1] || String(m.versionCode) !== process.argv[2]) process.exit(1)' "$TARGET_VERSION" "$BUILD_NUMBER" || error "Saved Android release does not match IPA version/build"
+  info "Resuming saved ${TARGET_VERSION} build ${BUILD_NUMBER}; Android was uploaded manually"
+else
+  BUILD_NUMBER=$(date +%s)
+fi
 info "Beta build: ${BOLD}${BETA_VERSION}${NC} (build ${BUILD_NUMBER}) - the app will report ${TARGET_VERSION} on both stores (previous cut: ${CURRENT_VERSION})"
 
 # ── apply the version / build-number bump (working tree; committed only on success) ──
@@ -139,7 +158,7 @@ info "Notes:"; sed 's/^/    /' "$NOTES_FILE"; echo ""
 # every retry). So we build ALL artifacts up front - the steps that actually fail (compile,
 # signing, export) happen before a single upload - and only publish once every artifact
 # exists. The fastlane beta lanes read UAT_CHANGELOG_PATH at upload time.
-if [ "$DO_ANDROID" = 1 ]; then
+if [ "$DO_ANDROID" = 1 ] && [ "$RESUME_IOS" = 0 ]; then
   info "Android → building signed AAB…"; bundle exec fastlane android build
   # Also build the sideloadable APK for the GitHub prerelease (the AAB isn't installable;
   # testers grabbing the build off GitHub need the APK - same as scripts/release.sh).
@@ -149,13 +168,13 @@ if [ "$DO_ANDROID" = 1 ]; then
   [ -f "$AAB_SRC" ] || error "AAB not found at $AAB_SRC"
   [ -f "$APK_SRC" ] || error "APK not found at $APK_SRC"
 fi
-if [ "$DO_IOS" = 1 ]; then
+if [ "$DO_IOS" = 1 ] && [ "$RESUME_IOS" = 0 ]; then
   info "iOS → building signed IPA…"; bundle exec fastlane ios build
   [ -f build/OffgridMobile.ipa ] || error "IPA not found at build/OffgridMobile.ipa"
 fi
 
 # ── PUBLISH - reached only if every build above succeeded ───────────
-if [ "$DO_ANDROID" = 1 ]; then info "Android → Play internal (AAB)…"; bundle exec fastlane android upload_beta; fi
+if [ "$DO_ANDROID" = 1 ] && [ "$RESUME_IOS" = 0 ]; then info "Android → Play internal (AAB)…"; bundle exec fastlane android upload_beta; fi
 if [ "$DO_IOS" = 1 ];     then info "iOS → TestFlight…";              bundle exec fastlane ios upload_beta;     fi
 
 # ── success → commit the bump, cut the PRERELEASE tag, GH prerelease ──
