@@ -15,7 +15,8 @@
  * modules the sync services build emitters over at import.
  */
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
+import { syncFileCompletionNotificationId } from '@offgrid/sync';
 
 jest.mock('react-native-vector-icons/Feather', () => {
   const { Text } = require('react-native');
@@ -64,6 +65,36 @@ const chooseFilter = (
 };
 
 describePro('the notifications screen filter', () => {
+  it('shows dismissal progress on a transfer until its notice disappears', async () => {
+    const { fileCompletionNotificationService } = requirePro<
+      typeof import('@offgrid/pro/sync/fileCompletionNotificationService')
+    >('@offgrid/pro/sync/fileCompletionNotificationService')!;
+    const completion = {
+      syncId: '763b4214-8e12-4f6d-a287-7ec69c12a940',
+      direction: 'receive' as const,
+      deviceId: 'the-mac',
+      deviceName: 'The Mac',
+      name: 'new-photo.png',
+      kind: 'file' as const,
+      completedAt: Date.now(),
+      available: true,
+    };
+    await act(async () => fileCompletionNotificationService.record(completion));
+    const id = syncFileCompletionNotificationId(completion);
+    const ui = render(<SyncNotificationsScreen />);
+    const dismiss = ui.getByTestId(`sync-file-notification-dismiss-${id}`);
+
+    fireEvent.press(dismiss);
+
+    expect(dismiss.props.accessibilityState).toMatchObject({
+      disabled: true,
+      busy: true,
+    });
+    await waitFor(() =>
+      expect(ui.queryByTestId(`sync-file-notification-${id}`)).toBeNull(),
+    );
+  });
+
   it('offers every filter, with All chosen to begin with', () => {
     const ui = render(<SyncNotificationsScreen />);
     fireEvent.press(ui.getByTestId('sync-notifications-filter'));

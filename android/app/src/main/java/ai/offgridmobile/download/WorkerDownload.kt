@@ -101,7 +101,16 @@ class WorkerDownload(
 
     private suspend fun handleDownloadException(downloadId: String, download: DownloadEntity, e: Exception): Result {
         if (isStopped) return handleStoppedState(downloadId, download, download.downloadedBytes)
-        return failDownload(downloadId, download, DownloadReason.fromThrowable(e))
+        val reason = DownloadReason.fromThrowable(e)
+        // The partial file is retained, so WorkManager can retry from its byte offset
+        // after a transient connection failure. Bound the retries so a persistently
+        // broken endpoint still becomes a visible, manually retryable failure.
+        if (DownloadReason.isRetryable(reason) && runAttemptCount < MAX_TRANSIENT_RETRIES) {
+            Log.w(TAG, "Transient download failure id=$downloadId attempt=$runAttemptCount reason=$reason; retrying")
+            downloadDao.updateStatus(downloadId, DownloadStatus.QUEUED)
+            return Result.retry()
+        }
+        return failDownload(downloadId, download, reason)
     }
 
     private data class StreamParams(
@@ -288,6 +297,7 @@ class WorkerDownload(
 
     companion object {
         private const val TAG = "WorkerDownload"
+        private const val MAX_TRANSIENT_RETRIES = 5
 
         val httpClient: OkHttpClient = OkHttpClient.Builder()
             .retryOnConnectionFailure(true)

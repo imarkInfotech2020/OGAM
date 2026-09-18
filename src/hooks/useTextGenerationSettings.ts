@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
+import { loadLlamaModelInfo } from 'llama.rn';
 import { DEFAULT_SETTINGS } from '../stores/appStore';
 import { selectIsLiteRT, useAppStore } from '../stores';
+import { modelMaxContextFromMetadata } from '../services/llmHelpers';
 import {
   MAX_MAX_TOOL_CALLS,
   MIN_MAX_TOOL_CALLS,
@@ -41,7 +44,8 @@ const maxTokensCeiling = (contextLength: number): number =>
 
 /**
  * One headless settings model for both text-generation settings surfaces.
- * The app store owns selected values. Loaded model metadata owns both maxima.
+ * The app store owns selected values. The selected GGUF header supplies its
+ * trained context limit before loading; loaded metadata supplies it afterward.
  * Each surface owns only its layout and presentation.
  */
 export function useTextGenerationSettings() {
@@ -49,24 +53,62 @@ export function useTextGenerationSettings() {
   const settings = useAppStore(state => state.settings);
   const updateSettings = useAppStore(state => state.updateSettings);
   const modelMaxContext = useAppStore(state => state.modelMaxContext);
+  const selectedModelId = useAppStore(state => state.activeModelId);
+  const loadedModelId = useAppStore(state => state.loadedTextModelId);
+  const selectedModel = useAppStore(state => state.downloadedModels.find(m => m.id === state.activeModelId));
+  const selectedPath = selectedModel?.engine === 'llama' ? selectedModel.filePath : null;
+  const [headerContext, setHeaderContext] = useState<{ path: string; max: number | null } | null>(null);
+
+  useEffect(() => {
+    if (!selectedPath || loadedModelId === selectedModelId) return;
+    let cancelled = false;
+    loadLlamaModelInfo(selectedPath)
+      .then(info => {
+        if (!cancelled) setHeaderContext({ path: selectedPath, max: modelMaxContextFromMetadata(info as Record<string, unknown>) });
+      })
+      .catch(() => {
+        if (!cancelled) setHeaderContext({ path: selectedPath, max: null });
+      });
+    return () => { cancelled = true; };
+  }, [selectedPath, selectedModelId, loadedModelId]);
 
   const temperature = settings.temperature ?? DEFAULT_SETTINGS.temperature;
   const maxTokens = settings.maxTokens ?? DEFAULT_SETTINGS.maxTokens;
+  const reasoningBudget = settings.reasoningBudget ?? 0;
   const maxToolCalls = settings.maxToolCalls ?? DEFAULT_SETTINGS.maxToolCalls;
   const contextLength =
     settings.contextLength ?? DEFAULT_SETTINGS.contextLength;
   const topP = settings.topP ?? DEFAULT_SETTINGS.topP;
   const repeatPenalty =
     settings.repeatPenalty ?? DEFAULT_SETTINGS.repeatPenalty;
-  const llamaModelLimit =
-    modelMaxContext ?? Math.max(maxTokens, contextLength, 512);
+  const selectedModelLimit = selectedModelId
+    ? loadedModelId === selectedModelId
+      ? modelMaxContext
+      : headerContext?.path === selectedPath ? headerContext.max : null
+    : modelMaxContext;
+  const llamaModelLimit = selectedModelLimit ?? Math.max(maxTokens, contextLength, 512);
+
+  useEffect(() => {
+    if (isLiteRT) return;
+    const nextContext = selectedModelLimit ? Math.min(contextLength, selectedModelLimit) : contextLength;
+    const nextMaxTokens = Math.min(maxTokens, nextContext);
+    const nextBudget = reasoningBudget > 0 ? Math.min(reasoningBudget, nextMaxTokens) : reasoningBudget;
+    if (nextContext !== contextLength || nextMaxTokens !== maxTokens || nextBudget !== reasoningBudget) {
+      updateSettings({
+        ...(nextContext !== contextLength ? { contextLength: nextContext } : {}),
+        ...(nextMaxTokens !== maxTokens ? { maxTokens: nextMaxTokens } : {}),
+        ...(nextBudget !== reasoningBudget ? { reasoningBudget: nextBudget } : {}),
+      });
+    }
+  }, [isLiteRT, selectedModelLimit, contextLength, maxTokens, reasoningBudget, updateSettings]);
 
   const liteRTTemperature =
     settings.liteRTTemperature ?? DEFAULT_SETTINGS.liteRTTemperature;
   const liteRTMaxTokens =
     settings.liteRTMaxTokens ?? DEFAULT_SETTINGS.liteRTMaxTokens;
   const liteRTTopP = settings.liteRTTopP ?? DEFAULT_SETTINGS.liteRTTopP;
-  const liteRTModelLimit = modelMaxContext ?? Math.max(liteRTMaxTokens, 512);
+  const liteRTModelLimit = loadedModelId === selectedModelId && selectedModelId && modelMaxContext
+    ? modelMaxContext : Math.max(liteRTMaxTokens, 512);
 
   const toolCalls = {
     key: 'maxToolCalls',
@@ -115,7 +157,7 @@ export function useTextGenerationSettings() {
       key: 'contextLength',
       label: 'Context Length',
       description: 'KV cache size - larger uses more RAM (requires reload)',
-      value: contextLength,
+      value: Math.min(contextLength, llamaModelLimit),
       min: 512,
       max: llamaModelLimit,
       step: 1024,
@@ -128,7 +170,7 @@ export function useTextGenerationSettings() {
       // length silently stays above its own ceiling.
       onChange: (value: number) =>
         updateSettings({
-          contextLength: value,
+          contextLength: Math.min(value, llamaModelLimit),
           ...(maxTokens > maxTokensCeiling(value)
             ? { maxTokens: maxTokensCeiling(value) }
             : {}),

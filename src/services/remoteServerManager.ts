@@ -215,7 +215,7 @@ class RemoteServerManager {
     const store = useRemoteServerStore.getState();
     const server = store.getServerById(serverId);
     if (!server) throw new Error(`Server not found: ${serverId}`);
-    const confirmedModels =
+    const confirmedState =
       server.modelManagement === 'offgrid-desktop-v1'
         ? await activateOffGridDesktopModel(
             {
@@ -225,7 +225,11 @@ class RemoteServerManager {
             category,
             modelId,
           )
-        : { ...server.mediaModels, [category]: modelId };
+        : null;
+    const confirmedModels = confirmedState?.active ?? {
+      ...server.mediaModels,
+      [category]: modelId,
+    };
     store.updateServer(serverId, {
       mediaModels: confirmedModels,
     });

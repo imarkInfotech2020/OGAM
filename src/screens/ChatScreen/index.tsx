@@ -52,6 +52,11 @@ export const ChatScreen: React.FC = () => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const chat = useChatScreen();
+  const [assistantSelected, setAssistantSelected] = useState(false);
+  // Historical message rows are memoized. Their Retry callback must read the latest composer
+  // selection even when the row itself has not re-rendered since Assistant was tapped.
+  const assistantSelectedRef = useRef(assistantSelected);
+  assistantSelectedRef.current = assistantSelected;
 
   // Collapsed Models control (shared with home): header "Models" → manager sheet.
   const [modelsManagerOpen, setModelsManagerOpen] = useState(false);
@@ -243,7 +248,11 @@ export const ChatScreen: React.FC = () => {
       isGeneratingImage={chat.isGeneratingImage}
       showGenerationDetails={chat.settings.showGenerationDetails}
       onCopy={chat.handleCopyMessage}
-      onRetry={chat.handleRetryMessage}
+      onRetry={message => {
+        const selected = assistantSelectedRef.current;
+        setAssistantSelected(false);
+        return chat.handleRetryMessage(message, selected);
+      }}
       onEdit={chat.handleEditMessage}
       onTranscribeAgain={chat.handleTranscribeAgain}
       onGenerateImage={chat.handleGenerateImageFromMessage}
@@ -322,6 +331,8 @@ export const ChatScreen: React.FC = () => {
           }}
         />
         <ChatMessageArea
+          assistantSelected={assistantSelected}
+          onAssistantSelectedChange={setAssistantSelected}
           flatListRef={flatListRef}
           isNearBottomRef={isNearBottomRef}
           chat={chat}

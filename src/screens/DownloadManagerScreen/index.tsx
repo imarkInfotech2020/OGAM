@@ -127,7 +127,7 @@ export const DownloadManagerScreen: React.FC = () => {
                   )}
                 </View>
                 {filteredActive.map(item => (
-                  <View key={`active-${item.modelId}-${item.fileName}`}>
+                  <View key={`active-${item.modelId}-${item.fileName}`} style={styles.downloadCardInset}>
                     <ActiveDownloadCard item={item} onRemove={handleRemoveDownload} onRetry={handleRetryDownload} onPause={handlePauseDownload} onResume={handleResumeDownload} />
                   </View>
                 ))}

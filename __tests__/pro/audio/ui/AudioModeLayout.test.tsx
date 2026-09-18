@@ -92,6 +92,8 @@ function renderLayout(overrides: Partial<React.ComponentProps<typeof AudioModeLa
     supportsVision: false,
     alertState: { visible: false, title: '', message: '', buttons: [] },
     setAlertState,
+    assistantSelected: false,
+    onAssistantPress: jest.fn(),
     ...overrides,
   };
   const utils = render(<AudioModeLayout {...props} />);
@@ -190,6 +192,15 @@ describe('AudioModeLayout — TTS stop control gating while preparing', () => {
 });
 
 describe('AudioModeLayout — press handlers respect the real state (assert the consequence)', () => {
+  it('shows the Assistant control beside attachments and exposes its selected state', () => {
+    const onAssistantPress = jest.fn();
+    const view = renderLayout({ assistantSelected: true, onAssistantPress });
+
+    expect(view.getByTestId('assistant-toggle').props.accessibilityState.selected).toBe(true);
+    fireEvent.press(view.getByTestId('assistant-toggle'));
+    expect(onAssistantPress).toHaveBeenCalledTimes(1);
+  });
+
   it('pressing the generation stop calls onStop exactly once while generating', () => {
     const { getByTestId, onStop } = renderLayout({ isGenerating: true });
     fireEvent.press(getByTestId('stop-button'));

@@ -114,6 +114,7 @@ export const useChatScreen = () => {
   const setAppImageGenerationStatus = useAppStore(s => s.setImageGenerationStatus);
   const removeImagesByConversationId = useAppStore(s => s.removeImagesByConversationId);
   const loadedSettings = useAppStore(s => s.loadedSettings);
+  const loadedTextModelId = useAppStore(s => s.loadedTextModelId);
   const textModelEvicted = useAppStore(s => s.textModelEvicted);
 
   // Remote model state - use proper selectors for reactivity
@@ -338,6 +339,8 @@ export const useChatScreen = () => {
     activeModel,
     settings,
     loadedSettings,
+    loadedTextModelId,
+    isModelLoading,
     pendingMessageRef,
     startGenerationRef,
     setDebugInfo,

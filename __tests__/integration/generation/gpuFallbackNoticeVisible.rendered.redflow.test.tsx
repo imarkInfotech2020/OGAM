@@ -26,12 +26,12 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: () => {}, useIsFocused: () => true,
 }));
 
-function pressByWalkingUp(node: unknown): void {
+function pressByWalkingUp(node: unknown): Promise<void> {
   type N = { props?: Record<string, unknown>; parent?: N | null } | null;
   let n = node as N;
   for (let d = 0; n && d < 12; d++) {
     const op = n.props?.onPress;
-    if (typeof op === 'function') { (op as () => void)(); return; }
+    if (typeof op === 'function') return Promise.resolve((op as () => void | Promise<void>)());
     n = n.parent ?? null;
   }
   throw new Error('no onPress found walking up from the node');
@@ -51,7 +51,7 @@ async function reloadOnOpenCL(h: Awaited<ReturnType<typeof setupChatScreen>>) {
   (DeviceInfo.getHardware as jest.Mock).mockResolvedValue('qcom'); // Adreno → OpenCL allowed
   selectBackendViaUI(h, 'opencl');
   await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).not.toBeNull(); });
-  await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('reload-model-banner')); });
+  await h.rtl.act(async () => { await pressByWalkingUp(h.view!.getByTestId('reload-model-banner')); });
   await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).toBeNull(); }, { timeout: 20000 });
 }
 

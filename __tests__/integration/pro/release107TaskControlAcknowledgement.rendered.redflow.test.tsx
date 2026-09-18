@@ -134,6 +134,7 @@ describe('Release 107 rendered task-control acknowledgement', () => {
     const screen = render(
       <ChatInput
         assistantAvailability="ready"
+        onAssistantEnableTools={() => true}
         onSend={(_text, _attachments, _imageMode, assistantEnabled) => {
           assistantTurns.push(assistantEnabled === true);
         }}
@@ -151,6 +152,23 @@ describe('Release 107 rendered task-control acknowledgement', () => {
     expect(screen.getByTestId('assistant-toggle').props.accessibilityState).toMatchObject({
       selected: false,
     });
+  });
+
+  it('does not show Sync setup when a Desktop is active but task access is unavailable', () => {
+    const screen = render(<ChatInput assistantAvailability="unavailable" onSend={() => undefined} />);
+
+    fireEvent.press(screen.getByTestId('assistant-toggle'));
+
+    expect(screen.getByText('Desktop tasks unavailable')).toBeTruthy();
+    expect(screen.queryByText('Set up Sync')).toBeNull();
+  });
+
+  it('shows Sync setup when no Desktop is active', () => {
+    const screen = render(<ChatInput assistantAvailability="needs-sync" onSend={() => undefined} />);
+
+    fireEvent.press(screen.getByTestId('assistant-toggle'));
+
+    expect(screen.getByText('Set up Sync')).toBeTruthy();
   });
 
   it('stops the active Desktop task from the chat Stop button', async () => {

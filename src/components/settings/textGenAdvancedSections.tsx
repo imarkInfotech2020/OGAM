@@ -203,25 +203,40 @@ export const ModelLoadingModeSelector: React.FC = () => {
 
 // ─── Thinking Budget ─────────────────────────────────────────────────────────
 
-const THINKING_BUDGET_STEPS = [REASONING_BUDGET_AUTO, ...REASONING_BUDGET_OPTIONS];
-
 /** llama.rn path only: the cap rides the completion request as thinking_budget_tokens
  *  (shared rule: @offgrid/models thinkingBudgetPayload). LiteRT has no thinking channel. */
-export const ThinkingBudgetSelector: React.FC = () => {
+export const ThinkingBudgetSelector: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
   const styles = useThemedStyles(createTextGenAdvancedStyles);
   const { settings, updateSettings } = useAppStore();
-  const selectedStep = THINKING_BUDGET_STEPS.indexOf(settings.reasoningBudget ?? REASONING_BUDGET_AUTO);
+  const maxTokens = Math.max(1, settings.maxTokens);
+  const steps = [
+    REASONING_BUDGET_AUTO,
+    ...REASONING_BUDGET_OPTIONS.filter(value => value < maxTokens),
+    maxTokens,
+  ];
+  const budget = settings.reasoningBudget ?? REASONING_BUDGET_AUTO;
+  const shownBudget = budget > 0 ? Math.min(budget, maxTokens) : REASONING_BUDGET_AUTO;
+  const selectedStep = steps.indexOf(shownBudget);
+
+  useEffect(() => {
+    if (budget > maxTokens) updateSettings({ reasoningBudget: maxTokens });
+  }, [budget, maxTokens, updateSettings]);
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, compact && styles.compactContainer]}>
       <SliderSetting
         testID="thinking-budget"
+        compact={compact}
         label="Thinking Budget"
-        description="Auto lets the model think for as long as it needs. A cap ends the thinking at that many tokens so the answer arrives sooner. Applies when Thinking is on."
+        description="Auto uses up to Max Tokens. A cap ends thinking earlier so the answer arrives sooner. Applies when Thinking is on."
         value={Math.max(0, selectedStep)}
-        min={0} max={THINKING_BUDGET_STEPS.length - 1} step={1}
-        formatValue={(step) => reasoningBudgetLabel(THINKING_BUDGET_STEPS[Math.round(step)] ?? REASONING_BUDGET_AUTO)}
+        min={0} max={steps.length - 1} step={1}
+        formatValue={(step) => steps[Math.round(step)] === REASONING_BUDGET_AUTO
+          ? 'Auto (up to Max Tokens)'
+          : steps[Math.round(step)] % 1024 !== 0 && steps[Math.round(step)] >= 1024
+            ? `${steps[Math.round(step)]} tokens`
+            : reasoningBudgetLabel(steps[Math.round(step)] ?? REASONING_BUDGET_AUTO)}
         allowValueEditing={false}
-        onChange={(step) => updateSettings({ reasoningBudget: THINKING_BUDGET_STEPS[step] })}
+        onChange={(step) => updateSettings({ reasoningBudget: steps[step] })}
       />
     </View>
   );

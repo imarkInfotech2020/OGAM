@@ -64,7 +64,10 @@ export interface VoiceNoteHandlerDeps {
     message: string,
     attachments: MediaAttachment[],
     imageMode: ImageModeState,
+    assistantEnabled?: boolean,
   ) => void;
+  getAssistantEnabled?: () => boolean;
+  onAssistantConsumed?: () => void;
   addAudioAttachment: (audio: {
     uri: string;
     audioFormat: 'wav' | 'mp3';
@@ -93,7 +96,8 @@ export function buildVoiceNoteHandlers(deps: VoiceNoteHandlerDeps) {
     const attachments = audioAttachment
       ? [...deps.getPendingAttachments(), audioAttachment]
       : [...deps.getPendingAttachments()];
-    deps.onSend(text, attachments, deps.imageMode);
+    deps.onSend(text, attachments, deps.imageMode, deps.getAssistantEnabled?.());
+    deps.onAssistantConsumed?.();
     deps.clearAttachments();
   };
 

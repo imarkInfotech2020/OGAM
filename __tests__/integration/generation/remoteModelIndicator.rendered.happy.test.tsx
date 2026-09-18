@@ -2,14 +2,13 @@
  * T053 (GREEN guard) — a remote model is visually distinguished from a local one in the model selector.
  *
  * Device UX finding: "No remote indicator in the model modality selector — a remote model looks identical to
- * a local one." The current selector marks remote models: a wifi section header with the server name + a
- * "Remote" badge on each remote row (TextTab.tsx:135,152). This guards that indicator from regressing.
+ * a local one." The selector marks remote models with a wifi section header and a cloud icon on each row.
  *
  * Real gestures: add a remote server through the real RemoteServersScreen modal (name + endpoint + Test
  * Connection + Add Server), faking only the /v1/models LAN probe at global.fetch. The real addServer +
  * testConnection populate the remoteServerStore (serverHealth + discoveredModels). Then open the real
- * ModelSelectorModal (which reads that store) and assert the remote model renders with its "Remote" badge
- * under the server's wifi header. Falsify: with no remote server added, no "Remote" badge / server header
+ * ModelSelectorModal (which reads that store) and assert the remote model renders with its cloud icon
+ * under the server's wifi header. Falsify: with no remote server added, no cloud icon / server header
  * appears in the selector.
  */
 import React from 'react';
@@ -29,7 +28,7 @@ const openSelector = () => render(
   <ModelSelectorModal visible onClose={() => {}} onSelectModel={() => {}} onUnloadModel={() => {}} isLoading={false} />,
 );
 
-describe('T053 (rendered) — remote model is marked in the selector (cloud/Remote indicator)', () => {
+describe('T053 (rendered) — remote model is marked in the selector (cloud indicator)', () => {
   beforeEach(() => {
     useRemoteServerStore.setState({ servers: [], serverHealth: {}, discoveredModels: {} });
     (global as unknown as { fetch: unknown }).fetch = jest.fn(async (url: string) => {
@@ -40,10 +39,10 @@ describe('T053 (rendered) — remote model is marked in the selector (cloud/Remo
     });
   });
 
-  it('shows the remote model with a "Remote" badge under its server header', async () => {
+  it('shows the remote model with a cloud icon under its server header', async () => {
     // Precondition (UI): before adding a server, the selector shows no remote indicator.
     const pre = openSelector();
-    expect(pre.queryByText('Remote')).toBeNull();
+    expect(pre.queryByLabelText('Remote model')).toBeNull();
     expect(pre.queryByText('My LM Studio')).toBeNull();
     pre.unmount();
 
@@ -62,6 +61,6 @@ describe('T053 (rendered) — remote model is marked in the selector (cloud/Remo
     const sel = openSelector();
     await waitFor(() => { expect(sel.queryByText('llama-3-8b')).not.toBeNull(); }, { timeout: 4000 });
     expect(sel.queryByText('My LM Studio')).not.toBeNull(); // wifi server-name section header
-    expect(sel.queryByText('Remote')).not.toBeNull();       // the per-row Remote badge — the indicator
+    expect(sel.queryByLabelText('Remote model')).not.toBeNull(); // per-row cloud indicator
   });
 });

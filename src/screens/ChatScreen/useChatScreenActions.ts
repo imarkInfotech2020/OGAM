@@ -50,6 +50,8 @@ interface ChatScreenActionsArgs {
   activeModel?: DownloadedModel;
   settings: ReturnType<typeof useAppStore.getState>['settings'];
   loadedSettings: ReturnType<typeof useAppStore.getState>['loadedSettings'];
+  loadedTextModelId: string | null;
+  isModelLoading: boolean;
   pendingMessageRef: MutableRefObject<{
     text: string;
     attachments?: MediaAttachment[];
@@ -79,6 +81,8 @@ export function useChatScreenActions({
   activeModel,
   settings,
   loadedSettings,
+  loadedTextModelId,
+  isModelLoading,
   pendingMessageRef,
   startGenerationRef,
   setDebugInfo,
@@ -155,7 +159,10 @@ export function useChatScreenActions({
     ? settings.enabledTools || []
     : [];
   const canReloadTextModel =
-    Boolean(activeModelInfo.modelId) && !activeModelInfo.isRemote;
+    Boolean(activeModelInfo.modelId) &&
+    !activeModelInfo.isRemote &&
+    !isModelLoading &&
+    loadedTextModelId === activeModelInfo.modelId;
 
   return {
     enabledTools,
@@ -184,13 +191,14 @@ export function useChatScreenActions({
     handleCopyMessage: (content: string) => {
       callHook(HOOKS.clipboardRecordLocalText, content, Date.now());
     },
-    handleRetryMessage: (message: ChatStoreState['conversations'][number]['messages'][number]) => {
+    handleRetryMessage: (message: ChatStoreState['conversations'][number]['messages'][number], assistantEnabled = false) => {
       const currentDeps = generationDepsRef.current ?? generationDeps;
       return handleRetryMessageFn(message, currentDeps, {
         activeConversationId: currentDeps.activeConversationId,
         hasActiveModel: !!currentDeps.hasActiveModel,
         deleteMessagesAfter,
         setDebugInfo,
+        assistantEnabled,
       });
     },
     handleEditMessage: (

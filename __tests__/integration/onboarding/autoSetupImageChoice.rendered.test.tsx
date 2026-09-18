@@ -108,3 +108,42 @@ test('Auto Setup offers the GPU model when the device recommends GPU', async () 
   expect(ui.getByText('Absolute Reality (GPU)')).toBeTruthy();
   expect(ui.queryByText('Absolute Reality (NPU 8gen2)')).toBeNull();
 });
+
+test('Android Auto Setup presents complementary image models across its three plans', async () => {
+  const navigation = { push() {}, replace() {} } as never;
+  const ui = render(
+    <AutoSetupScreen
+      navigation={navigation}
+      sessionFactory={() => createAutoSetupSession({
+        catalog: {
+          ...catalog,
+          imageModels: async () => [
+            ...(await catalog.imageModels()),
+            {
+              id: 'anythingv5_npu_8gen2', name: 'Anything V5 (NPU 8gen2)',
+              description: 'Anything V5', size: 150 * MB,
+              downloadUrl: 'https://models.test/anything-v5.zip',
+              style: 'anime', backend: 'qnn', variant: '8gen2',
+            },
+            {
+              id: 'dreamshaperv8_npu_8gen2', name: 'Dream Shaper V8 (NPU 8gen2)',
+              description: 'Dream Shaper V8', size: 250 * MB,
+              downloadUrl: 'https://models.test/dream-shaper-v8.zip',
+              style: 'general', backend: 'qnn', variant: '8gen2',
+            },
+          ],
+        },
+      })}
+    />,
+  );
+
+  await waitFor(() => expect(ui.getByTestId('auto-setup-plan-lean')).toBeTruthy());
+  for (const [tier, name] of [
+    ['lean', 'Anything V5 (NPU 8gen2)'],
+    ['balanced', 'Absolute Reality (NPU 8gen2)'],
+    ['extreme', 'Dream Shaper V8 (NPU 8gen2)'],
+  ]) {
+    fireEvent.press(ui.getByTestId(`auto-setup-plan-${tier}`));
+    expect(ui.getByText(name)).toBeTruthy();
+  }
+});

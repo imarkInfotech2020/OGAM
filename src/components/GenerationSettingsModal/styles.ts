@@ -51,8 +51,8 @@ const createAccordionStyles = (colors: ThemeColors) => ({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    marginTop: SPACING.xl,
-    marginBottom: SPACING.md,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
     paddingVertical: SPACING.sm,
   },
   accordionTitle: {
@@ -67,7 +67,7 @@ const createAccordionStyles = (colors: ThemeColors) => ({
     padding: SPACING.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   sectionLabel: {
     ...TYPOGRAPHY.label,
@@ -249,11 +249,11 @@ const createModelPickerStyles = (colors: ThemeColors, shadows: ThemeShadows) => 
 
 const createToggleStyles = (colors: ThemeColors) => ({
   modeToggleContainer: {
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.sm,
   },
   dimmed: { opacity: 0.5 },
   modeToggleInfo: {
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   modeToggleLabel: {
     ...TYPOGRAPHY.body,

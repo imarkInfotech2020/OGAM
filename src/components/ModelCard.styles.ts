@@ -51,6 +51,21 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
     color: colors.textMuted,
     marginTop: SPACING.xs,
   },
+  capabilityRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: SPACING.xs,
+    marginTop: SPACING.xs,
+  },
+  capabilityBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    backgroundColor: colors.surfaceLight,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
   authorTag: {
     backgroundColor: colors.surfaceLight,
     paddingHorizontal: 6,

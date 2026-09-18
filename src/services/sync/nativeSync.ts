@@ -130,6 +130,17 @@ function formatSilentJoinError(error: unknown): string {
   return 'unknown error';
 }
 
+function isAddressInUse(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return /EADDRINUSE|address already in use/i.test(String(error));
+  }
+  const candidate = error as { code?: unknown; message?: unknown };
+  return (
+    candidate.code === 'EADDRINUSE' ||
+    /EADDRINUSE|address already in use/i.test(String(candidate.message ?? error))
+  );
+}
+
 /** Construct (but don't start) the mobile Sync stack for a given local device. */
 export function createNativeSync(
   localDevice: DeviceInfo,
@@ -337,7 +348,19 @@ export function createNativeSync(
     async start() {
       publishHealth();
       try {
-        await engine.start(networkConfig.port);
+        try {
+          await engine.start(networkConfig.port);
+        } catch (error) {
+          // Debug and Play builds can be installed together. Android gives both processes the same
+          // fixed sync port, so let the second build use an ephemeral port and advertise that port
+          // in its TXT record instead of reporting the device as undiscoverable.
+          if (Platform.OS !== 'android' || !isAddressInUse(error)) throw error;
+          logger.warn(
+            `[SYNC] port ${networkConfig.port} is already in use; retrying on an ephemeral port`,
+          );
+          await engine.stop();
+          await engine.start(0);
+        }
         localDevice.port = transport.boundPort ?? 0; // advertise the real bound port
         await refreshLocalNetworkAddress();
         await orchestrator.start();

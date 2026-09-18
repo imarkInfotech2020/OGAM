@@ -29,6 +29,7 @@ import { modelManager } from '../../services';
 import { modelDownloadService } from '../../services/modelDownloadService';
 import { uniformDownloadId } from '../../services/modelDownloadService/uniformId';
 import { fetchModelFiles } from '../../services/modelCatalogFiles';
+import { predictGgufCapabilities } from '../../utils/ggufCapabilities';
 
 function hasNonSortFilters(fs: FilterState): boolean {
   return fs.orgs.length > 0 || fs.type !== 'all' || fs.source !== 'all' || fs.size !== 'all' || fs.quant !== 'all';
@@ -177,6 +178,11 @@ const ModelDetailView: React.FC<DetailProps> = ({
     return <ModelCard
         model={{ id: selectedModel.id, name: displayName, author: selectedModel.author, credibility: selectedModel.credibility }}
         file={item} downloadedModel={s.downloadedModel} isDownloaded={s.downloaded}
+        capabilities={item.name.toLowerCase().endsWith('.gguf') ? {
+          ...predictGgufCapabilities({ id: selectedModel.id, name: selectedModel.name, fileName: item.name }),
+          vision: !!item.mmProjFile,
+          predicted: true,
+        } : undefined}
         isDownloading={!!s.progress && !s.hasFailed && s.progress.status !== 'paused' && !isQueuedStatus(s.progress.status)}
         isQueued={isQueuedStatus(s.progress?.status ?? 'completed')}
         isPaused={s.progress?.status === 'paused'}
@@ -218,7 +224,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
       />
       <Card style={styles.modelInfoCard}>
         <View style={styles.authorRow}>
-          <Text style={styles.modelAuthor}>{selectedModel.author}</Text>
+          {selectedModel.author !== 'Unknown' && <Text style={styles.modelAuthor}>{selectedModel.author}</Text>}
           {selectedModel.credibility && (selectedModel.credibility.source === 'official' || selectedModel.credibility.source === 'verified-quantizer') && (
             <MaterialIcon
               name="verified"
@@ -227,7 +233,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
               accessibilityLabel={CREDIBILITY_LABELS[selectedModel.credibility.source].label}
             />
           )}
-          {selectedModel.credibility && selectedModel.credibility.source !== 'official' && selectedModel.credibility.source !== 'verified-quantizer' && (
+          {selectedModel.credibility?.source === 'lmstudio' && (
             <View style={[styles.credibilityBadge, { backgroundColor: `${CREDIBILITY_LABELS[selectedModel.credibility.source].color}25` }]}>
               {selectedModel.credibility.source === 'lmstudio' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>★</Text>}
               <Text style={[styles.credibilityText, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>
@@ -309,7 +315,12 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ item, index, focusTrigger
   // Strip files for the LiteRT parent so ModelCard skips the size-range / "N files"
   // badges (curated chips cover it); the original item still flows through onPress.
   const cardModel = isLiteRTParent ? { ...item, files: undefined } : item;
-  return <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} onDownload={isCompatible ? onDownload : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} /></AnimatedEntry>;
+  const capabilities = isLiteRTParent ? undefined : {
+    ...predictGgufCapabilities({ id: item.id, name: item.name }),
+    vision: item.modelType === 'vision',
+    predicted: true,
+  };
+  return <AnimatedEntry index={index} staggerMs={30} trigger={focusTrigger}><ModelCard model={cardModel} isDownloaded={isDownloaded} isDownloading={agg.downloading} isQueued={agg.queued} downloadProgress={agg.progress} downloadBytes={agg.bytes} downloadCount={agg.count} isCompatible={isCompatible} incompatibleReason={incompatibleReason} onPress={isCompatible ? onPress : undefined} onDownload={isCompatible ? onDownload : undefined} testID={`model-card-${index}`} compact isTrending={isTrending} recommended={recommended} supportsAcceleration={!isLiteRTParent && modelSupportsNpuGpu(item)} capabilities={capabilities} /></AnimatedEntry>;
 };
 
 function applyBackNavigation(setSelectedModel: (m: ModelInfo | null) => void, setModelFiles: (f: ModelFile[]) => void): void {
@@ -372,8 +383,14 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     const directDownload = onboarding
       ? () => { downloadRecommendedFile(item).catch(() => undefined); }
       : undefined;
+    // A disk scan can restore a file under a recovered_ id. The detail rows
+    // recognize it by filename, so the family row must use those same files.
+    const isDownloaded = downloadedModels.some(model =>
+      model.id.startsWith(`${item.id}/`) ||
+      item.files.some(file => file.name === model.fileName),
+    );
     return (
-      <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={directDownload ?? (() => handleSelectModel(item))} onDownload={directDownload} />
+      <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={isDownloaded} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={directDownload ?? (() => handleSelectModel(item))} onDownload={directDownload} />
     );
   };
 

@@ -112,7 +112,7 @@ export async function setActiveRemoteTextModelImpl(
   if (!configuredServer) throw new Error(`Server not found: ${serverId}`);
   const desktopManaged =
     configuredServer.modelManagement === 'offgrid-desktop-v1';
-  const confirmedModels =
+  const confirmedState =
     desktopManaged
       ? await activateOffGridDesktopModel(
           {
@@ -122,7 +122,11 @@ export async function setActiveRemoteTextModelImpl(
           'text',
           modelId,
         )
-      : { ...configuredServer.mediaModels, text: modelId };
+      : null;
+  const confirmedModels = confirmedState?.active ?? {
+    ...configuredServer.mediaModels,
+    text: modelId,
+  };
   if (!desktopManaged) {
     // Generic servers keep the existing publish-first behavior. New-chat local
     // preparation uses these IDs to avoid starting the prior local model.
@@ -147,6 +151,10 @@ export async function setActiveRemoteTextModelImpl(
   if (provider) {
     logger.log('[RemoteServerManager] Loading model on provider:', modelId);
     await provider.loadModel(modelId);
+    // Activation already fetched Desktop's confirmed live inventory. Use that
+    // very response, not the stale pre-selection picker entry, for both UI and
+    // provider capabilities before the next turn's tool preflight runs.
+    if (confirmedState) store.setDiscoveredModels(serverId, confirmedState.textModels);
     // Apply the discovered capabilities. A record that says the model can do NOTHING is the shape a
     // failed probe leaves behind, and it is stored exactly like a real answer - so the thinking
     // toggle stayed hidden and the kwarg was never sent, for the life of the install, because of one
@@ -181,6 +189,8 @@ export async function setActiveRemoteTextModelImpl(
         modelId,
         '— supportsVision:',
         discoveredModel.capabilities.supportsVision,
+        'supportsToolCalling:',
+        discoveredModel.capabilities.supportsToolCalling,
         'supportsThinking:',
         discoveredModel.capabilities.supportsThinking,
         'acceptsThinkingKwarg:',

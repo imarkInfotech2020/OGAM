@@ -12,14 +12,12 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Feather';
-import RNFS from 'react-native-fs';
 // Imported directly, not through the barrel: a component that reaches its sibling via the index
 // resolves undefined at render time.
 import { LoadingDots } from '../../LoadingDots';
 import { MediaAttachment } from '../../../types';
 import { viewDocument } from '@react-native-documents/viewer';
 import logger from '../../../utils/logger';
-import { AnimatedPressable } from '../../AnimatedPressable';
 import { resolveDocumentPath } from '../../../utils/resolveDocumentPath';
 
 interface FadeInImageProps {
@@ -98,52 +96,19 @@ interface MessageAttachmentsProps {
   styles: any;
   colors: any;
   onImagePress?: (uri: string) => void;
-  onTranscribeAgain?: (attachment: MediaAttachment) => Promise<void>;
 }
 
 function AudioAttachment({
-  attachment,
   index,
   isUser,
   styles,
   colors,
-  onTranscribeAgain,
 }: {
-  attachment: MediaAttachment;
   index: number;
   isUser: boolean;
   styles: any;
   colors: any;
-  onTranscribeAgain?: (attachment: MediaAttachment) => Promise<void>;
 }) {
-  const [fileExists, setFileExists] = React.useState(false);
-  const [isTranscribing, setIsTranscribing] = React.useState(false);
-
-  React.useEffect(() => {
-    let mounted = true;
-    const path = resolveDocumentPath(attachment.uri);
-    RNFS.exists(path)
-      .then(exists => {
-        if (mounted) setFileExists(exists);
-      })
-      .catch(() => {
-        if (mounted) setFileExists(false);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [attachment.uri]);
-
-  const transcribeAgain = async () => {
-    if (!onTranscribeAgain || isTranscribing) return;
-    setIsTranscribing(true);
-    try {
-      await onTranscribeAgain(attachment);
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
-
   return (
     <View
       testID={`audio-badge-${index}`}
@@ -160,29 +125,6 @@ function AudioAttachment({
           Voice message
         </Text>
       </View>
-      {attachment.textContent ? (
-        <Text
-          testID={`audio-transcription-${index}`}
-          style={[styles.audioTranscription, isUser ? styles.documentBadgeTextUser : styles.documentBadgeTextAssistant]}
-        >
-          {attachment.textContent}
-        </Text>
-      ) : null}
-      {isUser && fileExists && onTranscribeAgain ? (
-        <AnimatedPressable
-          testID={`audio-transcribe-again-${index}`}
-          style={styles.audioTranscribeAgain}
-          disabled={isTranscribing}
-          accessibilityRole="button"
-          accessibilityLabel="Transcribe voice message again"
-          onPress={transcribeAgain}
-        >
-          <Icon name="refresh-cw" size={12} color={colors.background} />
-          <Text style={styles.documentBadgeTextUser}>
-            {isTranscribing ? 'Transcribing...' : 'Transcribe again'}
-          </Text>
-        </AnimatedPressable>
-      ) : null}
     </View>
   );
 }
@@ -239,7 +181,6 @@ export function MessageAttachments({
   styles,
   colors,
   onImagePress,
-  onTranscribeAgain,
 }: MessageAttachmentsProps) {
   return (
     <View testID="message-attachments" style={styles.attachmentsContainer}>
@@ -259,12 +200,10 @@ export function MessageAttachments({
         ) : attachment.type === 'audio' ? (
           <AudioAttachment
             key={attachment.id}
-            attachment={attachment}
             index={index}
             isUser={isUser}
             styles={styles}
             colors={colors}
-            onTranscribeAgain={onTranscribeAgain}
           />
         ) : attachment.type === 'document' ? (
           <TouchableOpacity

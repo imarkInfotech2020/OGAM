@@ -188,6 +188,17 @@ export function useDownloadManager(): UseDownloadManagerResult {
   const executeRemoveDownload = async (item: DownloadItem) => {
     setAlertState(hideAlert());
     try {
+      // Older model-package transfers persisted their individual files as native
+      // "artifact" rows. Hydration can display them, but no model provider owns
+      // that type, so service.cancel() refuses the id and leaves the card in place.
+      if (item.modelKey?.startsWith('model-download:') && item.downloadId) {
+        await backgroundDownloadService.cancelDownload(item.downloadId);
+        const stillNative = (await backgroundDownloadService.getActiveDownloads())
+          .some(row => row.downloadId === item.downloadId);
+        if (stillNative) throw new Error('The native download could not be removed');
+        removeDownloadEntry(item.modelKey);
+        return;
+      }
       // Single owner: the service cancels the in-flight download (routing to the
       // owning provider — image uses the injected ops above) and logs [DL-SM].
       await modelDownloadService.cancel(idOf(item));

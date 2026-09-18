@@ -6,8 +6,8 @@
  * - Back button navigation
  * - Storage info rendering
  * - Breakdown section with model counts
- * - LLM models list rendering
- * - Image models list rendering
+ * - Model category summary
+ * - Auto Setup entry
  * - Orphaned files section
  * - Stale downloads section
  * - Delete orphaned file flow
@@ -233,27 +233,7 @@ describe('StorageSettingsScreen', () => {
     expect(getByText('Model Storage')).toBeTruthy();
   });
 
-  // ---- LLM Models section tests ----
-
-  it('shows LLM Models section when models exist', () => {
-    mockDownloadedModels = [
-      { id: 'm1', name: 'Llama 3', author: 'meta', fileName: 'llama3.gguf', filePath: '/p', fileSize: 4 * 1024 * 1024 * 1024, quantization: 'Q4_K_M', downloadedAt: '' },
-    ];
-
-    const { getAllByText } = render(<StorageSettingsScreen />);
-    // "LLM Models" appears in breakdown AND as a section title
-    expect(getAllByText('LLM Models').length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('renders model name and quantization', () => {
-    mockDownloadedModels = [
-      { id: 'm1', name: 'Phi-3 Mini', author: 'microsoft', fileName: 'phi3.gguf', filePath: '/p', fileSize: 2 * 1024 * 1024 * 1024, quantization: 'Q5_K_M', downloadedAt: '' },
-    ];
-
-    const { getByText } = render(<StorageSettingsScreen />);
-    expect(getByText('Phi-3 Mini')).toBeTruthy();
-    expect(getByText('Q5_K_M')).toBeTruthy();
-  });
+  // ---- Model summary tests ----
 
   it('does not show LLM Models section when no models', () => {
     const { queryAllByText } = render(<StorageSettingsScreen />);
@@ -261,53 +241,6 @@ describe('StorageSettingsScreen', () => {
     const llmTexts = queryAllByText('LLM Models');
     expect(llmTexts.length).toBe(1); // Only breakdown, no separate section
   });
-
-  // ---- Image Models section tests ----
-
-  it('shows Image Models section when image models exist', () => {
-    mockDownloadedImageModels = [
-      { id: 'i1', name: 'SD Turbo', description: '', modelPath: '/p', downloadedAt: '', size: 2 * 1024 * 1024 * 1024, style: 'creative', backend: 'mnn' },
-    ];
-
-    const { getAllByText } = render(<StorageSettingsScreen />);
-    // "Image Models" appears in breakdown AND as a section title
-    expect(getAllByText('Image Models').length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('renders image model with backend info', () => {
-    mockDownloadedImageModels = [
-      { id: 'i1', name: 'CoreML SD', description: '', modelPath: '/p', downloadedAt: '', size: 2048, style: 'realistic', backend: 'coreml' },
-    ];
-
-    const { getByText } = render(<StorageSettingsScreen />);
-    expect(getByText('CoreML SD')).toBeTruthy();
-    expect(getByText(/Core ML/)).toBeTruthy();
-  });
-
-  it('renders image model with MNN backend as GPU', () => {
-    mockDownloadedImageModels = [
-      { id: 'i1', name: 'MNN Model', description: '', modelPath: '/p', downloadedAt: '', size: 1024, style: '', backend: 'mnn' },
-    ];
-
-    const { getByText } = render(<StorageSettingsScreen />);
-    expect(getByText('MNN Model')).toBeTruthy();
-    expect(getByText('GPU')).toBeTruthy();
-  });
-
-  it('renders image model with QNN backend as NPU (single source of truth, no "Qualcomm NPU" drift)', () => {
-    mockDownloadedImageModels = [
-      { id: 'i1', name: 'QNN Model', description: '', modelPath: '/p', downloadedAt: '', size: 1024, style: 'artistic', backend: 'qnn' },
-    ];
-
-    const { getByText, queryByText } = render(<StorageSettingsScreen />);
-    expect(getByText('QNN Model')).toBeTruthy();
-    // Every surface now renders "NPU" via imageBackendLabel; Storage Settings used
-    // to drift to "Qualcomm NPU".
-    expect(getByText(/NPU/)).toBeTruthy();
-    expect(queryByText(/Qualcomm NPU/)).toBeNull();
-  });
-
-  // ---- Orphaned files section tests ----
 
   it('shows "No orphaned files found" after scan completes', async () => {
     mockGetOrphanedFiles.mockResolvedValue([]);
@@ -422,19 +355,6 @@ describe('StorageSettingsScreen', () => {
   });
 
   // ---- Multiple models tests ----
-
-  it('renders multiple LLM models with sizes', () => {
-    mockDownloadedModels = [
-      { id: 'm1', name: 'Model A', author: 'a', fileName: 'a.gguf', filePath: '/p', fileSize: 1024, quantization: 'Q4_K_M', downloadedAt: '' },
-      { id: 'm2', name: 'Model B', author: 'b', fileName: 'b.gguf', filePath: '/p', fileSize: 2048, quantization: 'Q8_0', downloadedAt: '' },
-    ];
-
-    const { getByText } = render(<StorageSettingsScreen />);
-    expect(getByText('Model A')).toBeTruthy();
-    expect(getByText('Model B')).toBeTruthy();
-    expect(getByText('Q4_K_M')).toBeTruthy();
-    expect(getByText('Q8_0')).toBeTruthy();
-  });
 
   it('Orphaned Files section has scan button', () => {
     const { getByText } = render(<StorageSettingsScreen />);
@@ -636,25 +556,6 @@ describe('StorageSettingsScreen', () => {
     await act(async () => {
       await new Promise<void>(resolve => setTimeout(() => resolve(), 0));
     });
-  });
-
-  it('renders image model with style info', () => {
-    mockDownloadedImageModels = [
-      { id: 'i1', name: 'Styled Model', description: '', modelPath: '/p', downloadedAt: '', size: 1024, style: 'anime', backend: 'mnn' },
-    ];
-
-    const { getByText } = render(<StorageSettingsScreen />);
-    expect(getByText(/anime/)).toBeTruthy();
-  });
-
-  it('renders image model without style', () => {
-    mockDownloadedImageModels = [
-      { id: 'i1', name: 'No Style', description: '', modelPath: '/p', downloadedAt: '', size: 1024, style: '', backend: 'mnn' },
-    ];
-
-    const { getByText } = render(<StorageSettingsScreen />);
-    expect(getByText('No Style')).toBeTruthy();
-    expect(getByText('GPU')).toBeTruthy();
   });
 
   it('shows scanning text while scanning', async () => {

@@ -52,6 +52,7 @@ import { SyncScreen } from '../../../pro/ui/SyncScreen';
 import { SyncSharingSettingsScreen } from '../../../pro/ui/SyncScreen/SyncSharingSettingsScreen';
 import { HomeNotificationsButton } from '../../../pro/ui/HomeNotificationsButton';
 import { ProRoot } from '../../../pro/ui/ProRoot';
+import { TaskChatCard } from '../../../pro/ui/TaskChatCard';
 import {
   getDiscoveryBoundaries,
   resetDiscoveryBoundaries,
@@ -279,7 +280,11 @@ describe('Pro mobile state sync journey', () => {
               status: 'completed',
             },
           ],
-          metrics: { modelName: 'Field Model', decodeTokensPerSecond: 42.5, completionTokens: 128 },
+          metrics: {
+            modelName: 'Field Model',
+            decodeTokensPerSecond: 42.5,
+            completionTokens: 128,
+          },
         }),
         created_at: createdAt,
       },
@@ -353,14 +358,27 @@ describe('Pro mobile state sync journey', () => {
       context: null,
       created_at: createdAt,
     });
-    remoteLog.record(CORE_SYNC_ENTITIES.conversation, 'late-parent-conversation', 'put', {
-      title: 'Late parent chat',
-      project_id: null,
-      created_at: createdAt,
-      updated_at: createdAt,
-    });
-    remoteState.sendRecord(mobile.id, CORE_SYNC_ENTITIES.message, 'late-parent-message');
-    remoteState.sendRecord(mobile.id, CORE_SYNC_ENTITIES.conversation, 'late-parent-conversation');
+    remoteLog.record(
+      CORE_SYNC_ENTITIES.conversation,
+      'late-parent-conversation',
+      'put',
+      {
+        title: 'Late parent chat',
+        project_id: null,
+        created_at: createdAt,
+        updated_at: createdAt,
+      },
+    );
+    remoteState.sendRecord(
+      mobile.id,
+      CORE_SYNC_ENTITIES.message,
+      'late-parent-message',
+    );
+    remoteState.sendRecord(
+      mobile.id,
+      CORE_SYNC_ENTITIES.conversation,
+      'late-parent-conversation',
+    );
 
     // The "no devices found, open Sync on a nearby device" notice must NOT come back, or the screen tells the user
     // to go and do the thing they have just finished doing, directly above the device they did it to. It reads as
@@ -378,9 +396,17 @@ describe('Pro mobile state sync journey', () => {
     // space. Two headings - one from the reachable group, one from the rest - was the bug this replaced.
     expect(ui.queryAllByText('Saved')).toHaveLength(0);
 
+    expect(ui.getByTestId('sync-export-diagnostics')).toBeTruthy();
     fireEvent.press(ui.getByTestId('sync-open-sharing'));
     expect(ui.getByTestId('sync-sending-accordion')).toBeTruthy();
     expect(ui.getByTestId('sync-clipboard-toggle')).toBeTruthy();
+    fireEvent.press(ui.getByTestId('ambient-open-settings'));
+    fireEvent(
+      ui.getByTestId('ambient-model-settings-toggle'),
+      'valueChange',
+      true,
+    );
+    fireEvent.press(ui.getByTestId('app-sheet-close'));
 
     fireEvent.press(ui.getByLabelText('Back'));
     fireEvent.press(ui.getByLabelText('Back'));
@@ -414,6 +440,98 @@ describe('Pro mobile state sync journey', () => {
     fireEvent.press(ui.getByText('Generation details'));
     expect(ui.getByText('42.5 tok/s')).toBeTruthy();
 
+    // A returning desktop can send a full wire batch of tombstones. The phone must finish the
+    // batch and leave navigation responsive after removing those turns from its chat projection.
+    const burstIds = Array.from(
+      { length: 126 },
+      (_, index) => `burst-message-${index}`,
+    );
+    const burstPuts = burstIds.map((id, index) =>
+      remoteLog.record(CORE_SYNC_ENTITIES.message, id, 'put', {
+        conversation_id: 'remote-conversation',
+        role: 'user',
+        content: `Burst turn ${index}`,
+        context: null,
+        created_at: new Date(Date.parse(createdAt) + index + 1).toISOString(),
+      }),
+    );
+    const parent = remoteLog.record(
+      CORE_SYNC_ENTITIES.conversation,
+      'buffered-parent',
+      'put',
+      {
+        title: 'Buffered child chat',
+        project_id: null,
+        created_at: createdAt,
+        updated_at: createdAt,
+      },
+    );
+    const child = remoteLog.record(
+      CORE_SYNC_ENTITIES.message,
+      'buffered-child',
+      'put',
+      {
+        conversation_id: 'buffered-parent',
+        role: 'user',
+        content: 'Buffered child turn.',
+        context: null,
+        created_at: createdAt,
+      },
+    );
+    remote.engine.sendApp(mobile.id, STATE_CHANNEL, {
+      t: 'ops',
+      // The parent is last on the wire, across a chunk boundary from its child.
+      ops: [child, ...burstPuts, parent],
+    });
+    const visibleBurstCount = () =>
+      useChatStore
+        .getState()
+        .conversations.find(item => item.id === 'remote-conversation')
+        ?.messages.filter(message =>
+          burstIds.includes(message.uuid ?? message.id),
+        ).length ?? 0;
+    await waitFor(() => expect(visibleBurstCount()).toBeGreaterThan(0));
+    expect(visibleBurstCount()).toBeLessThan(burstIds.length);
+    fireEvent.press(ui.getByText('Generation details'));
+    expect(ui.queryByText('42.5 tok/s')).toBeNull();
+    await waitFor(() =>
+      expect(
+        useChatStore
+          .getState()
+          .conversations.find(item => item.id === 'remote-conversation')
+          ?.messages.filter(message =>
+            burstIds.includes(message.uuid ?? message.id),
+          ),
+      ).toHaveLength(burstIds.length),
+    );
+    await waitFor(() =>
+      expect(
+        useChatStore
+          .getState()
+          .conversations.find(item => item.id === 'buffered-parent')
+          ?.messages.some(message => message.uuid === 'buffered-child'),
+      ).toBe(true),
+    );
+    const burstDeletes = burstIds.map(id =>
+      remoteLog.record(CORE_SYNC_ENTITIES.message, id, 'delete'),
+    );
+    remote.engine.sendApp(mobile.id, STATE_CHANNEL, {
+      t: 'ops',
+      ops: burstDeletes,
+    });
+    await waitFor(() =>
+      expect(
+        useChatStore
+          .getState()
+          .conversations.find(item => item.id === 'remote-conversation')
+          ?.messages.filter(message =>
+            burstIds.includes(message.uuid ?? message.id),
+          ),
+      ).toHaveLength(0),
+    );
+    fireEvent.press(ui.getByText('Generation details'));
+    expect(ui.getByText('42.5 tok/s')).toBeTruthy();
+
     remoteLog.record(CORE_SYNC_ENTITIES.message, 'older-gap-message', 'put', {
       conversation_id: 'remote-conversation',
       role: 'user',
@@ -428,12 +546,20 @@ describe('Pro mobile state sync journey', () => {
       context: null,
       created_at: '2026-07-27T12:02:00.000Z',
     });
-    remoteState.sendRecord(mobile.id, CORE_SYNC_ENTITIES.message, 'newer-gap-message');
-    await waitFor(() => expect(ui!.getByText('A newer turn arrived.')).toBeTruthy());
+    remoteState.sendRecord(
+      mobile.id,
+      CORE_SYNC_ENTITIES.message,
+      'newer-gap-message',
+    );
+    await waitFor(() =>
+      expect(ui!.getByText('A newer turn arrived.')).toBeTruthy(),
+    );
     expect(ui.queryByText('An older turn was missed.')).toBeNull();
     const sentBeforeGapRepair = remoteStateOpsSent;
     remoteState.requestSync(mobile.id);
-    await waitFor(() => expect(ui!.getByText('An older turn was missed.')).toBeTruthy());
+    await waitFor(() =>
+      expect(ui!.getByText('An older turn was missed.')).toBeTruthy(),
+    );
     expect(remoteStateOpsSent - sentBeforeGapRepair).toBe(1);
     fireEvent.press(ui.getByLabelText('Back'));
 
@@ -542,9 +668,7 @@ describe('Pro mobile state sync journey', () => {
       ).toMatchObject({ value_json: '1.25' }),
     );
 
-    await waitFor(() =>
-      expect(remoteLog.size()).toBe(stateSyncService.opCount()),
-    );
+    // Pull catch-up transfers winning records, not every superseded revision.
     await remote.engine.stop();
     await waitFor(() =>
       expect(syncService.connectedDeviceIds()).not.toContain(remoteDevice.id),
@@ -618,12 +742,14 @@ describe('Pro mobile state sync journey', () => {
       });
     }
     remoteState.requestSync(mobile.id);
-    await waitFor(() =>
-      expect(ui!.getByText(/^(?:[1-9]\d?|100)%$/)).toBeTruthy(),
-    );
-    expect(
-      ui.getByLabelText(/^Syncing, (?:[1-9]\d?|100) percent\. Notifications$/),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(ui!.getByText(/^(?:[1-9]\d?|100)%$/)).toBeTruthy();
+      expect(
+        ui!.getByLabelText(
+          /^Syncing, (?:[1-9]\d?|100) percent\. Notifications$/,
+        ),
+      ).toBeTruthy();
+    });
     await waitFor(() =>
       expect(ui!.queryByTestId('home-notifications-syncing')).toBeNull(),
     );
@@ -656,8 +782,7 @@ describe('Pro mobile state sync journey', () => {
     expect(ui.getByTestId('llama-temperature-value').props.children).toBe(
       winningTemperature.value,
     );
-
-  });
+  }, 30_000);
 
   it('reconnects before slow owners finish and rejects forged task state', async () => {
     let releaseSlowStartup: (() => void) | undefined;
@@ -776,6 +901,19 @@ describe('Pro mobile state sync journey', () => {
         title: task.title,
         executionDevice: task.executionDevice,
       }),
+    );
+    expect(
+      useTaskRunStore.getState().visualSteps[visualStep.visualStepId],
+    ).toBeUndefined();
+    useChatStore.getState().setActiveConversation(task.conversationId);
+    ui = render(
+      <TaskChatCard
+        message={{
+          toolName: 'computer_use',
+          toolCallId: task.taskId,
+          content: `Task reference: ${task.taskId}`,
+        }}
+      />,
     );
     await waitFor(() =>
       expect(

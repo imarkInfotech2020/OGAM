@@ -140,6 +140,7 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   },
   assistantGateContent: {
     paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
     paddingBottom: SPACING.xl,
     gap: SPACING.lg,
   },

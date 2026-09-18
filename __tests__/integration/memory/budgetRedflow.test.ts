@@ -1,13 +1,8 @@
 /**
- * RED-FLOW tests for the memory-budget bugs (M1, M2, M3, Q15) — see docs/DEVICE_TEST_LOG.md.
+ * Memory-budget regression scenarios (M1, M3, Q15) — see docs/DEVICE_TEST_LOG.md.
  *
- * These assert the CORRECT behavior and are RED on current HEAD because the bug is live. They run the
- * REAL modelResidencyManager over the RAM-sensor stub (deviceMemory harness) — no mock of the budget
- * logic, so the failure is the real defect. Each is wrapped in `it.failing` as the CARRIER: it.failing
- * is GREEN while the assertion throws (bug live) and FLIPS RED the moment the fix makes the assertion
- * pass — forcing conversion to a normal `it()` when the fix lands. (This is NOT a "green-pins-the-bug"
- * guard: the assertion inside is the FIX spec, not the current buggy behavior. Delete `.failing` to see
- * the real red failure.)
+ * They exercise the real residency manager over the native RAM-sensor boundary,
+ * preserving both normal admission and the explicit user override behavior.
  *
  * All numbers are the exact device/[MEM-SM]-log reproductions from the recon agents.
  */
@@ -17,11 +12,9 @@ import { setDeviceMemory, resetDeviceMemory, makeResident, gbOf } from '../../ha
 afterEach(() => resetDeviceMemory());
 
 describe('memory budget — red-flow (correct behavior; currently RED due to the bug)', () => {
-  // M1 — a CLEAN text model (mmap GGUF) and a DIRTY image model CO-RESIDE under the default
-  // balanced policy: the text weights page out under pressure, freeing real RAM for the
-  // image, so image-gen does NOT evict the text model (it pages around it). Swap is the
-  // CONSERVATIVE-mode behavior, not the default (see loadingModes.redflow).
-  it('M1: starting image-gen with a clean text model resident on a 640MB-free 12GB Android CO-RESIDES (text pages, not evicted)', async () => {
+  // M1 — with only 640MB free, a DIRTY image load must first evict the clean
+  // text model. Co-residency is safe only when live RAM supports the allocation.
+  it('M1: image generation evicts text before allocating dirty memory at 640MB free', async () => {
     setDeviceMemory({ platform: 'android', totalGB: 12, availGB: gbOf(640) });
     makeResident({ key: 'text', type: 'text', modelId: 'gemma', sizeMB: 5235, dirtyMemory: false });
 
@@ -29,11 +22,10 @@ describe('memory budget — red-flow (correct behavior; currently RED due to the
       key: 'image', type: 'image', modelId: 'sd', sizeMB: 2369, dirtyMemory: true,
     });
 
-    // Correct (balanced default): the clean text pages out to make real room for the dirty
-    // image; both stay resident — no forced mutual exclusion.
+    // The old physical-budget credit kept both resident and exposed the app to LMK.
     expect(fits).toBe(true);
-    expect(evicted).not.toContain('text');
-    expect(modelResidencyManager.isResident('text')).toBe(true);
+    expect(evicted).toContain('text');
+    expect(modelResidencyManager.isResident('text')).toBe(false);
   });
 
   // M2 (the "2nd in-app dirty heavy piled onto a PINNED dirty resident is refused") scenario was

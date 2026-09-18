@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { AnimatedPressable } from '../AnimatedPressable';
+import { ModelCard } from '../ModelCard';
+import { LoadingDots } from '../LoadingDots';
 import { SPACING, TYPOGRAPHY } from '../../constants';
 import { remoteServerManager } from '../../services/remoteServerManager';
 import { remoteServerModelOptions } from '../../services/remoteModelSelection';
@@ -51,11 +52,17 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
           option.serverId === activeServerId && option.id === activeModelId;
         const key = `${option.serverId}:${option.id}`;
         return (
-          <AnimatedPressable
+          <ModelCard
             key={key}
+            compact
             testID={`remote-${category}-model-${key}`}
-            style={[styles.row, active && styles.rowActive]}
-            hapticType="selection"
+            model={{ id: option.id, name: option.name, author: option.serverName,
+              modelType: category === 'image' ? 'vision' : undefined }}
+            sourceBadge="Remote"
+            facts={[category === 'transcription' ? 'Transcription' : category === 'voice' ? 'Voice' : 'Image']}
+            isActive={active}
+            trailing={selecting === key ? <LoadingDots color={colors.primary} />
+              : active ? <Icon name="check" size={16} color={colors.primary} /> : null}
             disabled={selecting !== null}
             onPress={async () => {
               setSelecting(key);
@@ -81,24 +88,7 @@ export const RemoteModelOptionsSection: React.FC<Props> = ({
                 setSelecting(null);
               }
             }}
-          >
-            <Icon
-              name="cloud"
-              size={14}
-              color={active ? colors.primary : colors.textMuted}
-            />
-            <View style={styles.info}>
-              <Text style={styles.name} numberOfLines={1}>
-                {option.name}
-              </Text>
-              <Text style={styles.serverName} numberOfLines={1}>
-                {option.serverName}
-              </Text>
-            </View>
-            {active ? (
-              <Icon name="check" size={16} color={colors.primary} />
-            ) : null}
-          </AnimatedPressable>
+          />
         );
       })}
       {error ? <Text style={styles.error}>{error}</Text> : null}

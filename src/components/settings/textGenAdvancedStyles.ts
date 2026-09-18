@@ -12,6 +12,9 @@ export const createTextGenAdvancedStyles = (colors: ThemeColors) => ({
   container: {
     marginBottom: SPACING.lg,
   },
+  compactContainer: {
+    marginBottom: 0,
+  },
   info: {
     marginBottom: SPACING.md,
   },

@@ -23,7 +23,7 @@ import { getSlot, SLOTS } from '../../bootstrap/slotRegistry';
 import { AppSheet } from '../AppSheet';
 import { Button } from '../Button';
 
-type AssistantAvailability = 'no-pro' | 'needs-sync' | 'ready';
+type AssistantAvailability = 'no-pro' | 'needs-sync' | 'unavailable' | 'ready';
 
 interface ChatInputProps {
   onSend: (message: string, attachments?: MediaAttachment[], imageMode?: ImageModeState, assistantEnabled?: boolean) => void;
@@ -59,6 +59,9 @@ interface ChatInputProps {
   assistantAvailability?: AssistantAvailability;
   onAssistantUpgrade?: () => void;
   onAssistantSetupSync?: () => void;
+  onAssistantEnableTools?: () => boolean;
+  assistantSelected?: boolean;
+  onAssistantSelectedChange?: (selected: boolean) => void;
 }
 
 const IMAGE_MODE_CYCLE: ImageModeState[] = ['auto', 'force', 'disabled'];
@@ -159,11 +162,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   assistantAvailability = 'no-pro',
   onAssistantUpgrade,
   onAssistantSetupSync,
+  onAssistantEnableTools,
+  assistantSelected,
+  onAssistantSelectedChange,
 }) => {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const [message, setMessage] = useState('');
-  const [assistantEnabled, setAssistantEnabled] = useState(false);
+  const [localAssistantEnabled, setLocalAssistantEnabled] = useState(false);
+  const assistantEnabled = assistantSelected ?? localAssistantEnabled;
+  const setAssistantEnabled = (selected: boolean) => {
+    if (onAssistantSelectedChange) onAssistantSelectedChange(selected);
+    else setLocalAssistantEnabled(selected);
+  };
   const [assistantTransitioning, setAssistantTransitioning] = useState(false);
   const [assistantGateOpen, setAssistantGateOpen] = useState(false);
   const [imageMode, setImageMode] = useState<ImageModeState>('auto');
@@ -207,6 +218,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     isAudioMode,
     imageMode,
     onSend,
+    getAssistantEnabled: () => assistantEnabled,
+    onAssistantConsumed: () => setAssistantEnabled(false),
     addAudioAttachment,
     clearAttachments,
     onHaptic: () => triggerHaptic('impactMedium'),
@@ -313,7 +326,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       setAssistantGateOpen(true);
       return;
     }
-    setAssistantEnabled(current => !current);
+    if (!assistantEnabled && !onAssistantEnableTools?.()) {
+      setAssistantGateOpen(true);
+      return;
+    }
+    setAssistantEnabled(!assistantEnabled);
     setAssistantTransitioning(true);
     if (assistantTransitionTimer.current) {
       clearTimeout(assistantTransitionTimer.current);
@@ -331,6 +348,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         action: 'View Pro',
         onPress: onAssistantUpgrade,
       }
+    : assistantAvailability === 'unavailable'
+      ? {
+          title: 'Desktop tasks unavailable',
+          body: 'This Desktop is connected, but Web Use and Computer Use are not available. Allow remote tasks on the Desktop and try again.',
+          action: 'OK',
+          onPress: undefined,
+        }
     : {
         title: 'Connect a Desktop',
         body: 'Set up Sync and connect Off Grid AI Desktop to use Web Use and Computer Use.',
@@ -366,6 +390,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const AudioInput = getSlot(SLOTS.chatInputAudioMode);
   if (isAudioMode && AudioInput) {
     return (
+      <>
       <AudioInput
         styles={styles}
         disabled={disabled}
@@ -407,7 +432,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         supportsVision={supportsVision}
         alertState={alertState}
         setAlertState={setAlertState}
+        assistantSelected={assistantEnabled}
+        onAssistantPress={handleAssistantPress}
       />
+      <AppSheet
+        visible={assistantGateOpen}
+        onClose={() => setAssistantGateOpen(false)}
+        title={assistantGate.title}
+        enableDynamicSizing
+      >
+        <View style={styles.assistantGateContent}>
+          <Text style={styles.assistantGateText}>{assistantGate.body}</Text>
+          <Button title={assistantGate.action} onPress={() => {
+            setAssistantGateOpen(false);
+            assistantGate.onPress?.();
+          }} />
+        </View>
+      </AppSheet>
+      </>
     );
   }
 

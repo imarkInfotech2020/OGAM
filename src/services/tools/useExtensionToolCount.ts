@@ -37,19 +37,20 @@ function subscribe(onChange: () => void): () => void {
 const getSnapshot = (): number =>
   getToolExtensions().reduce((n, e) => n + e.enabledToolCount(), 0);
 
-const ASSISTANT_TOOLS = new Set(['web_use', 'computer_use']);
-const getAssistantSnapshot = (): boolean =>
-  getToolExtensions().some(extension =>
-    (extension.getOpenAISchemas?.() ?? []).some(schema =>
-      ASSISTANT_TOOLS.has(schema?.function?.name),
-    ),
-  );
+const getAssistantSnapshot = (): 'needs-sync' | 'unavailable' | 'ready' =>
+  getToolExtensions().find(extension => extension.getAssistantAvailability)
+    ?.getAssistantAvailability?.() ?? 'needs-sync';
 
 export function useExtensionToolCount(): number {
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
-/** True only while a connected companion exposes Web Use or Computer Use. */
-export function useAssistantToolAvailability(): boolean {
+/** A connected Desktop can expose task tools even when the user disabled them. */
+export function useAssistantToolAvailability(): 'needs-sync' | 'unavailable' | 'ready' {
   return useSyncExternalStore(subscribe, getAssistantSnapshot);
+}
+
+/** Turn on only the two Assistant task tools, leaving every other tool untouched. */
+export function enableAssistantTools(): boolean {
+  return getToolExtensions().some(extension => extension.enableAssistantTools?.());
 }

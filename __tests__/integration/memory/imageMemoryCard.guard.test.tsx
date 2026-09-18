@@ -36,6 +36,15 @@ async function setup(ram: { platform: 'ios' | 'android'; totalBytes: number; ava
 }
 
 describe('memory OOM-avoidance — image gen + ModelFailureCard (guards)', () => {
+  it('does not use the 1GB minimum budget to admit a small dirty model at critically low RAM', async () => {
+    const t = await setup({ platform: 'android', totalBytes: 12 * GB, availBytes: 100 * MB }, 200 * MB);
+    const result = await t.imageGenerationService.generateImage({ prompt: 'a cat' });
+    expect(result).toBeNull();
+
+    const view = t.render(t.React.createElement(t.ModelFailureCard, {}));
+    expect(view.getByText('Image model: Not Enough Memory')).toBeTruthy();
+  });
+
   it('refuses an unfittable load and shows the "Not Enough Memory" card + Load Anyway', async () => {
     const t = await setup({ platform: 'ios', totalBytes: 6 * GB, availBytes: 300 * MB }, 8 * GB);
     const result = await t.imageGenerationService.generateImage({ prompt: 'a cat' });

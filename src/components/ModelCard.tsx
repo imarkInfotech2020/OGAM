@@ -31,6 +31,7 @@ interface ModelCardProps {
     modelType?: 'text' | 'vision' | 'code';
     paramCount?: number;
     minRamGB?: number;
+    quantization?: string;
   };
   file?: ModelFile;
   downloadedModel?: DownloadedModel;
@@ -69,6 +70,15 @@ interface ModelCardProps {
     onRetry: () => void;
     onRemove: () => void;
   };
+  /** Facts the owning surface knows (RAM, remote capabilities, model style). */
+  facts?: string[];
+  capabilities?: { tools?: boolean; thinking?: boolean; vision?: boolean; predicted?: boolean };
+  sourceBadge?: string;
+  trailing?: React.ReactNode;
+  disabled?: boolean;
+  nameTestID?: string;
+  factsTestID?: string;
+  footer?: React.ReactNode;
 }
 
 function resolveQuantInfo(file?: ModelFile, downloadedModel?: DownloadedModel) {
@@ -102,11 +112,17 @@ interface ModelCardHeadingProps {
   credibilityInfo: { color: string; label: string } | null;
   isActive?: boolean;
   incompatibleReason?: string;
+  facts?: string[];
+  capabilities?: { tools?: boolean; thinking?: boolean; vision?: boolean; predicted?: boolean };
+  sourceBadge?: string;
+  nameTestID?: string;
+  factsTestID?: string;
 }
 
 const ModelCardHeading: React.FC<ModelCardHeadingProps> = ({
   dense, model, fileSize, quantization, isVisionModel, supportsAcceleration,
   recommended, isTrending, credibility, credibilityInfo, isActive, incompatibleReason,
+  facts, capabilities, sourceBadge, nameTestID, factsTestID,
 }) => dense ? (
   <DenseModelCardContent
     model={model}
@@ -119,6 +135,11 @@ const ModelCardHeading: React.FC<ModelCardHeadingProps> = ({
     credibilitySource={credibility?.source}
     credibilityLabel={credibilityInfo?.label}
     incompatibleReason={incompatibleReason}
+    facts={facts}
+    capabilities={capabilities}
+    sourceBadge={sourceBadge}
+    nameTestID={nameTestID}
+    factsTestID={factsTestID}
   />
 ) : (
   <StandardModelCardContent
@@ -273,13 +294,21 @@ export const ModelCard: React.FC<ModelCardProps> = ({
   recommended,
   supportsAcceleration,
   failedState,
+  facts,
+  capabilities,
+  sourceBadge,
+  trailing,
+  disabled,
+  nameTestID,
+  factsTestID,
+  footer,
 }) => {
   const styles = useThemedStyles(createStyles);
   const useDenseLayout = compact;
 
   const quantInfo = resolveQuantInfo(file, downloadedModel);
   const fileSize = resolveFileSize(file, downloadedModel);
-  const isVisionModel = !!(file?.mmProjFile || (downloadedModel?.engine === 'llama' && downloadedModel.isVisionModel));
+  const isVisionModel = !!(model.modelType === 'vision' || file?.mmProjFile || (downloadedModel?.engine === 'llama' && downloadedModel.isVisionModel));
   const needsRepair = needsVisionRepair(downloadedModel, file);
 
   const sizeRange = React.useMemo(() => {
@@ -295,7 +324,10 @@ export const ModelCard: React.FC<ModelCardProps> = ({
 
   const credibility = resolveCredibility(model, downloadedModel);
   const credibilityInfo = credibility ? CREDIBILITY_LABELS[credibility.source] : null;
-  const quantization = file?.quantization ?? downloadedModel?.quantization;
+  const reportedQuantization = [file?.quantization, downloadedModel?.quantization, model.quantization]
+    .find(value => value && value !== 'Unknown');
+  const quantization = reportedQuantization ||
+    /(?:^|[-_.])((?:Q\d+(?:_[A-Z0-9]+)*)|F16|F32|FP16|INT8)(?:[-_.]|$)/i.exec(`${model.id} ${model.name}`)?.[1]?.toUpperCase();
   const actionsInProgress = !!compact && (isDownloading || isQueued || isPaused);
   const actionButtons = !failedState && (
     <ModelCardActions
@@ -328,7 +360,10 @@ export const ModelCard: React.FC<ModelCardProps> = ({
       ]}
       onPress={onPress}
       activeOpacity={0.7}
-      disabled={!onPress}
+      disabled={disabled || !onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={model.name}
+      accessibilityState={{ selected: !!isActive, disabled: !!disabled }}
       testID={testID}
     >
       <View style={[styles.cardRow, useDenseLayout && styles.cardRowDense]}>
@@ -346,6 +381,11 @@ export const ModelCard: React.FC<ModelCardProps> = ({
             credibilityInfo={credibilityInfo}
             isActive={isActive}
             incompatibleReason={!isCompatible ? (incompatibleReason ?? 'Too large') : undefined}
+            facts={facts}
+            capabilities={capabilities}
+            sourceBadge={sourceBadge}
+            nameTestID={nameTestID}
+            factsTestID={factsTestID}
           />
 
           {!useDenseLayout && (
@@ -378,8 +418,9 @@ export const ModelCard: React.FC<ModelCardProps> = ({
           )}
         </View>
 
-        {!actionsInProgress && actionButtons}
+        {trailing ?? (!actionsInProgress && actionButtons)}
       </View>
+      {footer}
     </TouchableOpacity>
   );
 };

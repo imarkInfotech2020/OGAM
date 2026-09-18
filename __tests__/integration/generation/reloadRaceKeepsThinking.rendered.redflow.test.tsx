@@ -99,6 +99,7 @@ describe('reload race — a send during the load window keeps thinking (device 2
     // GESTURE: tap the reload banner. The reload parks inside the capability window (hold engaged).
     await h.rtl.act(async () => { pressByWalkingUp(h.view!.getByTestId('reload-model-banner')); });
     await h.rtl.waitFor(() => { expect(h.boundary.llama!.multimodalHoldActive()).toBe(true); }, { timeout: 4000 });
+    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('reload-model-banner')).toBeNull(); });
 
     // GESTURE: the user sends while the reload is still finishing (device: 18:50:27.733).
     await h.tapSend('is 17 prime');

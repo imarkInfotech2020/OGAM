@@ -150,6 +150,40 @@ maybe('McpToolsScreen', () => {
     expect(useMcpStore.getState().enabledTools).toEqual(['create']);
   });
 
+  it('offers synced desktop tools off until the user enables one', () => {
+    seed({
+      serverId: 'mesh-task-mac-1',
+      servers: [{ id: 'mesh-task-mac-1', name: 'My Mac', url: 'sync://mac-1' }],
+    });
+    useMcpStore.getState().setServerTools('mesh-task-mac-1', [tool('web_use'), tool('computer_use')]);
+
+    const { UNSAFE_getAllByType } = render(<McpToolsScreen />);
+    const { Switch } = require('react-native');
+    const switches = UNSAFE_getAllByType(Switch);
+    expect(switches.map(item => item.props.value)).toEqual([false, false]);
+
+    fireEvent(switches[0], 'valueChange', true);
+    useMcpStore.getState().setServerTools('mesh-task-mac-1', [tool('web_use'), tool('computer_use')]);
+    expect(UNSAFE_getAllByType(Switch).map(item => item.props.value)).toEqual([true, false]);
+  });
+
+  it('shows a granted desktop connection with every newly discovered tool off', () => {
+    seed({
+      serverId: 'desktop-mcp',
+      servers: [{ id: 'desktop-mcp', name: 'My Mac', url: 'http://mac.local/mcp', grantedByDeviceId: 'mac-1' }],
+    });
+    useMcpStore.getState().setServerTools('desktop-mcp', [tool('search'), tool('edit')]);
+
+    const { UNSAFE_getAllByType } = render(<McpToolsScreen />);
+    const { Switch } = require('react-native');
+    const switches = UNSAFE_getAllByType(Switch);
+    expect(switches.map(item => item.props.value)).toEqual([false, false]);
+
+    fireEvent(switches[0], 'valueChange', true);
+    useMcpStore.getState().setServerTools('desktop-mcp', [tool('search'), tool('edit')]);
+    expect(UNSAFE_getAllByType(Switch).map(item => item.props.value)).toEqual([true, false]);
+  });
+
   it('Enable All adds every server tool; Enable All is disabled once all are enabled', () => {
     seed({
       serverId: 'srv-1',

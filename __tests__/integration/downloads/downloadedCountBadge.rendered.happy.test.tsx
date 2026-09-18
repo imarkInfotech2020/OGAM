@@ -18,7 +18,7 @@
  *
  * Real stack over the fs + AsyncStorage boundary: the REAL useTextModels hydration
  * (modelManager.getDownloadedModels → loadDownloadedModels → validateAndResolveModels, which really
- * probes the disk) runs, the REAL recommended list matches downloaded rows by id-prefix, and the REAL
+ * probes the disk) runs, the REAL recommended list matches downloaded rows by catalog id or file, and the REAL
  * ModelCard renders the mark. The N is EMERGENT from the seeded boundary, not programmed.
  */
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
@@ -70,6 +70,30 @@ describe('T012 (rendered) — ModelsScreen reflects N downloaded models', () => 
     // The count of downloaded marks the user sees on ModelsScreen must equal N.
     await waitFor(() => {
       expect(view.queryAllByTestId(/^model-card-\d+-downloaded$/).length).toBe(N);
+    }, { timeout: 4000 });
+  });
+
+  it('marks a family downloaded when its file was restored under a recovered id', async () => {
+    const boundary = installNativeBoundary({ fs: true });
+    const React = require('react');
+    const { render, waitFor } = requireRTL();
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default
+      ?? require('@react-native-async-storage/async-storage');
+    const { ModelsScreen } = require('../../../src/screens/ModelsScreen');
+    const fileName = 'gemma-4-E2B-it.litertlm';
+    const filePath = `${boundary.fs!.DocumentDirectoryPath}/models/${fileName}`;
+    boundary.fs!.seedFile(filePath, 2588147712);
+    await AsyncStorage.setItem('@local_llm/downloaded_models', JSON.stringify([
+      createDownloadedModel({
+        id: `recovered_${fileName}`, name: 'Gemma 4 E2B', engine: 'litert',
+        filePath, fileName,
+      }),
+    ]));
+
+    const view = render(React.createElement(ModelsScreen, {}));
+    await waitFor(() => {
+      expect(view.getByText('Gemma 4 LiteRT')).toBeTruthy();
+      expect(view.getByTestId('model-card-0-downloaded')).toBeTruthy();
     }, { timeout: 4000 });
   });
 });

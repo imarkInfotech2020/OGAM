@@ -695,18 +695,14 @@ describe('ModelResidencyManager', () => {
       expect(unloadImg).not.toHaveBeenCalled();
     });
 
-    // The prompt-enhancement-skipped bug, reproduced from the exact device numbers
-    // (12GB Android, ~4.6GB raw availMem, empty residents, a 5.2GB DIRTY LiteRT E4B).
-    // Before the fix, budgetForSpec's dirty branch used raw availMem → budget 3566 →
-    // fits=FALSE without an override, so image-prompt enhancement (which never overrides)
-    // silently skipped and chat needed a pointless "Load Anyway". After the fix, the fit
-    // check reads the SAME reclaimable-aware availability the override floor already used,
-    // so the model fits with NO override on a phone that plainly has room.
-    describe('Android reclaimable-aware fit (no false refusal of a dirty model)', () => {
+    // Dirty model loads must respect live availability. Crediting hypothetical
+    // background-app reclaim admitted diffusion beside text at ~1GB available and
+    // Android killed the foreground app instead of freeing enough memory.
+    describe('dirty model fit under live Android memory pressure', () => {
       const originalOS = Platform.OS;
       afterEach(() => { Platform.OS = originalOS; });
 
-      it('a 5.2GB dirty LiteRT text model FITS on an empty 12GB Android phone WITHOUT override', async () => {
+      it('refuses a 5.2GB dirty LiteRT model when only 4.6GB is available', async () => {
         Platform.OS = 'android';
         modelResidencyManager._reset();
         modelResidencyManager.setBudgetOverrideMB(null);
@@ -722,7 +718,7 @@ describe('ModelResidencyManager', () => {
           dirtyMemory: true, // LiteRT weights are dirty/accelerator memory
         });
 
-        expect(fits).toBe(true); // fails-before: was false (budget 3566 < 5235)
+        expect(fits).toBe(false);
         expect(evicted).toEqual([]);
       });
 

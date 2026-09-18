@@ -114,8 +114,9 @@ const ToolCallWithThinking: React.FC<{
 const TimelineThinkingBlock: React.FC<{
   text: string;
   styles: ReturnType<typeof createStyles>;
-}> = ({ text, styles }) => {
-  const [expanded, setExpanded] = useState(false);
+  isStreaming: boolean;
+}> = ({ text, styles, isStreaming }) => {
+  const [expanded, setExpanded] = useState(isStreaming);
   return (
     <ThinkingBlock
       parsedContent={{
@@ -134,7 +135,8 @@ const SyncedAssistantTimeline: React.FC<{
   message: Message;
   styles: ReturnType<typeof createStyles>;
   colors: ReturnType<typeof useTheme>['colors'];
-}> = ({ message, styles, colors }) => (
+  isStreaming: boolean;
+}> = ({ message, styles, colors, isStreaming }) => (
   <>
     {message.timeline?.map((entry, index) => {
       if (entry.kind === 'thinking') {
@@ -143,6 +145,7 @@ const SyncedAssistantTimeline: React.FC<{
             key={`thinking:${index}`}
             text={entry.text}
             styles={styles}
+            isStreaming={isStreaming}
           />
         );
       }
@@ -180,7 +183,6 @@ interface MessageBubbleProps {
   hideProse?: boolean;
   metaExtra?: React.ReactNode;
   onImagePress?: (uri: string) => void;
-  onTranscribeAgain?: ChatMessageProps['onTranscribeAgain'];
   onToggleThinking: () => void;
   onToggleSupportingContext: () => void;
   onLongPress: () => void;
@@ -204,7 +206,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   hideProse,
   metaExtra,
   onImagePress,
-  onTranscribeAgain,
   onToggleThinking,
   onToggleSupportingContext,
   onLongPress,
@@ -271,6 +272,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
                 message={message}
                 styles={styles}
                 colors={colors}
+                isStreaming={Boolean(isStreaming)}
               />
             )}
             {!!message.toolArtifacts?.length && !timelineHasTools && (
@@ -298,7 +300,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               />
             )}
           </Accordion>
-          {isStreaming && !hasVisibleAnswer && (
+          {isStreaming && !hideProse && !hasVisibleAnswer && (
             <View testID="streaming-thinking-hint" style={styles.streamingThinkingHint}>
               <View testID="thinking-indicator">
                 <ThinkingIndicator />
@@ -320,11 +322,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               styles={styles}
               colors={colors}
               onImagePress={onImagePress}
-              onTranscribeAgain={
-                onTranscribeAgain
-                  ? attachment => onTranscribeAgain(message, attachment)
-                  : undefined
-              }
             />
           )}
 
@@ -391,7 +388,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onCopy,
   onRetry,
   onEdit,
-  onTranscribeAgain,
   onGenerateImage,
   showActions = true,
   canGenerateImage = false,
@@ -421,6 +417,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const isSupportingContext =
     !isStreaming &&
     !hasAttachments &&
+    !message.timeline?.length &&
+    !message.toolArtifacts?.length &&
     isSupportingChatContext({
       answer: parsedContent.response,
       reasoning: parsedContent.thinking,
@@ -562,7 +560,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       hideProse={hideProse}
       metaExtra={metaExtra}
       onImagePress={onImagePress}
-      onTranscribeAgain={onTranscribeAgain}
       onToggleThinking={() => setShowThinking(!showThinking)}
       onToggleSupportingContext={() =>
         setShowSupportingContext(!showSupportingContext)

@@ -558,11 +558,14 @@ describe('mobile ambient sharing journey', () => {
       remoteRecords.has(`${SHARED_FILE_ENTITY}:${rejectedScreenshot.syncId}`),
     ).toBe(false);
     expect(receivedFiles).toHaveLength(0);
-    fireEvent.press(
-      within(rejectedRow).getByTestId(
-        `sync-approval-reject-${approvalId(rejectedRow)}`,
-      ),
+    const rejectButton = within(rejectedRow).getByTestId(
+      `sync-approval-reject-${approvalId(rejectedRow)}`,
     );
+    fireEvent.press(rejectButton);
+    expect(rejectButton.props.accessibilityState).toMatchObject({
+      disabled: true,
+      busy: true,
+    });
     await waitFor(() =>
       expect(ui!.queryByText(/Screenshot-rejected\.png with/)).toBeNull(),
     );
