@@ -443,7 +443,7 @@ describe('Pro mobile state sync journey', () => {
     // A returning desktop can send a full wire batch of tombstones. The phone must finish the
     // batch and leave navigation responsive after removing those turns from its chat projection.
     const burstIds = Array.from(
-      { length: 128 },
+      { length: 126 },
       (_, index) => `burst-message-${index}`,
     );
     const burstPuts = burstIds.map((id, index) =>
@@ -455,10 +455,45 @@ describe('Pro mobile state sync journey', () => {
         created_at: new Date(Date.parse(createdAt) + index + 1).toISOString(),
       }),
     );
+    const parent = remoteLog.record(
+      CORE_SYNC_ENTITIES.conversation,
+      'buffered-parent',
+      'put',
+      {
+        title: 'Buffered child chat',
+        project_id: null,
+        created_at: createdAt,
+        updated_at: createdAt,
+      },
+    );
+    const child = remoteLog.record(
+      CORE_SYNC_ENTITIES.message,
+      'buffered-child',
+      'put',
+      {
+        conversation_id: 'buffered-parent',
+        role: 'user',
+        content: 'Buffered child turn.',
+        context: null,
+        created_at: createdAt,
+      },
+    );
     remote.engine.sendApp(mobile.id, STATE_CHANNEL, {
       t: 'ops',
-      ops: burstPuts,
+      // The parent is last on the wire, across a chunk boundary from its child.
+      ops: [child, ...burstPuts, parent],
     });
+    const visibleBurstCount = () =>
+      useChatStore
+        .getState()
+        .conversations.find(item => item.id === 'remote-conversation')
+        ?.messages.filter(message =>
+          burstIds.includes(message.uuid ?? message.id),
+        ).length ?? 0;
+    await waitFor(() => expect(visibleBurstCount()).toBeGreaterThan(0));
+    expect(visibleBurstCount()).toBeLessThan(burstIds.length);
+    fireEvent.press(ui.getByText('Generation details'));
+    expect(ui.queryByText('42.5 tok/s')).toBeNull();
     await waitFor(() =>
       expect(
         useChatStore
@@ -468,6 +503,14 @@ describe('Pro mobile state sync journey', () => {
             burstIds.includes(message.uuid ?? message.id),
           ),
       ).toHaveLength(burstIds.length),
+    );
+    await waitFor(() =>
+      expect(
+        useChatStore
+          .getState()
+          .conversations.find(item => item.id === 'buffered-parent')
+          ?.messages.some(message => message.uuid === 'buffered-child'),
+      ).toBe(true),
     );
     const burstDeletes = burstIds.map(id =>
       remoteLog.record(CORE_SYNC_ENTITIES.message, id, 'delete'),
@@ -487,7 +530,7 @@ describe('Pro mobile state sync journey', () => {
       ).toHaveLength(0),
     );
     fireEvent.press(ui.getByText('Generation details'));
-    expect(ui.queryByText('42.5 tok/s')).toBeNull();
+    expect(ui.getByText('42.5 tok/s')).toBeTruthy();
 
     remoteLog.record(CORE_SYNC_ENTITIES.message, 'older-gap-message', 'put', {
       conversation_id: 'remote-conversation',
