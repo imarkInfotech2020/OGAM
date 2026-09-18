@@ -6,6 +6,7 @@ import type {
   RemoteModelOption,
   RemoteServer,
 } from '../types';
+import { predictGgufCapabilities } from '../utils/ggufCapabilities';
 import {
   REMOTE_FETCH_REDIRECT_POLICY,
   remoteAuthorizationHeaders,
@@ -217,22 +218,24 @@ function textModels(
     if (!installed.has(model.id) || categoryForKind(model.kind) !== 'text') {
       return [];
     }
-    const desktopRemoteModel = model.id.startsWith('remote-vision:');
     const live = liveModels.get(model.id);
-    const supportsThinking =
-      desktopRemoteModel &&
-      (live?.capabilities.includes('reasoning') ||
-        live?.reasoningMandatory === true);
+    const predicted = predictGgufCapabilities(model);
+    const hasLiveCapabilities = !!live?.capabilities.length;
+    const supportsThinking = hasLiveCapabilities
+      ? live?.capabilities.includes('reasoning') === true || live?.reasoningMandatory === true
+      : predicted.thinking;
     return [
       {
         id: model.id,
         name: model.name,
         serverId,
         capabilities: {
-          supportsVision: model.kind === 'vision',
-          supportsToolCalling: true,
+          supportsVision: model.kind === 'vision' || live?.capabilities.includes('vision') === true,
+          supportsToolCalling: hasLiveCapabilities
+            ? live?.capabilities.includes('tools') === true
+            : predicted.tools,
           supportsThinking,
-          acceptsThinkingKwarg: supportsThinking,
+          acceptsThinkingKwarg: model.id.startsWith('remote-vision:') && supportsThinking,
           ...(live?.reasoningMandatory
             ? { thinkingLevelsOnly: true }
             : {}),
