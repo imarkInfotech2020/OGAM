@@ -13,6 +13,7 @@ import type { GenerationDeps } from './useChatGenerationActions';
 import { supersedeSyncedReplies } from '../../services/sync/supersedeSyncedReplies';
 import { useChatStore } from '../../stores/chatStore';
 import { useRemoteServerStore } from '../../stores/remoteServerStore';
+import { enableAssistantTools } from '../../services/tools/useExtensionToolCount';
 import type { MediaAttachment } from '../../types';
 import RNFS from 'react-native-fs';
 import { useWhisperStore } from '../../stores/whisperStore';
@@ -24,6 +25,7 @@ import { resolveDocumentPath } from '../../utils/resolveDocumentPath';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 
 type RetryParams = {
+  assistantEnabled?: boolean;
   activeConversationId: string | null | undefined;
   hasActiveModel: boolean;
   deleteMessagesAfter: (c: string, m: string) => void;
@@ -40,7 +42,7 @@ async function retryFromUserMessage({ message, genDeps, p, convId, msgs }: Retry
   const recordedKind = recordedTurnKind(msgs, message.id);
   logger.log(`[RESEND-SM] retry user msg idx=${idx} willDelete=${idx !== -1 && idx < msgs.length - 1} recordedKind=${recordedKind ?? 'none'}`);
   if (idx !== -1 && idx < msgs.length - 1) p.deleteMessagesAfter(convId, message.id);
-  await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: message, recordedKind });
+  await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: message, recordedKind, assistantEnabled: p.assistantEnabled });
 }
 
 /** Retry from an ASSISTANT message: regenerate the preceding user turn. Uses the SAME whole-turn
@@ -53,7 +55,7 @@ async function retryFromAssistantMessage({ message, genDeps, p, convId, msgs }: 
   logger.log(`[RESEND-SM] retry assistant msg idx=${idx} prevUser=${prev?.id ?? 'none'} recordedKind=${recordedKind ?? 'none'}`);
   if (prev) {
     p.deleteMessagesAfter(convId, prev.id);
-    await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: prev, recordedKind });
+    await regenerateResponseFn(genDeps, { setDebugInfo: p.setDebugInfo, userMessage: prev, recordedKind, assistantEnabled: p.assistantEnabled });
   }
 }
 
@@ -75,6 +77,13 @@ export async function handleRetryMessageFn(
   // no-op. Mirrors the send path's "No Model Selected" alert (handleSendFn).
   if (!p.hasActiveModel) { logger.log('[RESEND-SM] retry BAIL: no active model'); genDeps.setAlertState(showAlert('No Model Selected', 'Please select a model first.')); return; }
   if (!p.activeConversationId) { logger.log('[RESEND-SM] retry BAIL: no conv'); return; }
+  // Retry does not go through the composer button. Re-apply its tool selection before deleting the
+  // old reply, so a selected Assistant never silently resends with only the other enabled tools.
+  if (p.assistantEnabled && !enableAssistantTools()) {
+    logger.log('[RESEND-SM] retry BAIL: assistant task tools unavailable');
+    genDeps.setAlertState(showAlert('Assistant unavailable', 'Connect an active Desktop to use Assistant tools, then retry.'));
+    return;
+  }
   // Stop any in-flight TTS before deleting messages (no-op without pro audio)
   callHook(HOOKS.audioStop);
   // A synced reply shows as a live preview until its op lands; clear it too, or resend duplicates it.

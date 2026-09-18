@@ -12,6 +12,9 @@ export interface ToolExtension {
   canHandle(toolName: string): boolean;
   execute(call: ToolCall): Promise<ToolResult>;
   enabledToolCount(): number;
+  /** Assistant setup is distinct from whether its two task tools are currently enabled. */
+  getAssistantAvailability?(): 'needs-sync' | 'unavailable' | 'ready';
+  enableAssistantTools?(): boolean;
   /**
    * Notify when the answer to `enabledToolCount` may have changed.
    *

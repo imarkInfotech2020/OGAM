@@ -27,7 +27,7 @@ import { createStyles } from './styles';
 import { useTheme } from '../../theme';
 import { useAppStore } from '../../stores';
 import { getToolExtensions } from '../../services/tools/extensions';
-import { useAssistantToolAvailability, useExtensionToolCount } from '../../services/tools/useExtensionToolCount';
+import { enableAssistantTools, useAssistantToolAvailability, useExtensionToolCount } from '../../services/tools/useExtensionToolCount';
 import { AVAILABLE_TOOLS } from '../../services/tools';
 import { useOpenProTools } from '../../hooks/useOpenProTools';
 import { useIsProActive } from '../../hooks/useIsProActive';
@@ -38,6 +38,8 @@ import { RootStackParamList } from '../../navigation/types';
 import { SPACING } from '../../constants';
 
 export type ChatMessageAreaProps = {
+  assistantSelected: boolean;
+  onAssistantSelectedChange: (selected: boolean) => void;
   flatListRef: React.RefObject<FlatList | null>;
   isNearBottomRef: React.MutableRefObject<boolean>;
   chat: ReturnType<typeof useChatScreen>;
@@ -150,6 +152,8 @@ const ModelStatusBar: React.FC<{
 };
 
 export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
+  assistantSelected,
+  onAssistantSelectedChange,
   flatListRef,
   isNearBottomRef,
   chat,
@@ -169,7 +173,7 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   // restart. Return is intentionally unused — the count is naturally 0 when Pro
   // is inactive (no extensions registered); we only need the re-render.
   const isProActive = useIsProActive();
-  const assistantToolsAvailable = useAssistantToolAvailability();
+  const assistantAvailability = useAssistantToolAvailability();
   // extToolCount is the live MCP tool count (the email/calendar extension reports 0
   // here because those live in settings.enabledTools — see EmailCalendarExtension).
   // Subscribed, not read at render: deactivating an MCP server cleared the store but the mounted
@@ -397,6 +401,8 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
         }}
       >
         <ChatInput
+          assistantSelected={assistantSelected}
+          onAssistantSelectedChange={onAssistantSelectedChange}
           onSend={chat.handleSend}
           onStop={chat.handleStop}
           disabled={!chat.hasActiveModel}
@@ -428,10 +434,9 @@ export const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
           assistantAvailability={
             !isProActive
               ? 'no-pro'
-              : assistantToolsAvailable
-                ? 'ready'
-                : 'needs-sync'
+              : assistantAvailability
           }
+          onAssistantEnableTools={enableAssistantTools}
           onAssistantUpgrade={() => tabNav.navigate('ProDetail')}
           onAssistantSetupSync={() => tabNav.navigate('Sync')}
         />

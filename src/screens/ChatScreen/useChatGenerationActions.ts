@@ -505,7 +505,7 @@ async function generateWithCompactionRetry(
     0,
   );
   logger.log(
-    `[GEN-SM] generateWithCompactionRetry conv=${opts.id} msgs=${opts.messages.length} tools=${enabledTools.length} ext=${extCount}`,
+    `[GEN-SM] generateWithCompactionRetry conv=${opts.id} msgs=${opts.messages.length} tools=${enabledTools.length} ext=${extCount} assistant=${opts.assistantEnabled === true}`,
   );
   const capabilityIssue = remoteToolCapabilityIssue(
     enabledTools.length + extCount,
@@ -1084,12 +1084,13 @@ export type RegenerateCall = {
   setDebugInfo: SetState<any>;
   userMessage: Message;
   recordedKind?: TurnKind;
+  assistantEnabled?: boolean;
 };
 export async function regenerateResponseFn(
   deps: GenerationDeps,
   call: RegenerateCall,
 ): Promise<void> {
-  const { setDebugInfo, userMessage, recordedKind } = call;
+  const { setDebugInfo, userMessage, recordedKind, assistantEnabled } = call;
   logger.log(
     `[RESEND-SM] regenerate start userMsg=${userMessage.id} conv=${
       deps.activeConversationId
@@ -1203,6 +1204,7 @@ export async function regenerateResponseFn(
         prompt: systemPrompt,
         messages: [...prefix, ...filtered],
         setDebugInfo,
+        assistantEnabled,
       },
       activeTools,
       conversation?.projectId,

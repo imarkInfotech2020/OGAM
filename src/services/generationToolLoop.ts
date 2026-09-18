@@ -1411,6 +1411,7 @@ export async function runToolLoop(
     builtInSchemas,
     extSchemas,
   );
+  logger.log(`[ToolLoop] routed assistant=${ctx.assistantEnabled === true} tools=[${effectiveSchemas.map((schema: any) => schema?.function?.name).filter(Boolean).join(',')}]`);
   ctx.onToolsRouted?.(
     effectiveSchemas.map((s: any) => s?.function?.name).filter(Boolean),
   );

@@ -184,13 +184,14 @@ export function useChatScreenActions({
     handleCopyMessage: (content: string) => {
       callHook(HOOKS.clipboardRecordLocalText, content, Date.now());
     },
-    handleRetryMessage: (message: ChatStoreState['conversations'][number]['messages'][number]) => {
+    handleRetryMessage: (message: ChatStoreState['conversations'][number]['messages'][number], assistantEnabled = false) => {
       const currentDeps = generationDepsRef.current ?? generationDeps;
       return handleRetryMessageFn(message, currentDeps, {
         activeConversationId: currentDeps.activeConversationId,
         hasActiveModel: !!currentDeps.hasActiveModel,
         deleteMessagesAfter,
         setDebugInfo,
+        assistantEnabled,
       });
     },
     handleEditMessage: (
