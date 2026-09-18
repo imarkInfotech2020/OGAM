@@ -44,6 +44,14 @@ Build a signed release AAB locally - NO upload. Artifact for testing the pipelin
 
 Build a dev/beta AAB and upload to the Play Store internal track
 
+### android upload_beta
+
+```sh
+[bundle exec] fastlane android upload_beta
+```
+
+Upload an ALREADY-BUILT AAB to Play internal (no build - for the atomic uat.sh flow)
+
 ### android release
 
 ```sh
@@ -59,6 +67,16 @@ Build a production AAB and upload to the Play Store production track
 ```
 
 Push Android store listing text + images (no build)
+
+### android promote
+
+```sh
+[bundle exec] fastlane android promote
+```
+
+Promote the tested internal build to production (no rebuild, no re-upload)
+
+Usage: fastlane android promote version_code:<n>  (the tested versionCode)
 
 ----
 
@@ -81,6 +99,14 @@ Build a signed release IPA locally - NO upload. Artifact for testing the pipelin
 
 Build and upload to TestFlight
 
+### ios upload_beta
+
+```sh
+[bundle exec] fastlane ios upload_beta
+```
+
+Upload an ALREADY-BUILT IPA to TestFlight (no build - for the atomic uat.sh flow)
+
 ### ios release
 
 ```sh
@@ -96,6 +122,14 @@ Build and upload to the App Store
 ```
 
 Push App Store listing metadata (no build)
+
+### ios promote
+
+```sh
+[bundle exec] fastlane ios promote
+```
+
+Promote the tested TestFlight build to an App Store version (no rebuild)
 
 ----
 
