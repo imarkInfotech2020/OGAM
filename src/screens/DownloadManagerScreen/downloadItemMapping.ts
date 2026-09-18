@@ -46,6 +46,9 @@ function getActiveItemAuthor(
   metadata: Record<string, any> | null,
 ): string {
   if (isImage) return getImageAuthor(metadata?.imageModelBackend);
+  // Synced model downloads use an encoded transfer identity as modelId. It is
+  // needed for routing, but it is not a publisher name for the visible card.
+  if (entry.modelId.startsWith('model-download:')) return 'Unknown';
   return entry.modelId.split('/')[0] ?? 'Unknown';
 }
 
@@ -108,6 +111,7 @@ export function entryToActiveItem(entry: DownloadEntry): DownloadItem {
     reasonCode: entry.errorCode as
       | import('../../types').BackgroundDownloadReasonCode
       | undefined,
+    isVisionModel: isImage ? undefined : !!metadata?.mmProjFileName || !!entry.mmProjDownloadId,
   };
 }
 
@@ -133,7 +137,7 @@ export function modelStoreCompletedItems(
         downloadedAt: model.downloadedAt,
         filePath: model.filePath,
         isVisionModel:
-          model.engine === 'llama' ? model.isVisionModel : undefined,
+          model.engine === 'llama' ? model.isVisionModel : model.liteRTVision,
         mmProjPath: model.engine === 'llama' ? model.mmProjPath : undefined,
         mmProjFileName:
           model.engine === 'llama' ? model.mmProjFileName : undefined,

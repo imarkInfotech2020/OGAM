@@ -36,6 +36,9 @@ export const createStyles = (colors: ThemeColors, shadows: ThemeShadows) => ({
   section: {
     marginBottom: SPACING.sm,
   },
+  downloadCardInset: {
+    marginHorizontal: SPACING.md,
+  },
   sectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
