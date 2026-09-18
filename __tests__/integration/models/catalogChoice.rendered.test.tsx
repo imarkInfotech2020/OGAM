@@ -106,10 +106,10 @@ describe('Model choice on the phone', () => {
     }));
 
     await waitFor(() => {
-      const hint = picker.getByText(/^~\d+\.\d GB RAM/);
-      const estimate = Number(String(hint.props.children).match(/[\d.]+/)?.[0]);
+      const hint = picker.getByText(/~\d+\.\d GB RAM/);
+      const estimate = Number(String(hint.props.children).match(/~(\d+\.\d) GB RAM/)?.[1]);
       expect(estimate).toBeLessThan(7.2);
-      expect(picker.queryByText(/^~~/)).toBeNull();
+      expect(String(hint.props.children)).not.toMatch(/~~/);
     });
   });
 });
