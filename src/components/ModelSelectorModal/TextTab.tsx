@@ -7,7 +7,7 @@ import { hardwareService } from '../../services';
 import { textOverheadMultiplier } from '../../services/activeModelService/types';
 import { estimateTextModelMemoryMB } from '../../services/activeModelService/memory';
 import { useAppStore } from '../../stores';
-import { ModelRow } from '../ModelRow';
+import { ModelCard } from '../ModelCard';
 import { createAllStyles } from './styles';
 import { fileExceedsBudget } from '../../services/memoryBudget';
 import { useResidentRows } from '../models/useResidentRows';
@@ -82,6 +82,8 @@ export const TextTab: React.FC<TextTabProps> = ({
   const activeLocalModel = downloadedModels.find(
     m => m.filePath === currentModelPath,
   );
+  const activeLocalCapabilities = activeLocalModel?.engine === 'llama'
+    ? predictGgufCapabilities(activeLocalModel) : null;
 
   // Find active remote model info
   const activeRemoteModelInfo = useMemo(() => {
@@ -96,46 +98,42 @@ export const TextTab: React.FC<TextTabProps> = ({
   return (
     <>
       {hasLoaded && (
-        <View style={styles.loadedSection}>
+        <View>
           <View style={styles.loadedHeader}>
             <Icon name="check-circle" size={14} color={colors.success} />
             <Text style={styles.loadedLabel}>Currently Loaded</Text>
           </View>
-          <View style={styles.loadedModelItem} testID="currently-loaded-model">
-            <View style={styles.loadedModelInfo}>
-              <Text
-                style={styles.loadedModelName}
-                numberOfLines={1}
-                testID="currently-loaded-model-name"
-              >
-                {activeLocalModel?.name ||
-                  activeRemoteModelInfo?.model?.name ||
-                  'Unknown'}
-              </Text>
-              <Text
-                style={styles.loadedModelMeta}
-                testID="currently-loaded-model-ram"
-              >
-                {activeLocalModel
-                  ? `${
-                      activeLocalModel.quantization
-                    } • ${hardwareService.formatModelSize(
-                      activeLocalModel,
-                    )} • ${textResident
-                      ? `${(textResident.sizeMB / 1024).toFixed(1)} GB`
-                      : hardwareService.formatModelRam(activeLocalModel, ramMultiplier)} RAM`
-                  : `Remote • ${activeRemoteModelInfo?.serverName ?? 'Model'}`}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.unloadButton}
-              onPress={onUnloadModel}
-              disabled={isAnyLoading}
-            >
+          <ModelCard
+            compact
+            testID="currently-loaded-model"
+            nameTestID="currently-loaded-model-name"
+            factsTestID="currently-loaded-model-ram"
+            model={{
+              id: activeLocalModel?.id ?? activeRemoteModelInfo?.model.id ?? 'selected',
+              name: activeLocalModel?.name ?? activeRemoteModelInfo?.model.name ?? 'Unknown',
+              author: activeLocalModel?.author ?? activeRemoteModelInfo?.serverName ?? '',
+              modelType: activeRemoteModelInfo?.model.capabilities.supportsVision ? 'vision' : 'text',
+              quantization: typeof activeRemoteModelInfo?.model.details?.quantization === 'string'
+                ? activeRemoteModelInfo.model.details.quantization : undefined,
+            }}
+            downloadedModel={activeLocalModel}
+            sourceBadge={activeRemoteModelInfo ? 'Remote' : undefined}
+            capabilities={activeRemoteModelInfo ? {
+              vision: activeRemoteModelInfo.model.capabilities.supportsVision,
+              tools: activeRemoteModelInfo.model.capabilities.supportsToolCalling,
+              thinking: activeRemoteModelInfo.model.capabilities.supportsThinking,
+            } : { ...activeLocalCapabilities, predicted: true }}
+            facts={activeLocalModel
+              ? [`${textResident
+                  ? `${(textResident.sizeMB / 1024).toFixed(1)} GB`
+                  : hardwareService.formatModelRam(activeLocalModel, ramMultiplier)} RAM`]
+              : []}
+            isActive
+            trailing={<TouchableOpacity style={styles.unloadButton} onPress={onUnloadModel} disabled={isAnyLoading}>
               <Icon name="power" size={16} color={colors.error} />
               <Text style={styles.unloadButtonText}>Unload</Text>
-            </TouchableOpacity>
-          </View>
+            </TouchableOpacity>}
+          />
         </View>
       )}
 
@@ -217,25 +215,24 @@ export const TextTab: React.FC<TextTabProps> = ({
             const isActive =
               currentRemoteModelId === null &&
               (loadInProgress ? isLoadingThis : isLoaded || isSelected);
+            const predictedCapabilities = model.engine === 'llama' ? predictGgufCapabilities(model) : null;
             return (
-              <ModelRow
+              <ModelCard
                 key={model.id}
+                compact
                 testID={`text-model-row-${model.id}`}
-                name={model.name}
-                size={hardwareService.formatModelSize(model)}
-                quant={model.quantization}
-                ramHint={`${estimatedRamMB[model.id] != null
+                model={{ id: model.id, name: model.name, author: model.author || 'On device',
+                  modelType: predictedCapabilities?.vision ? 'vision' : 'text' }}
+                downloadedModel={model}
+                capabilities={{ ...predictedCapabilities, predicted: true }}
+                facts={[`${estimatedRamMB[model.id] != null
                   ? `~${(estimatedRamMB[model.id] / 1024).toFixed(1)} GB`
-                  : hardwareService.formatModelRam(model, ramMultiplier)} RAM${memoryFits ? '' : ' (may not fit)'}`}
-                isVision={
-                  model.engine === 'llama' &&
-                  predictGgufCapabilities(model).vision
-                }
+                  : hardwareService.formatModelRam(model, ramMultiplier)} RAM${memoryFits ? '' : ' (may not fit)'}`]}
                 isActive={isActive}
-                isLoaded={
-                  isLoaded && !loadInProgress && currentRemoteModelId === null
-                }
-                loading={isLoadingThis}
+                trailing={isLoadingThis ? <LoadingDots color={colors.primary} testID="model-row-loading" />
+                  : isLoaded && !loadInProgress && currentRemoteModelId === null
+                    ? <View style={styles.checkmark}><Icon name="check" size={16} color={colors.background} /></View>
+                    : null}
                 disabled={isAnyLoading || isLoaded}
                 onPress={() => onSelectModel(model)}
               />
@@ -256,67 +253,26 @@ export const TextTab: React.FC<TextTabProps> = ({
             const isLoadingThis =
               loadingRemoteModelKey === `${serverId}:${model.id}`;
             return (
-              <TouchableOpacity
+              <ModelCard
                 key={model.id}
+                compact
                 testID={`remote-text-model-${serverId}-${model.id}`}
-                style={[
-                  styles.modelItem,
-                  isCurrent && styles.modelItemSelectedRemote,
-                ]}
+                model={{ id: model.id, name: model.name, author: '',
+                  modelType: model.capabilities.supportsVision ? 'vision' : 'text',
+                  quantization: typeof model.details?.quantization === 'string' ? model.details.quantization : undefined }}
+                sourceBadge="Remote"
+                capabilities={{
+                  vision: model.capabilities.supportsVision,
+                  tools: model.capabilities.supportsToolCalling,
+                  thinking: model.capabilities.supportsThinking,
+                }}
+                isActive={isCurrent || isLoadingThis}
                 onPress={() => onSelectRemoteModel(model, serverId)}
                 disabled={isAnyLoading || isCurrent}
-              >
-                <View style={styles.modelInfo}>
-                  <Text
-                    style={[
-                      styles.modelName,
-                      isCurrent && styles.modelNameSelectedRemote,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {model.name}
-                  </Text>
-                  <View style={styles.modelMeta}>
-                    <Text style={styles.remoteBadge}>Remote</Text>
-                    {model.capabilities.supportsVision && (
-                      <>
-                        <Text style={styles.metaSeparator}>•</Text>
-                        <View style={styles.visionBadge}>
-                          <Icon name="eye" size={10} color={colors.info} />
-                          <Text style={styles.visionBadgeText}>Vision</Text>
-                        </View>
-                      </>
-                    )}
-                    {model.capabilities.supportsToolCalling && (
-                      <>
-                        <Text style={styles.metaSeparator}>•</Text>
-                        <View style={styles.toolBadge}>
-                          <Icon name="tool" size={10} color={colors.warning} />
-                        </View>
-                      </>
-                    )}
-                    {model.capabilities.supportsThinking && (
-                      <>
-                        <Text style={styles.metaSeparator}>•</Text>
-                        <View style={styles.thinkingBadge}>
-                          <Icon name="zap" size={10} color="#8B5CF6" />
-                          <Text style={styles.thinkingBadgeText}>Thinking</Text>
-                        </View>
-                      </>
-                    )}
-                  </View>
-                </View>
-                {isLoadingThis ? (
-                  <LoadingDots
-                    color={colors.primary}
-                    testID="remote-text-model-loading"
-                  />
-                ) : isCurrent ? (
-                  <View style={styles.checkmarkRemote}>
-                    <Icon name="check" size={16} color={colors.background} />
-                  </View>
-                ) : null}
-              </TouchableOpacity>
+                trailing={isLoadingThis ? <LoadingDots color={colors.primary} testID="remote-text-model-loading" />
+                  : isCurrent ? <View style={styles.checkmarkRemote}><Icon name="check" size={16} color={colors.background} /></View>
+                  : null}
+              />
             );
           })}
         </View>

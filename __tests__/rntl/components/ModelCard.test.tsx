@@ -251,13 +251,13 @@ describe('ModelCard', () => {
     });
 
     it('shows model type badge in compact mode for vision', () => {
-      const { getByText } = render(
+      const { getByLabelText } = render(
         <ModelCard
           model={{ ...baseModel, modelType: 'vision' }}
           compact={true}
         />
       );
-      expect(getByText('Vision')).toBeTruthy();
+      expect(getByLabelText('Vision')).toBeTruthy();
     });
 
     it('hides the NPU/GPU badge when the model is not accelerable', () => {
@@ -465,7 +465,7 @@ describe('ModelCard', () => {
           }}
         />
       );
-      expect(getByText('Community')).toBeTruthy();
+      expect(queryByText('Community')).toBeNull();
       expect(queryByText('★')).toBeNull();
       expect(queryByText('✓')).toBeNull();
       expect(queryByText('◆')).toBeNull();

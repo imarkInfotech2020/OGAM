@@ -1,8 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { DenseModelCardContent } from '../../components/ModelCardContent';
 import Icon from 'react-native-vector-icons/Feather';
-import { Card } from '../../components';
 import { ModelCard } from '../../components/ModelCard';
 import { useTheme, useThemedStyles } from '../../theme';
 import { useDownloadStore } from '../../stores/downloadStore';
@@ -109,17 +107,13 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
   };
 
   return (
-    <Card style={styles.downloadCard}>
-      <View style={styles.downloadHeader}>
-        <View style={styles.downloadInfo}>
-          <DenseModelCardContent
-            model={{ name: item.fileName, author: item.author, modelType: item.isVisionModel ? 'vision' : item.modelType === 'text' ? 'text' : undefined }}
-            fileSize={item.fileSize}
-            quantization={item.quantization}
-            isVisionModel={!!item.isVisionModel}
-          />
-        </View>
-      </View>
+    <ModelCard
+      compact
+      model={{ id: item.modelId, name: item.fileName, author: item.author,
+        modelType: item.isVisionModel ? 'vision' : item.modelType === 'text' ? 'text' : undefined }}
+      file={{ name: item.fileName, size: item.fileSize, quantization: item.quantization, downloadUrl: '' }}
+      facts={[item.modelType === 'tts' ? 'Voice' : item.modelType === 'stt' ? 'Transcription' : item.modelType === 'image' ? 'Image' : 'Text']}
+      footer={<>
       <View style={styles.progressContainer}>
         <View style={styles.transferRow}>
           <View style={[styles.progressBarBackground, styles.transferProgressBar]}>
@@ -185,7 +179,8 @@ export const ActiveDownloadCard: React.FC<ActiveDownloadCardProps> = ({ item, on
           </View>
         )}
       </View>
-    </Card>
+      </>}
+    />
   );
 };
 

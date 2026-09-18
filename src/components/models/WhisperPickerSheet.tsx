@@ -11,9 +11,9 @@ import { TYPOGRAPHY, SPACING } from '../../constants';
 import { WHISPER_MODELS } from '../../services/whisperService';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { useSttDownloadState } from '../../hooks/useSttDownloadState';
-import { presentProgress } from '../../utils/progressPresentation';
 import { RemoteModelOptionsSection } from './RemoteModelOptionsSection';
 import { remoteServerManager } from '../../services/remoteServerManager';
+import { ModelCard } from '../ModelCard';
 
 type Props = {
   visible: boolean;
@@ -76,20 +76,19 @@ export const WhisperPickerSheet: React.FC<Props> = ({
           // while it is busy — several models can download at once, each with its own percentage.
           const dl = stateFor(m.id);
           const busy = dl?.active ?? false;
-          const progress = dl
-            ? presentProgress({
-            progress: dl.progress,
-            bytesDownloaded: dl.currentBytes,
-            totalBytes: dl.totalBytes,
-            bytesPerSecond: dl.bytesPerSecond,
-            status: dl.queued ? 'pending' : 'running',
-              })
-            : undefined;
           return (
-            <AnimatedPressable
+            <ModelCard
               key={m.id}
-              style={[styles.row, active && styles.rowActive]}
-              hapticType="selection"
+              compact
+              model={{ id: m.id, name: m.name, author: 'On device', description: m.description }}
+              file={{ name: m.name, size: m.size * 1024 * 1024, quantization: '', downloadUrl: '' }}
+              facts={[m.lang === 'multi' ? '99 languages' : 'English', 'Transcription']}
+              isActive={active}
+              isDownloaded={present}
+              isDownloading={!!dl?.downloading}
+              isQueued={!!dl?.queued}
+              downloadProgress={dl?.progress}
+              downloadBytes={dl ? { downloaded: dl.currentBytes ?? 0, total: dl.totalBytes ?? 0, bytesPerSecond: dl.bytesPerSecond } : undefined}
               disabled={busy}
               onPress={() => {
                 remoteServerManager.clearActiveRemoteMediaModel(
@@ -99,20 +98,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({
                   if (!active) selectModel(m.id);
                 } else downloadModel(m.id);
               }}
-            >
-              <View style={styles.rowInfo}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {m.name}
-                  {m.lang === 'multi' ? ' · 99 langs' : ' · EN'}
-                </Text>
-                <Text style={styles.desc} numberOfLines={1}>
-                  {m.description}
-                </Text>
-                <Text style={styles.meta} numberOfLines={1}>
-                  {dl?.downloading ? progress?.detailText : `${m.size} MB`}
-                </Text>
-              </View>
-              {(() => {
+              trailing={(() => {
                 if (dl?.queued)
                   return (
                     <Icon
@@ -124,9 +110,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({
                   );
                 if (dl?.downloading)
                   return (
-                    <Text style={styles.percent} testID="whisper-row-progress">
-                      {progress?.percentageText ?? 'In progress'}
-                    </Text>
+                    <View testID="whisper-row-progress" />
                   );
                 // selectModel sets downloadedModelId optimistically, so the active row IS the one loading —
                 // show a spinner on it while it loads (not a premature checkmark), matching text/image.
@@ -168,7 +152,7 @@ export const WhisperPickerSheet: React.FC<Props> = ({
                   <Icon name="download" size={16} color={colors.textMuted} />
                 );
               })()}
-            </AnimatedPressable>
+            />
           );
         })}
       </View>
@@ -206,7 +190,6 @@ const createStyles = (colors: ThemeColors) => ({
   name: { ...TYPOGRAPHY.body, color: colors.text },
   desc: { ...TYPOGRAPHY.bodySmall, color: colors.textSecondary },
   meta: { ...TYPOGRAPHY.meta, color: colors.textMuted },
-  percent: { ...TYPOGRAPHY.meta, color: colors.primary },
   sectionLabel: {
     ...TYPOGRAPHY.label,
     color: colors.textMuted,

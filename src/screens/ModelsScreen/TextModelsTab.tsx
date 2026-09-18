@@ -218,7 +218,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
       />
       <Card style={styles.modelInfoCard}>
         <View style={styles.authorRow}>
-          <Text style={styles.modelAuthor}>{selectedModel.author}</Text>
+          {selectedModel.author !== 'Unknown' && <Text style={styles.modelAuthor}>{selectedModel.author}</Text>}
           {selectedModel.credibility && (selectedModel.credibility.source === 'official' || selectedModel.credibility.source === 'verified-quantizer') && (
             <MaterialIcon
               name="verified"
@@ -227,7 +227,7 @@ const ModelDetailView: React.FC<DetailProps> = ({
               accessibilityLabel={CREDIBILITY_LABELS[selectedModel.credibility.source].label}
             />
           )}
-          {selectedModel.credibility && selectedModel.credibility.source !== 'official' && selectedModel.credibility.source !== 'verified-quantizer' && (
+          {selectedModel.credibility?.source === 'lmstudio' && (
             <View style={[styles.credibilityBadge, { backgroundColor: `${CREDIBILITY_LABELS[selectedModel.credibility.source].color}25` }]}>
               {selectedModel.credibility.source === 'lmstudio' && <Text style={[styles.credibilityIcon, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>★</Text>}
               <Text style={[styles.credibilityText, { color: CREDIBILITY_LABELS[selectedModel.credibility.source].color }]}>
