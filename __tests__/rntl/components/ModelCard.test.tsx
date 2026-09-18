@@ -453,7 +453,7 @@ describe('ModelCard', () => {
     });
 
     it('shows no badge icon for community models', () => {
-      const { queryByText, getByText } = render(
+      const { queryByText } = render(
         <ModelCard
           model={{
             ...baseModel,
