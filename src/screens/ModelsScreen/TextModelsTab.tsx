@@ -383,8 +383,14 @@ export const TextModelsTab: React.FC<Props> = (props) => {
     const directDownload = onboarding
       ? () => { downloadRecommendedFile(item).catch(() => undefined); }
       : undefined;
+    // A disk scan can restore a file under a recovered_ id. The detail rows
+    // recognize it by filename, so the family row must use those same files.
+    const isDownloaded = downloadedModels.some(model =>
+      model.id.startsWith(`${item.id}/`) ||
+      item.files.some(file => file.name === model.fileName),
+    );
     return (
-      <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={downloadedModels.some(m => m.id.startsWith(item.id))} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={directDownload ?? (() => handleSelectModel(item))} onDownload={directDownload} />
+      <ModelListItem item={item} index={index} focusTrigger={focusTrigger} isDownloaded={isDownloaded} isTrending={trendingAsModelInfo.some(t => t.id === item.id)} onPress={directDownload ?? (() => handleSelectModel(item))} onDownload={directDownload} />
     );
   };
 
