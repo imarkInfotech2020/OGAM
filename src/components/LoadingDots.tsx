@@ -5,21 +5,19 @@ import { useTheme } from '../theme';
 
 const wave = css.keyframes({
   '0%': { transform: [{ translateY: 0 }] },
-  '16.667%': { transform: [{ translateY: -5 }] },
-  '50%': { transform: [{ translateY: -5 }] },
-  '66.667%': { transform: [{ translateY: 0 }] },
+  '50%': { transform: [{ translateY: -7 }] },
   '100%': { transform: [{ translateY: 0 }] },
 });
 
 const waveStyles = css.create({
   dot: {
     animationName: wave,
-    animationDuration: 900,
+    animationDuration: 1050,
     animationTimingFunction: 'ease-in-out',
     animationIterationCount: 'infinite',
   },
-  second: { animationDelay: 150 },
-  third: { animationDelay: 300 },
+  second: { animationDelay: 160 },
+  third: { animationDelay: 320 },
 });
 
 interface LoadingDotsProps {

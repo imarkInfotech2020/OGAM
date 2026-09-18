@@ -30,5 +30,25 @@ describe('voice mode prompt enhancement', () => {
     expect(view.getByTestId('thinking-block-content')).toBeTruthy();
     expect(view.getByText('A cinematic fox in the snow.')).toBeTruthy();
     expect(view.queryByTestId('audio-bubble-enhancing-image')).toBeNull();
+    expect(view.getByTestId('audio-response-loader')).toBeTruthy();
+  });
+
+  it('shows the shared loader while an audio reply is pending and removes it when complete', () => {
+    const msg = createMessage({ id: 'audio-reply', role: 'assistant', content: '' });
+    const props = {
+      msg,
+      shouldAnimate: false,
+      showGenerationDetails: false,
+      onCopy: () => {},
+      onRetry: () => {},
+      onEdit: () => {},
+      onGenerateImage: () => {},
+      onImagePress: () => {},
+    };
+    const view = render(<MessageAudioMode {...props} isStreamingThis />);
+    expect(view.getByTestId('audio-response-loader')).toBeTruthy();
+
+    view.rerender(<MessageAudioMode {...props} msg={{ ...msg, content: 'Hello.' }} isStreamingThis={false} />);
+    expect(view.queryByTestId('audio-response-loader')).toBeNull();
   });
 });
